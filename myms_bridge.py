@@ -943,9 +943,38 @@ class MymsEngine(QObject):
     def promptOpenTrackFxDialog(self, track, slot):
         self.requestOpenTrackFxDialog.emit(track, slot)
 
+    @pyqtSlot(int, result=int)
+    def getTrackFxCount(self, track):
+        count = 0
+        for s in range(4):
+            if self.isTrackFxLoaded(track, s):
+                count += 1
+        return count
+
+    @pyqtSlot(result=int)
+    def getMaxTrackFx(self):
+        return 4
+
+    @pyqtSlot(int, result='QVariantList')
+    def getTrackFxSlots(self, track):
+        res = []
+        for s in range(4):
+            loaded = self.isTrackFxLoaded(track, s)
+            res.append({
+                "slot": s,
+                "loaded": loaded,
+                "name": self.getTrackFxName(track, s) if loaded else "",
+                "format": self.getTrackFxFormatName(track, s) if loaded else "",
+                "vendor": self.getTrackFxVendor(track, s) if loaded else "",
+                "path": self.getTrackFxPath(track, s) if loaded else "",
+                "has_gui": self.hasTrackFxNativeEditor(track, s) if loaded else False,
+                "num_params": self.getTrackFxNumParams(track, s) if loaded else 0
+            })
+        return res
+
     def getTrackFxChainData(self, track):
         res = []
-        for s in range(2):
+        for s in range(4):
             if self.isTrackFxLoaded(track, s):
                 res.append({
                     "slot": s,

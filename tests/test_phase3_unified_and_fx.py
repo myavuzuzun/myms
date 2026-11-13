@@ -154,5 +154,48 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
+    def test_05_load_vst3_plugin(self):
+        vst3_path = os.path.join(PROJECT_ROOT, "plugins", "vst3", "demo_synth_vst3.so")
+        self.assertTrue(os.path.exists(vst3_path), f"File not found: {vst3_path}")
+
+        ok = self.engine.loadTrackPlugin(0, vst3_path)
+        self.assertTrue(ok)
+        self.assertTrue(self.engine.isTrackPluginLoaded(0))
+        self.assertEqual(self.engine.getTrackPluginFormatName(0), "VST3")
+        self.assertEqual(self.engine.getTrackPluginName(0), "Demo VST3 Synth")
+        self.assertEqual(self.engine.getTrackPluginNumParams(0), 3)
+
+        params = self.engine.getTrackPluginParams(0)
+        self.assertEqual(len(params), 3)
+        p_names = [p["name"] for p in params]
+        self.assertIn("Cutoff", p_names)
+        self.assertIn("Resonance", p_names)
+        self.assertIn("Volume", p_names)
+
+        # Note playback with VST3
+        self.engine.noteOnInst(0, 60, 0.8)
+        self.engine.noteOffInst(0, 60)
+
+    def test_06_track_fx_slots_and_count(self):
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        self.assertEqual(self.engine.getTrackFxCount(0), 0)
+        self.assertEqual(self.engine.getMaxTrackFx(), 4)
+
+        # Load slot 0 and slot 2
+        self.engine.loadTrackFx(0, 0, filter_fx_path)
+        self.engine.loadTrackFx(0, 2, filter_fx_path)
+        self.assertEqual(self.engine.getTrackFxCount(0), 2)
+
+        slots = self.engine.getTrackFxSlots(0)
+        self.assertEqual(len(slots), 4)
+        self.assertTrue(slots[0]["loaded"])
+        self.assertFalse(slots[1]["loaded"])
+        self.assertTrue(slots[2]["loaded"])
+        self.assertFalse(slots[3]["loaded"])
+
+        self.engine.unloadTrackFx(0, 0)
+        self.engine.unloadTrackFx(0, 2)
+        self.assertEqual(self.engine.getTrackFxCount(0), 0)
+
 if __name__ == "__main__":
     unittest.main()

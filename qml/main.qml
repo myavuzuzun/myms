@@ -700,7 +700,7 @@ Item {
                             }
 
                             Rectangle {
-                                width: 140
+                                width: 120
                                 height: parent.height - 2
                                 Layout.alignment: Qt.AlignBottom
                                 color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? theme.bgCard : "transparent"
@@ -710,7 +710,7 @@ Item {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "🔌 PLUGIN INSTRUMENT"
+                                    text: "🎛 SMART MACROS"
                                     font.bold: true
                                     font.pixelSize: 10
                                     color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? theme.accent : theme.textMuted
@@ -720,31 +720,6 @@ Item {
                                     onClicked: {
                                         rootItem.bottomDeckCollapsed = false
                                         bottomStack.currentIndex = 1
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: 115
-                                height: parent.height - 2
-                                Layout.alignment: Qt.AlignBottom
-                                color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 2) ? theme.bgCard : "transparent"
-                                border.color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 2) ? theme.border : "transparent"
-                                border.width: 1
-                                radius: 2
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "🎛 SMART MACROS"
-                                    font.bold: true
-                                    font.pixelSize: 10
-                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 2) ? theme.accent : theme.textMuted
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: {
-                                        rootItem.bottomDeckCollapsed = false
-                                        bottomStack.currentIndex = 2
                                     }
                                 }
                             }
@@ -785,12 +760,9 @@ Item {
                             onRequestEditInstrument: (track, trackType) => {
                                 editorModal.open(track, trackType)
                             }
-                        }
-
-                        PluginView {
-                            id: pluginView
-                            engine: mymsEngine
-                            currentTrack: (mymsEngine ? mymsEngine.selectedInstrument : 0)
+                            onRequestEditFx: (track) => {
+                                fxModal.open(track)
+                            }
                         }
 
                         MacroView {
@@ -836,10 +808,17 @@ Item {
         }
     }
 
-    // Pop-up Instrument Studio Editor Modal (AuraSynth / FontBox / BeatPad / VST2 / CLAP)
+    // Pop-up Instrument Studio Editor Modal (AuraSynth / FontBox / BeatPad / Plugin)
     InstrumentEditorModal {
         id: editorModal
         objectName: "editorModal"
+        engine: mymsEngine
+    }
+
+    // Pop-up Track Insert FX Chain Modal
+    TrackFxModal {
+        id: fxModal
+        objectName: "fxModal"
         engine: mymsEngine
     }
 }

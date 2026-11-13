@@ -17,7 +17,7 @@ struct ma_device;
 namespace myms {
 
 constexpr int MAX_INSTRUMENTS = 32;
-constexpr int MAX_TRACK_FX = 2;
+constexpr int MAX_TRACK_FX = 4;
 
 enum TrackType {
     TRACK_TYPE_SYNTH = 0,

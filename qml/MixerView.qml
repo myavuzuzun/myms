@@ -13,6 +13,7 @@ Rectangle {
 
     property var engine
     signal requestEditInstrument(int track, int trackType)
+    signal requestEditFx(int track)
 
     function gainToDb(gain) {
         if (gain <= 0.0001) return "-inf dB"
@@ -342,134 +343,6 @@ Rectangle {
                             }
                         }
 
-                        // 3c. Track Insert FX Chain (Slot 1 & Slot 2)
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-
-                            Repeater {
-                                model: 2
-                                Rectangle {
-                                    id: fxSlotRect
-                                    Layout.fillWidth: true
-                                    height: 18
-                                    radius: 2
-                                    property int slotIdx: index
-                                    property bool isLoaded: engine ? engine.isTrackFxLoaded(strip.trackIdx, slotIdx) : false
-                                    property string fxName: engine ? engine.getTrackFxName(strip.trackIdx, slotIdx) : ""
-                                    property string fxFmt: engine ? engine.getTrackFxFormatName(strip.trackIdx, slotIdx) : ""
-                                    color: isLoaded ? theme.bgCard : theme.bgWell
-                                    border.color: isLoaded ? theme.accent : theme.border
-
-                                    Connections {
-                                        target: engine
-                                        function onTrackFxChanged(t, s) {
-                                            if ((t === strip.trackIdx || t === -1) && (s === fxSlotRect.slotIdx || s === -1)) {
-                                                fxSlotRect.isLoaded = engine.isTrackFxLoaded(strip.trackIdx, fxSlotRect.slotIdx)
-                                                fxSlotRect.fxName = engine.getTrackFxName(strip.trackIdx, fxSlotRect.slotIdx)
-                                                fxSlotRect.fxFmt = engine.getTrackFxFormatName(strip.trackIdx, fxSlotRect.slotIdx)
-                                            }
-                                        }
-                                        function onProjectLoaded() {
-                                            fxSlotRect.isLoaded = engine ? engine.isTrackFxLoaded(strip.trackIdx, fxSlotRect.slotIdx) : false
-                                            fxSlotRect.fxName = engine ? engine.getTrackFxName(strip.trackIdx, fxSlotRect.slotIdx) : ""
-                                            fxSlotRect.fxFmt = engine ? engine.getTrackFxFormatName(strip.trackIdx, fxSlotRect.slotIdx) : ""
-                                        }
-                                    }
-
-                                    RowLayout {
-                                        anchors.fill: parent
-                                        anchors.leftMargin: 4
-                                        anchors.rightMargin: 4
-                                        spacing: 2
-
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: fxSlotRect.isLoaded ? (fxSlotRect.fxFmt + ": " + (fxSlotRect.fxName ? fxSlotRect.fxName : "FX")) : ("+ FX " + (fxSlotRect.slotIdx + 1))
-                                            font.pixelSize: 8
-                                            font.bold: fxSlotRect.isLoaded
-                                            color: fxSlotRect.isLoaded ? theme.textHeading : theme.textMuted
-                                            elide: Text.ElideRight
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-
-                                        // Open Native FX GUI Button
-                                        Rectangle {
-                                            width: 14
-                                            height: 14
-                                            radius: 2
-                                            color: fxGuiMouse.containsMouse ? theme.btnHover : "transparent"
-                                            visible: fxSlotRect.isLoaded
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: "🗔"
-                                                font.pixelSize: 8
-                                                color: theme.accent
-                                            }
-                                            MouseArea {
-                                                id: fxGuiMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (engine) engine.promptOpenTrackFxGui(strip.trackIdx, fxSlotRect.slotIdx)
-                                                }
-                                                ToolTip.visible: containsMouse
-                                                ToolTip.text: "Open Effect GUI Window"
-                                                ToolTip.delay: 300
-                                            }
-                                        }
-
-                                        // Unload FX Button
-                                        Rectangle {
-                                            width: 14
-                                            height: 14
-                                            radius: 2
-                                            color: fxDelMouse.containsMouse ? theme.stopAccent : "transparent"
-                                            visible: fxSlotRect.isLoaded
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: "✕"
-                                                font.pixelSize: 8
-                                                color: fxDelMouse.containsMouse ? "#ffffff" : theme.textMuted
-                                            }
-                                            MouseArea {
-                                                id: fxDelMouse
-                                                anchors.fill: parent
-                                                hoverEnabled: true
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: {
-                                                    if (engine) engine.unloadTrackFx(strip.trackIdx, fxSlotRect.slotIdx)
-                                                }
-                                                ToolTip.visible: containsMouse
-                                                ToolTip.text: "Unload FX"
-                                                ToolTip.delay: 300
-                                            }
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        z: -1
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            if (engine) {
-                                                if (!fxSlotRect.isLoaded) {
-                                                    engine.promptOpenTrackFxDialog(strip.trackIdx, fxSlotRect.slotIdx)
-                                                } else {
-                                                    engine.promptOpenTrackFxGui(strip.trackIdx, fxSlotRect.slotIdx)
-                                                }
-                                            }
-                                        }
-                                        ToolTip.visible: containsMouse && !fxSlotRect.isLoaded
-                                        ToolTip.text: "Click to load audio effect plugin (VST3, CLAP, VST2)"
-                                        ToolTip.delay: 400
-                                    }
-                                }
-                            }
-                        }
-
                         // 4. Pan Slider (High Precision Horizontal Slider)
                         Rectangle {
                             Layout.fillWidth: true
@@ -592,11 +465,11 @@ Rectangle {
                             }
                         }
 
-                        // 5. Mute & Solo Buttons
+                        // 5. Mute, Solo & FX Buttons
                         RowLayout {
                             Layout.fillWidth: true
                             height: 22
-                            spacing: 4
+                            spacing: 3
 
                             Button {
                                 Layout.fillWidth: true
@@ -612,7 +485,7 @@ Rectangle {
                                 contentItem: Text {
                                     text: "MUTE"
                                     font.bold: true
-                                    font.pixelSize: 9
+                                    font.pixelSize: 8
                                     color: strip.trackMute ? "#ffffff" : theme.textMuted
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
@@ -633,11 +506,49 @@ Rectangle {
                                 contentItem: Text {
                                     text: "SOLO"
                                     font.bold: true
-                                    font.pixelSize: 9
+                                    font.pixelSize: 8
                                     color: strip.trackSolo ? "#ffffff" : theme.textMuted
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
+                            }
+
+                            Button {
+                                id: fxBtn
+                                Layout.fillWidth: true
+                                implicitHeight: 22
+                                property int fxCount: engine ? engine.getTrackFxCount(strip.trackIdx) : 0
+                                Connections {
+                                    target: engine
+                                    function onTrackFxChanged(t, s) {
+                                        if (t === strip.trackIdx || t === -1) {
+                                            fxBtn.fxCount = engine.getTrackFxCount(strip.trackIdx)
+                                        }
+                                    }
+                                    function onProjectLoaded() {
+                                        fxBtn.fxCount = engine ? engine.getTrackFxCount(strip.trackIdx) : 0
+                                    }
+                                }
+                                background: Rectangle {
+                                    color: (fxBtn.fxCount > 0) ? theme.accent : (parent.hovered ? theme.btnHover : theme.btnBg)
+                                    border.color: (fxBtn.fxCount > 0) ? theme.accent : theme.border
+                                    radius: 3
+                                }
+                                contentItem: Text {
+                                    text: (fxBtn.fxCount > 0) ? ("FX (" + fxBtn.fxCount + ")") : "FX"
+                                    font.bold: true
+                                    font.pixelSize: 8
+                                    color: (fxBtn.fxCount > 0) ? "#ffffff" : (parent.hovered ? theme.textHeading : theme.textMuted)
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                onClicked: {
+                                    if (engine) engine.setSelectedInstrument(strip.trackIdx)
+                                    root.requestEditFx(strip.trackIdx)
+                                }
+                                ToolTip.visible: hovered
+                                ToolTip.text: (fxBtn.fxCount > 0) ? ("Open Insert FX Chain (" + fxBtn.fxCount + " active)") : "Open Insert FX Chain"
+                                ToolTip.delay: 300
                             }
                         }
 
@@ -645,7 +556,7 @@ Rectangle {
                         RowLayout {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            Layout.minimumHeight: 110
+                            Layout.minimumHeight: 50
                             spacing: 6
 
                             // Custom Rock-Solid Vertical Fader

@@ -85,19 +85,21 @@
    - Hosts native Graphical User Interfaces (GUIs) in dedicated floating KDE Breeze windows (`[ 🗔 OPEN GUI ]`).
    - Integrated parameter editor with smooth sliders for quick parameter manipulation and sound design.
 
-### 4.2. Per-Track Plugin Insert Effects (FX Chain)
-- Every track features an Insert FX chain with 2 dedicated slots (`MAX_TRACK_FX = 2`).
+### 4.2. Per-Track Plugin Insert Effects (FX Chain & Modal Window)
+- Every track features an Insert FX chain with up to 4 dedicated slots (`MAX_TRACK_FX = 4`).
 - Works on **any** track type (AuraSynth, SoundFont2, BeatPad, or Plugin Instrument).
 - Signal path per track:
-  `[Instrument Sound Generator] ➔ [Insert FX Slot 1] ➔ [Insert FX Slot 2] ➔ [Track Volume & Pan] ➔ [Master Bus]`.
-- Each FX slot supports:
-  - Plugin file loading (`.vst3`, `.clap`, `.so`), unloading, bypass.
-  - Native GUI window launching (`[ 🗔 ]`).
-  - Automated parameter access and persistence.
-- Mixer channel strip displays FX slot pills: `[ FX 1: Name ] [ 🗔 ] [ ✕ ]` or `[ + FX 1 ]`.
+  `[Instrument Sound Generator] ➔ [Insert FX Slot 1..4] ➔ [Track Volume & Pan] ➔ [Master Bus]`.
+- Mixer Channel Strip Integration:
+  - Clean 3-button row: `[ MUTE ]`, `[ SOLO ]`, `[ FX ]` (or `[ FX (N) ]` glowing in KDE sky blue when effects are loaded).
+  - Clicking `[ FX ]` opens the dedicated in-app `TrackFxModal` window.
+- In-App Track Insert FX Modal (`TrackFxModal`):
+  - Visual signal flow diagram from Generator through FX 1..4 to Mixer.
+  - Dedicated cards for all 4 slots showing loaded format badges (`VST3`, `CLAP`, `VST2`), plugin names, vendors, paths, and status.
+  - Action buttons: `[ 🗔 OPEN GUI ]`, `[ 📁 CHANGE... ]`, `[ ✕ REMOVE ]`, and quick demo presets.
 
-### 4.3. Native Plugin GUI Window Host (`PluginHostWindow`)
-- Standalone top-level floating window wrapping an X11 container widget (`WA_NativeWindow`).
+### 4.3. Native Plugin GUI Window Host (`PluginNativeHostWindow`)
+- Standalone top-level floating window wrapping an X11 container widget (`WA_NativeWindow`, `WA_PaintOnScreen`).
 - Dynamically resizes to match plugin's native dimensions (`effEditGetRect`, `CLAP_EXT_GUI`, or `IPlugView::getSize`).
 - Forwards mouse clicks and drags seamlessly to plugin editors with dedicated X11 event pumps.
 - Title bar reflects plugin and track context: `myms — [Plugin Name] ([Format]) — Track [N]`.
@@ -106,14 +108,20 @@
 ### 4.4. Bundled Reference Plugins
 1. **Interactive GUI Test Synth (`plugins/gui_synth/demo_gui_synth.so`)**:
    - Bundled lightweight Linux synthesizer featuring a custom interactive X11 graphical interface.
-   - Real-time animated oscilloscope/waveform display, custom draggable knobs/sliders for Cutoff, Resonance, and Volume, and instant parameter feedback.
+   - Real-time animated oscilloscope/waveform display, custom draggable knobs/sliders for Cutoff, Resonance, Decay, and Volume, and instant parameter feedback.
 2. **Track Insert Filter FX (`plugins/effects/demo_filter_fx.so`)**:
-   - Bundled stereo resonant multi-mode filter and saturation insert effect to test track FX processing.
+   - Bundled stereo resonant multi-mode filter and saturation insert effect with interactive X11 GUI.
+3. **Steinberg VST3 Reference Synth (`plugins/vst3/demo_synth_vst3.so`)**:
+   - Native 64-bit Linux VST3 synthesizer built with official `vst3_c_api.h` implementing `IPluginFactory`, `IComponent`, `IAudioProcessor`, and `IEditController`.
+4. **CLAP Reference Synth (`plugins/clap/demo_synth_clap.clap`)**:
+   - Native CLAP synthesizer plugin implementing `clap_entry`, params, and note events.
+5. **VST 2.4 Reference Synth (`plugins/vst2/demo_synth_vst2.so`)**:
+   - Standard 64-bit Linux VST2 plugin.
 
-### 4.5. Resizable Dock System
+### 4.5. Streamlined Dock System
 - Dynamic splitter bar using global coordinate delta mapping (`mapToItem`) to smoothly adjust bottom deck height against the Tracker matrix without jitter.
-- Tabs: `🎚 TRACK MIXER`, `🔌 PLUGIN INSTRUMENT`, `🎛 SMART MACROS`.
-- Pop-up modal studio editor (`InstrumentEditorModal`) with a single, unified `PLUGIN` tab.
+- Simplified 2-Tab Dock: `🎚 TRACK MIXER` and `🎛 SMART MACROS`.
+- Eliminates dock clutter: sound design and plugin instruments are edited exclusively in the dedicated in-app `InstrumentEditorModal` when clicking `[ ⚙ EDIT SOUND ]`.
 
 ---
 

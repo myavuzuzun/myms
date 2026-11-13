@@ -22,6 +22,10 @@ if [ ! -f "plugins/clap/demo_synth_clap.clap" ]; then
     mkdir -p plugins/clap
     g++ -O3 -shared -fPIC -Iengine/include plugins/clap/demo_synth_clap.cpp -o plugins/clap/demo_synth_clap.clap -lm
 fi
+if [ ! -f "plugins/vst3/demo_synth_vst3.so" ]; then
+    mkdir -p plugins/vst3
+    g++ -O3 -shared -fPIC -Iengine/include plugins/vst3/demo_synth_vst3.cpp -o plugins/vst3/demo_synth_vst3.so -lm
+fi
 if [ ! -f "plugins/gui_synth/demo_gui_synth.so" ]; then
     mkdir -p plugins/gui_synth
     g++ -O3 -shared -fPIC -Iengine/include \
