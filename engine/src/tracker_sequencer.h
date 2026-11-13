@@ -115,6 +115,11 @@ public:
 
     void setSongMode(bool songMode) {
         m_isSongMode = songMode;
+        if (songMode && !m_isPlaying && !m_songOrder.empty()) {
+            m_songOrderIndex = 0;
+            m_currentPattern = std::clamp(m_songOrder[0], 0, static_cast<int>(m_patterns.size()) - 1);
+            m_currentRow = 0;
+        }
     }
 
     bool isSongMode() const {
@@ -135,6 +140,11 @@ public:
         m_isPlaying = false;
         m_currentRow = 0;
         m_songOrderIndex = 0;
+        if (!m_songOrder.empty()) {
+            m_currentPattern = std::clamp(m_songOrder[0], 0, static_cast<int>(m_patterns.size()) - 1);
+        } else {
+            m_currentPattern = 0;
+        }
         m_samplesUntilNextRow = 0;
     }
 
@@ -338,7 +348,7 @@ public:
         return static_cast<int>((m_sampleRate * 60.0f) / (m_bpm * static_cast<float>(m_lpb)));
     }
 
-    inline bool advanceSample(int& outRow, int& outPattern) {
+    inline bool advanceSample(int& outRow, int& outPattern, int& outSongOrderIndex) {
         if (!m_isPlaying || m_patterns.empty()) {
             return false;
         }
@@ -346,6 +356,7 @@ public:
         if (m_samplesUntilNextRow <= 0) {
             outRow = m_currentRow;
             outPattern = getCurrentPattern();
+            outSongOrderIndex = m_songOrderIndex;
             m_samplesUntilNextRow = getSamplesPerRow();
             
             int curRows = (outPattern < static_cast<int>(m_patterns.size())) ? m_patterns[outPattern].numRows : DEFAULT_NUM_ROWS;

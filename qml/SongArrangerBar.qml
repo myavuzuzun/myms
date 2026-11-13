@@ -7,7 +7,7 @@ Rectangle {
     StudioTheme { id: theme }
 
     color: theme.bgHeader
-    height: 38
+    height: 44
     border.color: theme.border
     border.width: 1
 
@@ -15,41 +15,62 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 8
-        anchors.rightMargin: 8
-        spacing: 8
+        anchors.leftMargin: 10
+        anchors.rightMargin: 10
+        spacing: 10
 
-        // Left Label & Song Mode Status
+        // 1. Arranger Mode & Title
         RowLayout {
-            spacing: 6
+            spacing: 8
+
             Text {
-                text: "ARRANGER"
+                text: "SONG ARRANGER"
                 font.bold: true
-                font.pixelSize: 10
+                font.pixelSize: 11
                 color: theme.textHeading
             }
 
-            Rectangle {
-                height: 18
-                width: songStatusText.implicitWidth + 10
-                radius: 2
-                color: (engine && engine.isSongMode) ? theme.playAccent : theme.bgWell
-                border.color: (engine && engine.isSongMode) ? theme.playAccent : theme.border
+            // Mode Selector Pill (PAT vs SONG)
+            Button {
+                id: modeToggleBtn
+                implicitHeight: 24
+                implicitWidth: (engine && engine.isSongMode) ? 105 : 95
+                checkable: true
+                checked: engine ? engine.isSongMode : false
+                onClicked: {
+                    if (engine) engine.toggleSongMode()
+                }
 
-                Text {
-                    id: songStatusText
+                background: Rectangle {
+                    color: (engine && engine.isSongMode) ? theme.playAccent : theme.bgWell
+                    radius: 3
+                    border.color: (engine && engine.isSongMode) ? theme.playAccent : theme.border
+                }
+
+                contentItem: Row {
                     anchors.centerIn: parent
-                    text: (engine && engine.isSongMode) ? "SONG ACTIVE" : "PAT LOOP"
-                    font.bold: true
-                    font.pixelSize: 8
-                    color: (engine && engine.isSongMode) ? "#ffffff" : theme.textMuted
+                    spacing: 4
+                    Rectangle {
+                        width: 6
+                        height: 6
+                        radius: 3
+                        color: (engine && engine.isSongMode) ? "#ffffff" : theme.stopAccent
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
+                    Text {
+                        text: (engine && engine.isSongMode) ? "SONG MODE" : "PAT LOOP"
+                        font.bold: true
+                        font.pixelSize: 10
+                        color: (engine && engine.isSongMode) ? "#ffffff" : theme.textMuted
+                        anchors.verticalCenter: parent.verticalCenter
+                    }
                 }
             }
         }
 
-        Rectangle { width: 1; height: 18; color: theme.border }
+        Rectangle { width: 1; height: 22; color: theme.border }
 
-        // Horizontal Scrollable Sequence Chain
+        // 2. Horizontal Sequence Timeline
         ScrollView {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -58,80 +79,100 @@ Rectangle {
             ScrollBar.vertical.policy: ScrollBar.AlwaysOff
 
             Row {
-                spacing: 6
+                id: sequenceRow
+                spacing: 8
                 anchors.verticalCenter: parent.verticalCenter
 
                 Repeater {
                     id: stepRepeater
                     model: engine ? engine.songOrderLength : 1
 
-                    // Single Song Step Block
+                    // Single Arranger Step Card
                     Rectangle {
-                        id: stepBlock
-                        width: 78
-                        height: 28
-                        radius: 3
+                        id: stepCard
+                        width: 96
+                        height: 32
+                        radius: 4
+
                         property int stepIdx: index
                         property int patNum: engine ? engine.getSongOrderStep(stepIdx) : 0
-                        property bool isCurrentPlaybackStep: (engine && engine.isSongMode && engine.songOrderIndex === stepIdx)
-                        property bool isSelectedPattern: (engine && engine.currentPattern === patNum)
+                        property bool isPlayingStep: (engine && engine.isSongMode && engine.isPlaying && engine.songOrderIndex === stepIdx)
+                        property bool isCurrentEditPattern: (engine && engine.currentPattern === patNum)
 
-                        color: isCurrentPlaybackStep ? theme.playRow : (isSelectedPattern ? theme.bgWellHover : theme.bgCard)
-                        border.color: isCurrentPlaybackStep ? theme.playAccent : (isSelectedPattern ? theme.accent : theme.border)
-                        border.width: isCurrentPlaybackStep ? 2 : (isSelectedPattern ? 1 : 1)
+                        color: isPlayingStep ? theme.playRow : (isCurrentEditPattern ? theme.bgWellHover : theme.bgCard)
+                        border.color: isPlayingStep ? theme.playAccent : (isCurrentEditPattern ? theme.accent : theme.border)
+                        border.width: isPlayingStep ? 2 : (isCurrentEditPattern ? 1.5 : 1)
 
                         RowLayout {
                             anchors.fill: parent
                             anchors.margins: 4
                             spacing: 4
 
-                            // Step Number
+                            // Step Order Label
                             Text {
-                                text: "#" + (stepBlock.stepIdx + 1)
-                                font.pixelSize: 8
+                                text: "#" + (stepCard.stepIdx < 9 ? "0" + (stepCard.stepIdx + 1) : "" + (stepCard.stepIdx + 1))
+                                font.pixelSize: 9
                                 font.bold: true
-                                color: stepBlock.isCurrentPlaybackStep ? theme.playAccent : theme.textDim
+                                color: stepCard.isPlayingStep ? theme.playAccent : theme.textDim
                             }
 
-                            // Pattern Badge
+                            // Pattern Dropdown Button
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 18
+                                height: 22
                                 radius: 2
-                                color: stepBlock.isCurrentPlaybackStep ? theme.playAccent : (stepBlock.isSelectedPattern ? theme.accent : theme.btnBg)
+                                color: stepCard.isPlayingStep ? theme.playAccent : (stepCard.isCurrentEditPattern ? theme.accent : theme.btnBg)
 
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "PAT " + (stepBlock.patNum < 10 ? "0" + stepBlock.patNum : "" + stepBlock.patNum)
-                                    font.bold: true
-                                    font.pixelSize: 9
-                                    font.family: "Monospace"
-                                    color: (stepBlock.isCurrentPlaybackStep || stepBlock.isSelectedPattern) ? "#ffffff" : theme.textMain
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 4
+                                    anchors.rightMargin: 4
+                                    spacing: 2
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "PAT " + (stepCard.patNum < 10 ? "0" + stepCard.patNum : "" + stepCard.patNum)
+                                        font.bold: true
+                                        font.pixelSize: 10
+                                        font.family: "Monospace"
+                                        color: (stepCard.isPlayingStep || stepCard.isCurrentEditPattern) ? "#ffffff" : theme.textMain
+                                        horizontalAlignment: Text.AlignHCenter
+                                    }
+
+                                    Text {
+                                        text: "▾"
+                                        font.pixelSize: 8
+                                        color: (stepCard.isPlayingStep || stepCard.isCurrentEditPattern) ? "#ffffff" : theme.textMuted
+                                    }
                                 }
 
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
-                                    onWheel: (wheel) => {
-                                        if (engine) {
-                                            let delta = wheel.angleDelta.y > 0 ? 1 : -1
-                                            let newPat = Math.max(0, Math.min(engine.numPatterns - 1, stepBlock.patNum + delta))
-                                            engine.setSongOrderStep(stepBlock.stepIdx, newPat)
-                                        }
-                                    }
-                                    onClicked: {
-                                        if (engine) {
-                                            engine.setSongOrderIndex(stepBlock.stepIdx)
-                                            engine.setCurrentPattern(stepBlock.patNum)
+                                    onClicked: patMenu.open()
+                                }
+
+                                Menu {
+                                    id: patMenu
+                                    Repeater {
+                                        model: engine ? engine.numPatterns : 1
+                                        MenuItem {
+                                            text: "Pattern " + (index < 10 ? "0" + index : "" + index)
+                                            onTriggered: {
+                                                if (engine) {
+                                                    engine.setSongOrderStep(stepCard.stepIdx, index)
+                                                    engine.setCurrentPattern(index)
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
 
-                            // Remove Step button (visible if > 1 step)
+                            // Remove Step button
                             Rectangle {
-                                width: 12
-                                height: 12
+                                width: 14
+                                height: 14
                                 radius: 2
                                 visible: (engine && engine.songOrderLength > 1)
                                 color: delMouse.containsMouse ? theme.stopAccent : "transparent"
@@ -140,30 +181,42 @@ Rectangle {
                                     anchors.centerIn: parent
                                     text: "×"
                                     font.bold: true
-                                    font.pixelSize: 9
-                                    color: theme.textMuted
+                                    font.pixelSize: 10
+                                    color: (delMouse.containsMouse) ? "#ffffff" : theme.textMuted
                                 }
 
                                 MouseArea {
                                     id: delMouse
                                     anchors.fill: parent
                                     hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        if (engine) engine.removeSongOrderStep(stepBlock.stepIdx)
+                                        if (engine) engine.removeSongOrderStep(stepCard.stepIdx)
                                     }
+                                }
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            z: -1
+                            onClicked: {
+                                if (engine) {
+                                    engine.setSongOrderIndex(stepCard.stepIdx)
+                                    engine.setCurrentPattern(stepCard.patNum)
                                 }
                             }
                         }
                     }
                 }
 
-                // Arrow Connector / Add Step Button
+                // Add Step Button
                 Button {
-                    implicitWidth: 64
+                    implicitWidth: 80
                     implicitHeight: 28
                     text: "+ STEP"
                     font.bold: true
-                    font.pixelSize: 9
+                    font.pixelSize: 10
                     background: Rectangle {
                         color: parent.hovered ? theme.btnHover : theme.btnBg
                         border.color: theme.border
@@ -184,6 +237,16 @@ Rectangle {
                     }
                 }
             }
+        }
+
+        Rectangle { width: 1; height: 22; color: theme.border }
+
+        // Total song steps readout
+        Text {
+            text: (engine ? engine.songOrderLength : 1) + " Steps in Song"
+            font.pixelSize: 10
+            font.bold: true
+            color: theme.textMuted
         }
     }
 }

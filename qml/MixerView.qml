@@ -14,7 +14,6 @@ Rectangle {
     property var engine
     signal requestEditInstrument(int track, int trackType)
 
-    // Helper: decibels from linear gain (0..2.0)
     function gainToDb(gain) {
         if (gain <= 0.0001) return "-inf"
         let db = 20.0 * Math.log10(gain)
@@ -22,9 +21,8 @@ Rectangle {
         return db.toFixed(1) + " dB"
     }
 
-    // Helper: pan label (0..1.0)
     function panToString(pan) {
-        if (Math.abs(pan - 0.5) < 0.03) return "C"
+        if (Math.abs(pan - 0.5) < 0.04) return "CENTER"
         if (pan < 0.5) {
             let pct = Math.round((0.5 - pan) * 200)
             return "L " + pct + "%"
@@ -34,55 +32,65 @@ Rectangle {
         }
     }
 
+    // High performance VU meter updater: DOES NOT rebuild delegates!
     Timer {
         id: meterTimer
-        interval: 30
+        interval: 35
         running: root.visible && engine && engine.isPlaying
         repeat: true
         onTriggered: {
-            // Trigger repaints of track VU meters
-            meterRepeater.model = 0
-            meterRepeater.model = engine ? engine.numTracks : 1
+            if (!engine) return
+            for (let i = 0; i < meterRepeater.count; ++i) {
+                let item = meterRepeater.itemAt(i)
+                if (item) {
+                    let m = engine.getTrackMeters(i)
+                    if (m && m.length >= 2) {
+                        item.peakL = m[0]
+                        item.peakR = m[1]
+                    }
+                }
+            }
         }
     }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 6
-        spacing: 4
+        anchors.margins: 8
+        spacing: 6
 
         // Top Toolbar of Mixer
         RowLayout {
             Layout.fillWidth: true
-            height: 24
-            spacing: 8
+            height: 26
+            spacing: 10
 
             Text {
-                text: "TRACK MIXER"
+                text: "STUDIO TRACK MIXER"
                 font.bold: true
-                font.pixelSize: 11
+                font.pixelSize: 12
                 color: theme.textHeading
             }
 
-            Rectangle { width: 1; height: 14; color: theme.border }
+            Rectangle { width: 1; height: 16; color: theme.border }
 
             Text {
-                text: (engine ? engine.numTracks : 1) + " Tracks Active"
-                font.pixelSize: 10
+                text: (engine ? engine.numTracks : 1) + " Active Channels"
+                font.pixelSize: 11
                 color: theme.textMuted
             }
 
             Item { Layout.fillWidth: true }
 
             Button {
-                implicitHeight: 22
-                implicitWidth: 84
-                text: "+ Add Track"
-                font.pixelSize: 10
+                implicitHeight: 26
+                implicitWidth: 105
+                text: "+ Add Channel"
+                font.bold: true
+                font.pixelSize: 11
                 background: Rectangle {
                     color: parent.hovered ? theme.btnHover : theme.btnBg
                     border.color: theme.border
-                    radius: 2
+                    radius: 3
                 }
                 contentItem: Text {
                     text: parent.text
@@ -113,20 +121,20 @@ Rectangle {
 
             Row {
                 id: channelRow
-                spacing: 6
+                spacing: 8
                 height: parent.height
 
                 Repeater {
                     id: meterRepeater
                     model: engine ? engine.numTracks : 1
 
-                    // --- INDIVIDUAL TRACK CHANNEL STRIP ---
+                    // --- INDIVIDUAL TRACK CHANNEL STRIP (Spacious 160px wide) ---
                     Rectangle {
                         id: strip
-                        width: 122
+                        width: 160
                         height: channelRow.height
                         color: (engine && engine.selectedInstrument === index) ? theme.bgWellHover : theme.bgWell
-                        radius: 3
+                        radius: 4
                         border.color: (engine && engine.selectedInstrument === index) ? theme.accent : theme.border
                         border.width: (engine && engine.selectedInstrument === index) ? 2 : 1
 
@@ -138,9 +146,8 @@ Rectangle {
                         property bool trackSolo: engine ? engine.getTrackSolo(trackIdx) : false
                         property int trackSf2: engine ? engine.getTrackSf2Preset(trackIdx) : 0
 
-                        property var meters: (engine && engine.isPlaying) ? engine.getTrackMeters(trackIdx) : [0.0, 0.0]
-                        property real peakL: meters && meters.length > 0 ? meters[0] : 0.0
-                        property real peakR: meters && meters.length > 1 ? meters[1] : 0.0
+                        property real peakL: 0.0
+                        property real peakR: 0.0
 
                         Connections {
                             target: engine
@@ -169,82 +176,88 @@ Rectangle {
 
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 4
-                            spacing: 4
+                            anchors.margins: 6
+                            spacing: 5
 
-                            // 1. Header (Track Name & Number)
+                            // 1. Channel Header: Track Number & Name
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 22
+                                height: 26
                                 color: (engine && engine.selectedInstrument === strip.trackIdx) ? theme.accent : theme.bgTrackHeader
-                                radius: 2
+                                radius: 3
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 4
-                                    anchors.rightMargin: 4
-                                    spacing: 2
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        text: (engine ? engine.getInstrumentName(strip.trackIdx) : "Track " + (strip.trackIdx + 1))
-                                        font.bold: true
-                                        font.pixelSize: 10
-                                        color: (engine && engine.selectedInstrument === strip.trackIdx) ? "#ffffff" : theme.textMain
-                                        elide: Text.ElideRight
-                                    }
+                                    anchors.leftMargin: 6
+                                    anchors.rightMargin: 6
+                                    spacing: 4
 
                                     Text {
                                         text: "#" + (strip.trackIdx + 1)
-                                        font.pixelSize: 9
-                                        color: (engine && engine.selectedInstrument === strip.trackIdx) ? "#ffffff" : theme.textDim
+                                        font.bold: true
+                                        font.pixelSize: 11
+                                        color: (engine && engine.selectedInstrument === strip.trackIdx) ? "#ffffff" : theme.accent
+                                    }
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: (engine ? engine.getInstrumentName(strip.trackIdx) : "Track")
+                                        font.bold: true
+                                        font.pixelSize: 11
+                                        color: (engine && engine.selectedInstrument === strip.trackIdx) ? "#ffffff" : theme.textMain
+                                        elide: Text.ElideRight
                                     }
                                 }
 
                                 MouseArea {
                                     anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         if (engine) engine.setSelectedInstrument(strip.trackIdx)
+                                    }
+                                    onDoubleClicked: {
+                                        if (engine) {
+                                            engine.setSelectedInstrument(strip.trackIdx)
+                                            root.requestEditInstrument(strip.trackIdx, strip.trackType)
+                                        }
                                     }
                                 }
                             }
 
-                            // 2. Instrument Engine Selector (SYNTH / SF2 / DRUMS)
+                            // 2. Engine Type Selector Button
                             Rectangle {
-                                id: engineSelector
+                                id: engineBtn
                                 Layout.fillWidth: true
-                                height: 20
+                                height: 24
                                 color: engineMouse.containsMouse ? theme.btnHover : theme.btnBg
-                                radius: 2
+                                radius: 3
                                 border.color: theme.border
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 4
-                                    anchors.rightMargin: 4
-                                    spacing: 2
+                                    anchors.leftMargin: 6
+                                    anchors.rightMargin: 6
+                                    spacing: 4
 
                                     Text {
-                                        id: typeLabel
                                         Layout.fillWidth: true
                                         text: {
-                                            if (strip.trackType === 1) return "SF2"
-                                            if (strip.trackType === 2) return "DRUMS"
-                                            return "SYNTH"
+                                            if (strip.trackType === 1) return "🎻 SOUNDFONT"
+                                            if (strip.trackType === 2) return "🥁 BEATPAD"
+                                            return "🎹 AURASYNTH"
                                         }
                                         font.bold: true
-                                        font.pixelSize: 9
+                                        font.pixelSize: 10
                                         color: {
                                             if (strip.trackType === 1) return "#92ebb5"
                                             if (strip.trackType === 2) return "#f7b731"
                                             return theme.accent
                                         }
-                                        horizontalAlignment: Text.AlignHCenter
                                     }
 
                                     Text {
                                         text: "▾"
-                                        font.pixelSize: 8
+                                        font.pixelSize: 10
                                         color: theme.textMuted
                                     }
                                 }
@@ -254,18 +267,14 @@ Rectangle {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        engineMenu.open()
-                                    }
+                                    onClicked: engineMenu.open()
                                 }
 
                                 Menu {
                                     id: engineMenu
                                     MenuItem {
                                         text: "🎹 AuraSynth (Poly Subtractive)"
-                                        onTriggered: {
-                                            if (engine) engine.setTrackType(strip.trackIdx, 0)
-                                        }
+                                        onTriggered: if (engine) engine.setTrackType(strip.trackIdx, 0)
                                     }
                                     MenuItem {
                                         text: "🎻 SoundFont (SF2 Multi-Voice)"
@@ -280,32 +289,30 @@ Rectangle {
                                     }
                                     MenuItem {
                                         text: "🥁 BeatPad (8-Slot Sampler)"
-                                        onTriggered: {
-                                            if (engine) engine.setTrackType(strip.trackIdx, 2)
-                                        }
+                                        onTriggered: if (engine) engine.setTrackType(strip.trackIdx, 2)
                                     }
                                 }
                             }
 
-                            // 3. SF2 Preset Selector (Visible only when SF2 is selected)
+                            // 3. SF2 Preset Selector (Visible only when SF2 is active)
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 20
-                                color: sf2Mouse.containsMouse ? theme.btnHover : theme.btnBg
+                                height: 22
+                                color: sf2Mouse.containsMouse ? theme.btnHover : theme.bgCard
                                 radius: 2
                                 border.color: theme.border
                                 visible: (strip.trackType === 1)
 
                                 Text {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 3
-                                    anchors.rightMargin: 3
+                                    anchors.leftMargin: 4
+                                    anchors.rightMargin: 4
                                     text: {
                                         if (!engine || !engine.sf2Loaded) return "No SF2 Loaded"
                                         let name = engine.getSoundFontPresetName(strip.trackSf2)
-                                        return (strip.trackSf2 < 10 ? "0" + strip.trackSf2 : "" + strip.trackSf2) + ": " + (name ? name : "Preset")
+                                        return (strip.trackSf2 < 10 ? "00" + strip.trackSf2 : (strip.trackSf2 < 100 ? "0" + strip.trackSf2 : "" + strip.trackSf2)) + " " + (name ? name : "Preset")
                                     }
-                                    font.pixelSize: 8
+                                    font.pixelSize: 9
                                     color: theme.textMain
                                     elide: Text.ElideRight
                                     verticalAlignment: Text.AlignVCenter
@@ -317,16 +324,13 @@ Rectangle {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        sf2PresetPopup.open()
-                                    }
+                                    onClicked: sf2Popup.open()
                                 }
 
                                 Popup {
-                                    id: sf2PresetPopup
-                                    width: 220
-                                    height: 240
-                                    y: 22
+                                    id: sf2Popup
+                                    width: 240
+                                    height: 260
                                     modal: true
                                     focus: true
                                     background: Rectangle {
@@ -337,13 +341,13 @@ Rectangle {
 
                                     ColumnLayout {
                                         anchors.fill: parent
-                                        anchors.margins: 4
+                                        anchors.margins: 6
                                         spacing: 4
 
                                         Text {
-                                            text: "Select SoundFont Preset"
+                                            text: "Track #" + (strip.trackIdx + 1) + " SoundFont Preset"
                                             font.bold: true
-                                            font.pixelSize: 10
+                                            font.pixelSize: 11
                                             color: theme.textHeading
                                         }
 
@@ -358,27 +362,27 @@ Rectangle {
                                                 model: engine ? engine.sf2PresetCount : 0
                                                 delegate: Rectangle {
                                                     width: sf2List.width
-                                                    height: 20
-                                                    color: (strip.trackSf2 === index) ? theme.accent : (pItemMouse.containsMouse ? theme.btnHover : "transparent")
+                                                    height: 22
+                                                    color: (strip.trackSf2 === index) ? theme.accent : (pMouse.containsMouse ? theme.btnHover : "transparent")
                                                     radius: 2
 
                                                     Text {
                                                         anchors.fill: parent
                                                         anchors.leftMargin: 6
                                                         text: (index < 10 ? "00" + index : (index < 100 ? "0" + index : "" + index)) + ": " + (engine ? engine.getSoundFontPresetName(index) : "")
-                                                        font.pixelSize: 9
+                                                        font.pixelSize: 10
                                                         color: (strip.trackSf2 === index) ? "#ffffff" : theme.textMain
                                                         verticalAlignment: Text.AlignVCenter
                                                         elide: Text.ElideRight
                                                     }
 
                                                     MouseArea {
-                                                        id: pItemMouse
+                                                        id: pMouse
                                                         anchors.fill: parent
                                                         hoverEnabled: true
                                                         onClicked: {
                                                             if (engine) engine.setTrackSf2Preset(strip.trackIdx, index)
-                                                            sf2PresetPopup.close()
+                                                            sf2Popup.close()
                                                         }
                                                     }
                                                 }
@@ -388,114 +392,141 @@ Rectangle {
                                 }
                             }
 
-                            // 4. Pan Control (Compact Knob / Slider)
-                            RowLayout {
+                            // 4. Pan Slider (High Precision Horizontal Slider)
+                            Rectangle {
                                 Layout.fillWidth: true
-                                height: 18
-                                spacing: 2
+                                height: 22
+                                color: theme.bgCard
+                                radius: 2
+                                border.color: theme.border
 
-                                Text {
-                                    text: "PAN"
-                                    font.pixelSize: 8
-                                    font.bold: true
-                                    color: theme.textDim
-                                }
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.leftMargin: 4
+                                    anchors.rightMargin: 4
+                                    spacing: 4
 
-                                Slider {
-                                    id: panSlider
-                                    Layout.fillWidth: true
-                                    from: 0.0
-                                    to: 1.0
-                                    value: strip.trackPan
-                                    onMoved: {
-                                        if (engine) engine.setTrackPan(strip.trackIdx, value)
+                                    Text {
+                                        text: "PAN"
+                                        font.pixelSize: 9
+                                        font.bold: true
+                                        color: theme.textDim
                                     }
 
-                                    background: Rectangle {
-                                        x: panSlider.leftPadding
-                                        y: panSlider.topPadding + panSlider.availableHeight / 2 - height / 2
-                                        width: panSlider.availableWidth
-                                        height: 3
-                                        radius: 1
-                                        color: theme.border
+                                    // Pan Groove & Handle
+                                    Item {
+                                        id: panTrackItem
+                                        Layout.fillWidth: true
+                                        height: parent.height
 
                                         Rectangle {
-                                            anchors.centerIn: parent
-                                            width: 2
-                                            height: 7
-                                            color: theme.textMuted
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: parent.width
+                                            height: 4
+                                            radius: 2
+                                            color: theme.border
+
+                                            // Center detent mark
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: 2
+                                                height: 8
+                                                color: theme.textMuted
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            id: panCap
+                                            width: 12
+                                            height: 14
+                                            radius: 2
+                                            color: panMouseArea.pressed ? "#ffffff" : theme.accent
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            x: Math.max(0, Math.min(panTrackItem.width - width, strip.trackPan * (panTrackItem.width - width)))
+                                        }
+
+                                        MouseArea {
+                                            id: panMouseArea
+                                            anchors.fill: parent
+                                            cursorShape: Qt.SizeHorCursor
+                                            hoverEnabled: true
+
+                                            function updatePan(mouseX) {
+                                                let avail = panTrackItem.width - panCap.width
+                                                if (avail <= 0) return
+                                                let clampedX = Math.max(0, Math.min(avail, mouseX - panCap.width / 2))
+                                                let newPan = clampedX / avail
+                                                if (Math.abs(newPan - 0.5) < 0.05) newPan = 0.5 // Snap to center
+                                                if (engine) engine.setTrackPan(strip.trackIdx, newPan)
+                                            }
+
+                                            onPressed: (mouse) => updatePan(mouse.x)
+                                            onPositionChanged: (mouse) => { if (pressed) updatePan(mouse.x) }
+                                            onDoubleClicked: { if (engine) engine.setTrackPan(strip.trackIdx, 0.5) }
+                                            onWheel: (wheel) => {
+                                                if (engine) {
+                                                    let delta = (wheel.angleDelta.y > 0 ? 0.05 : -0.05)
+                                                    let nextPan = Math.max(0.0, Math.min(1.0, strip.trackPan + delta))
+                                                    engine.setTrackPan(strip.trackIdx, nextPan)
+                                                }
+                                            }
                                         }
                                     }
 
-                                    handle: Rectangle {
-                                        x: panSlider.leftPadding + panSlider.visualPosition * (panSlider.availableWidth - width)
-                                        y: panSlider.topPadding + panSlider.availableHeight / 2 - height / 2
-                                        width: 8
-                                        height: 12
-                                        radius: 1
-                                        color: panSlider.pressed ? "#ffffff" : theme.accent
-                                        border.color: theme.borderLight
+                                    Text {
+                                        text: root.panToString(strip.trackPan)
+                                        font.pixelSize: 8
+                                        font.bold: true
+                                        font.family: "Monospace"
+                                        color: theme.textMain
+                                        width: 38
+                                        horizontalAlignment: Text.AlignRight
                                     }
-                                }
-
-                                Text {
-                                    text: root.panToString(strip.trackPan)
-                                    font.pixelSize: 8
-                                    font.family: "Monospace"
-                                    color: theme.textMuted
-                                    width: 32
-                                    horizontalAlignment: Text.AlignRight
                                 }
                             }
 
-                            // 5. Mute & Solo Buttons
+                            // 5. Mute & Solo Buttons (Large 24px)
                             RowLayout {
                                 Layout.fillWidth: true
-                                height: 20
+                                height: 24
                                 spacing: 4
 
-                                // Mute Button
                                 Button {
                                     Layout.fillWidth: true
-                                    implicitHeight: 20
+                                    implicitHeight: 24
                                     checkable: true
                                     checked: strip.trackMute
-                                    onClicked: {
-                                        if (engine) engine.setTrackMute(strip.trackIdx, !strip.trackMute)
-                                    }
+                                    onClicked: if (engine) engine.setTrackMute(strip.trackIdx, !strip.trackMute)
                                     background: Rectangle {
                                         color: strip.trackMute ? theme.pauseAccent : (parent.hovered ? theme.btnHover : theme.btnBg)
                                         border.color: strip.trackMute ? theme.pauseAccent : theme.border
-                                        radius: 2
+                                        radius: 3
                                     }
                                     contentItem: Text {
-                                        text: "M"
+                                        text: "MUTE"
                                         font.bold: true
-                                        font.pixelSize: 9
+                                        font.pixelSize: 10
                                         color: strip.trackMute ? "#ffffff" : theme.textMuted
                                         horizontalAlignment: Text.AlignHCenter
                                         verticalAlignment: Text.AlignVCenter
                                     }
                                 }
 
-                                // Solo Button
                                 Button {
                                     Layout.fillWidth: true
-                                    implicitHeight: 20
+                                    implicitHeight: 24
                                     checkable: true
                                     checked: strip.trackSolo
-                                    onClicked: {
-                                        if (engine) engine.setTrackSolo(strip.trackIdx, !strip.trackSolo)
-                                    }
+                                    onClicked: if (engine) engine.setTrackSolo(strip.trackIdx, !strip.trackSolo)
                                     background: Rectangle {
                                         color: strip.trackSolo ? theme.accent : (parent.hovered ? theme.btnHover : theme.btnBg)
                                         border.color: strip.trackSolo ? theme.accent : theme.border
-                                        radius: 2
+                                        radius: 3
                                     }
                                     contentItem: Text {
-                                        text: "S"
+                                        text: "SOLO"
                                         font.bold: true
-                                        font.pixelSize: 9
+                                        font.pixelSize: 10
                                         color: strip.trackSolo ? "#ffffff" : theme.textMuted
                                         horizontalAlignment: Text.AlignHCenter
                                         verticalAlignment: Text.AlignVCenter
@@ -503,70 +534,107 @@ Rectangle {
                                 }
                             }
 
-                            // 6. Volume Fader & Live Peak Meter
+                            // 6. High-Precision Vertical Volume Fader & Dual VU Meter
                             RowLayout {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                spacing: 4
+                                spacing: 6
 
-                                // Vertical Volume Fader
-                                Slider {
-                                    id: volSlider
+                                // Custom Rock-Solid Vertical Fader
+                                Item {
+                                    id: faderArea
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
-                                    orientation: Qt.Vertical
-                                    from: 0.0
-                                    to: 1.5
-                                    value: strip.trackVol
-                                    onMoved: {
-                                        if (engine) engine.setTrackVolume(strip.trackIdx, value)
-                                    }
 
-                                    background: Rectangle {
-                                        x: volSlider.leftPadding + volSlider.availableWidth / 2 - width / 2
-                                        y: volSlider.topPadding
-                                        width: 4
-                                        height: volSlider.availableHeight
-                                        radius: 2
-                                        color: theme.border
+                                    // Fader Track Groove
+                                    Rectangle {
+                                        id: faderGroove
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        width: 6
+                                        height: parent.height
+                                        radius: 3
+                                        color: theme.bgWell
 
-                                        // 0dB unity gain reference marker
+                                        // Unity Gain 0dB marker line (at volume = 1.0 out of 1.5 max)
                                         Rectangle {
-                                            y: volSlider.topPadding + (1.0 - (1.0 / 1.5)) * volSlider.availableHeight - 1
-                                            x: -4
-                                            width: 12
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            y: Math.round((1.0 - (1.0 / 1.5)) * (faderGroove.height - 20) + 10)
+                                            width: 22
                                             height: 2
-                                            color: theme.textMuted
+                                            color: theme.accent
+                                            opacity: 0.6
                                         }
                                     }
 
-                                    handle: Rectangle {
-                                        x: volSlider.leftPadding + volSlider.availableWidth / 2 - width / 2
-                                        y: volSlider.topPadding + (1.0 - volSlider.visualPosition) * (volSlider.availableHeight - height)
-                                        width: 18
-                                        height: 10
-                                        radius: 2
-                                        color: volSlider.pressed ? "#ffffff" : (strip.trackMute ? theme.textDim : theme.accent)
-                                        border.color: theme.borderLight
+                                    // Fader Cap (Tactile pro mixing console slider cap)
+                                    Rectangle {
+                                        id: faderCap
+                                        width: 36
+                                        height: 18
+                                        radius: 3
+                                        anchors.horizontalCenter: faderGroove.horizontalCenter
+                                        y: {
+                                            let trackH = Math.max(1, faderArea.height - height)
+                                            let norm = Math.max(0.0, Math.min(1.5, strip.trackVol)) / 1.5
+                                            return Math.round((1.0 - norm) * trackH)
+                                        }
+                                        color: faderMouse.pressed ? "#ffffff" : (strip.trackMute ? theme.textDim : theme.btnHover)
+                                        border.color: faderMouse.pressed ? theme.accent : theme.borderLight
+                                        border.width: 1
+
+                                        // Grip center notch
+                                        Rectangle {
+                                            anchors.centerIn: parent
+                                            width: parent.width - 8
+                                            height: 2
+                                            color: faderMouse.pressed ? theme.accent : theme.borderLight
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        id: faderMouse
+                                        anchors.fill: parent
+                                        cursorShape: Qt.SizeVerCursor
+                                        hoverEnabled: true
+
+                                        function updateVol(mouseY) {
+                                            let trackH = Math.max(1, faderArea.height - faderCap.height)
+                                            let clampedY = Math.max(0, Math.min(trackH, mouseY - faderCap.height / 2))
+                                            let norm = 1.0 - (clampedY / trackH)
+                                            let newVol = norm * 1.5
+                                            if (Math.abs(newVol - 1.0) < 0.04) newVol = 1.0 // Snap to unity 0dB
+                                            if (engine) engine.setTrackVolume(strip.trackIdx, newVol)
+                                        }
+
+                                        onPressed: (mouse) => updateVol(mouse.y)
+                                        onPositionChanged: (mouse) => { if (pressed) updateVol(mouse.y) }
+                                        onDoubleClicked: { if (engine) engine.setTrackVolume(strip.trackIdx, 1.0) }
+                                        onWheel: (wheel) => {
+                                            if (engine) {
+                                                let delta = (wheel.angleDelta.y > 0 ? 0.05 : -0.05)
+                                                let nextVol = Math.max(0.0, Math.min(1.5, strip.trackVol + delta))
+                                                engine.setTrackVolume(strip.trackIdx, nextVol)
+                                            }
+                                        }
                                     }
                                 }
 
-                                // Dual Stereo VU Peak Level Meter
+                                // Dual Stereo VU Peak Level Meter (Wide 12px)
                                 Rectangle {
-                                    width: 10
+                                    width: 12
                                     Layout.fillHeight: true
                                     color: theme.bgWell
-                                    radius: 1
+                                    radius: 2
                                     border.color: theme.border
 
                                     Row {
                                         anchors.fill: parent
                                         anchors.margins: 1
-                                        spacing: 1
+                                        spacing: 2
 
                                         // Left Peak Meter Bar
                                         Rectangle {
-                                            width: 3
+                                            width: 4
                                             height: parent.height
                                             color: "transparent"
 
@@ -575,12 +643,13 @@ Rectangle {
                                                 width: parent.width
                                                 height: Math.min(parent.height, parent.height * Math.min(1.0, strip.peakL * 1.3))
                                                 color: strip.peakL > 0.95 ? theme.stopAccent : (strip.peakL > 0.75 ? theme.pauseAccent : theme.playAccent)
+                                                radius: 1
                                             }
                                         }
 
                                         // Right Peak Meter Bar
                                         Rectangle {
-                                            width: 3
+                                            width: 4
                                             height: parent.height
                                             color: "transparent"
 
@@ -589,38 +658,40 @@ Rectangle {
                                                 width: parent.width
                                                 height: Math.min(parent.height, parent.height * Math.min(1.0, strip.peakR * 1.3))
                                                 color: strip.peakR > 0.95 ? theme.stopAccent : (strip.peakR > 0.75 ? theme.pauseAccent : theme.playAccent)
+                                                radius: 1
                                             }
                                         }
                                     }
                                 }
                             }
 
-                            // 7. Gain dB readout
+                            // 7. Decibel Volume Label
                             Text {
                                 Layout.fillWidth: true
                                 text: root.gainToDb(strip.trackVol)
-                                font.pixelSize: 8
+                                font.pixelSize: 10
+                                font.bold: true
                                 font.family: "Monospace"
-                                color: strip.trackVol > 1.05 ? theme.pauseAccent : theme.textMuted
+                                color: strip.trackVol > 1.05 ? theme.pauseAccent : theme.textMain
                                 horizontalAlignment: Text.AlignHCenter
                             }
 
-                            // 8. Edit Instrument Button
+                            // 8. Edit Instrument Button (Opens pop-up editor)
                             Button {
                                 Layout.fillWidth: true
-                                implicitHeight: 22
-                                text: "⚙ EDIT"
+                                implicitHeight: 26
+                                text: "⚙ EDIT SOUND"
                                 font.bold: true
-                                font.pixelSize: 9
+                                font.pixelSize: 10
                                 background: Rectangle {
-                                    color: parent.hovered ? theme.btnHover : theme.btnBg
+                                    color: parent.hovered ? theme.accent : theme.btnBg
                                     border.color: theme.border
-                                    radius: 2
+                                    radius: 3
                                 }
                                 contentItem: Text {
                                     text: parent.text
                                     font: parent.font
-                                    color: theme.accent
+                                    color: parent.parent.hovered ? "#ffffff" : theme.accent
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
@@ -635,20 +706,20 @@ Rectangle {
 
                 // Vertical Divider between Tracks and Master
                 Rectangle {
-                    width: 1
+                    width: 2
                     height: channelRow.height
                     color: theme.border
                 }
 
                 // ==========================================
-                // MASTER CHANNEL STRIP
+                // MASTER CHANNEL STRIP (Spacious 160px wide)
                 // ==========================================
                 Rectangle {
                     id: masterStrip
-                    width: 130
+                    width: 160
                     height: channelRow.height
                     color: theme.bgWell
-                    radius: 3
+                    radius: 4
                     border.color: theme.borderLight
                     border.width: 1
 
@@ -666,93 +737,128 @@ Rectangle {
 
                     ColumnLayout {
                         anchors.fill: parent
-                        anchors.margins: 4
-                        spacing: 4
+                        anchors.margins: 6
+                        spacing: 5
 
                         // Master Header
                         Rectangle {
                             Layout.fillWidth: true
-                            height: 22
+                            height: 26
                             color: theme.bgTrackHeader
-                            radius: 2
+                            radius: 3
 
                             Text {
                                 anchors.centerIn: parent
-                                text: "MASTER"
+                                text: "MASTER BUS"
                                 font.bold: true
-                                font.pixelSize: 10
+                                font.pixelSize: 11
                                 color: theme.textHeading
                             }
                         }
 
-                        // Soft Limiter / Peak Status
+                        // Soft Limiter / Output Peak Status
                         Rectangle {
                             Layout.fillWidth: true
-                            height: 16
+                            height: 22
                             color: (masterStrip.masterPeakL > 0.98 || masterStrip.masterPeakR > 0.98) ? theme.stopAccent : theme.bgWellHover
-                            radius: 2
+                            radius: 3
 
                             Text {
                                 anchors.centerIn: parent
-                                text: (masterStrip.masterPeakL > 0.98 || masterStrip.masterPeakR > 0.98) ? "LIMITING" : "CLEAN"
+                                text: (masterStrip.masterPeakL > 0.98 || masterStrip.masterPeakR > 0.98) ? "LIMITING ACTIVE" : "CLEAN OUTPUT"
                                 font.bold: true
-                                font.pixelSize: 8
+                                font.pixelSize: 9
                                 color: (masterStrip.masterPeakL > 0.98 || masterStrip.masterPeakR > 0.98) ? "#ffffff" : theme.playAccent
                             }
                         }
 
-                        // Master Volume Fader & Level Meters
+                        // Master Volume Fader & Dual Stereo Level Meters
                         RowLayout {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            spacing: 4
+                            spacing: 6
 
-                            Slider {
-                                id: masterSlider
+                            Item {
+                                id: masterFaderArea
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                orientation: Qt.Vertical
-                                from: 0.0
-                                to: 1.5
-                                value: masterStrip.masterVol
-                                onMoved: {
-                                    if (engine) engine.setMasterVolume(value)
-                                }
 
-                                background: Rectangle {
-                                    x: masterSlider.leftPadding + masterSlider.availableWidth / 2 - width / 2
-                                    y: masterSlider.topPadding
-                                    width: 4
-                                    height: masterSlider.availableHeight
-                                    radius: 2
-                                    color: theme.border
+                                Rectangle {
+                                    id: masterFaderGroove
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    width: 6
+                                    height: parent.height
+                                    radius: 3
+                                    color: theme.bgWell
 
+                                    // Unity Gain 0dB marker
                                     Rectangle {
-                                        y: masterSlider.topPadding + (1.0 - (1.0 / 1.5)) * masterSlider.availableHeight - 1
-                                        x: -4
-                                        width: 12
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        y: Math.round((1.0 - (1.0 / 1.5)) * (masterFaderGroove.height - 20) + 10)
+                                        width: 22
                                         height: 2
-                                        color: theme.textMuted
+                                        color: theme.playAccent
+                                        opacity: 0.6
                                     }
                                 }
 
-                                handle: Rectangle {
-                                    x: masterSlider.leftPadding + masterSlider.availableWidth / 2 - width / 2
-                                    y: masterSlider.topPadding + (1.0 - masterSlider.visualPosition) * (masterSlider.availableHeight - height)
-                                    width: 18
-                                    height: 10
-                                    radius: 2
-                                    color: masterSlider.pressed ? "#ffffff" : theme.playAccent
-                                    border.color: theme.borderLight
+                                Rectangle {
+                                    id: masterFaderCap
+                                    width: 36
+                                    height: 18
+                                    radius: 3
+                                    anchors.horizontalCenter: masterFaderGroove.horizontalCenter
+                                    y: {
+                                        let trackH = Math.max(1, masterFaderArea.height - height)
+                                        let norm = Math.max(0.0, Math.min(1.5, masterStrip.masterVol)) / 1.5
+                                        return Math.round((1.0 - norm) * trackH)
+                                    }
+                                    color: masterFaderMouse.pressed ? "#ffffff" : theme.btnHover
+                                    border.color: masterFaderMouse.pressed ? theme.playAccent : theme.borderLight
+                                    border.width: 1
+
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: parent.width - 8
+                                        height: 2
+                                        color: masterFaderMouse.pressed ? theme.playAccent : theme.borderLight
+                                    }
+                                }
+
+                                MouseArea {
+                                    id: masterFaderMouse
+                                    anchors.fill: parent
+                                    cursorShape: Qt.SizeVerCursor
+                                    hoverEnabled: true
+
+                                    function updateMasterVol(mouseY) {
+                                        let trackH = Math.max(1, masterFaderArea.height - masterFaderCap.height)
+                                        let clampedY = Math.max(0, Math.min(trackH, mouseY - masterFaderCap.height / 2))
+                                        let norm = 1.0 - (clampedY / trackH)
+                                        let newVol = norm * 1.5
+                                        if (Math.abs(newVol - 1.0) < 0.04) newVol = 1.0
+                                        if (engine) engine.setMasterVolume(newVol)
+                                    }
+
+                                    onPressed: (mouse) => updateMasterVol(mouse.y)
+                                    onPositionChanged: (mouse) => { if (pressed) updateMasterVol(mouse.y) }
+                                    onDoubleClicked: { if (engine) engine.setMasterVolume(1.0) }
+                                    onWheel: (wheel) => {
+                                        if (engine) {
+                                            let delta = (wheel.angleDelta.y > 0 ? 0.05 : -0.05)
+                                            let nextVol = Math.max(0.0, Math.min(1.5, masterStrip.masterVol + delta))
+                                            engine.setMasterVolume(nextVol)
+                                        }
+                                    }
                                 }
                             }
 
-                            // Master Stereo VU Level Meter
+                            // Master Dual Stereo Level Meter (14px wide)
                             Rectangle {
                                 width: 14
                                 Layout.fillHeight: true
                                 color: theme.bgWell
-                                radius: 1
+                                radius: 2
                                 border.color: theme.border
 
                                 Row {
@@ -770,6 +876,7 @@ Rectangle {
                                             width: parent.width
                                             height: Math.min(parent.height, parent.height * Math.min(1.0, masterStrip.masterPeakL * 1.3))
                                             color: masterStrip.masterPeakL > 0.95 ? theme.stopAccent : (masterStrip.masterPeakL > 0.75 ? theme.pauseAccent : theme.playAccent)
+                                            radius: 1
                                         }
                                     }
 
@@ -783,6 +890,7 @@ Rectangle {
                                             width: parent.width
                                             height: Math.min(parent.height, parent.height * Math.min(1.0, masterStrip.masterPeakR * 1.3))
                                             color: masterStrip.masterPeakR > 0.95 ? theme.stopAccent : (masterStrip.masterPeakR > 0.75 ? theme.pauseAccent : theme.playAccent)
+                                            radius: 1
                                         }
                                     }
                                 }
@@ -793,34 +901,33 @@ Rectangle {
                         Text {
                             Layout.fillWidth: true
                             text: root.gainToDb(masterStrip.masterVol)
-                            font.pixelSize: 8
+                            font.pixelSize: 10
+                            font.bold: true
                             font.family: "Monospace"
-                            color: theme.textMain
+                            color: theme.textHeading
                             horizontalAlignment: Text.AlignHCenter
                         }
 
-                        // Master Reset unity 0dB
+                        // Master Unity Reset Button
                         Button {
                             Layout.fillWidth: true
-                            implicitHeight: 22
-                            text: "UNITY (0dB)"
+                            implicitHeight: 26
+                            text: "UNITY 0.0 dB"
                             font.bold: true
-                            font.pixelSize: 8
+                            font.pixelSize: 9
                             background: Rectangle {
                                 color: parent.hovered ? theme.btnHover : theme.btnBg
                                 border.color: theme.border
-                                radius: 2
+                                radius: 3
                             }
                             contentItem: Text {
                                 text: parent.text
                                 font: parent.font
-                                color: theme.textMuted
+                                color: theme.textMain
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }
-                            onClicked: {
-                                if (engine) engine.setMasterVolume(1.0)
-                            }
+                            onClicked: if (engine) engine.setMasterVolume(1.0)
                         }
                     }
                 }

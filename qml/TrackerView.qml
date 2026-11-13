@@ -76,6 +76,7 @@ Rectangle {
     }
 
     signal gridModified()
+    signal requestEditInstrument(int track, int trackType)
 
     // 2-octave piano keyboard mapping with native Turkish Q & US support
     function getMidiFromKey(event) {
@@ -433,6 +434,14 @@ Rectangle {
                                 root.selectedTrack = index
                                 if (engine) engine.setSelectedInstrument(index)
                                 root.forceActiveFocus()
+                            }
+                            onDoubleClicked: {
+                                root.selectedTrack = index
+                                if (engine) {
+                                    engine.setSelectedInstrument(index)
+                                    let trkType = engine.getTrackType(index)
+                                    root.requestEditInstrument(index, trkType)
+                                }
                             }
                         }
 

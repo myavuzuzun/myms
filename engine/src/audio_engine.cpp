@@ -398,7 +398,10 @@ void AudioEngine::removeSongOrderStep(int step) {
 }
 
 int AudioEngine::getSongOrderIndex() const {
-    return m_uiSongOrderIndex.load(std::memory_order_relaxed);
+    if (m_sequencer.isPlaying()) {
+        return m_uiSongOrderIndex.load(std::memory_order_relaxed);
+    }
+    return m_sequencer.getSongOrderIndex();
 }
 
 void AudioEngine::setSongOrderIndex(int step) {
@@ -602,6 +605,9 @@ int AudioEngine::getNumPatterns() const {
 }
 
 int AudioEngine::getCurrentPattern() const {
+    if (m_sequencer.isPlaying()) {
+        return m_uiCurrentPattern.load(std::memory_order_relaxed);
+    }
     return m_sequencer.getCurrentPattern();
 }
 
@@ -742,10 +748,11 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
     for (int f = 0; f < frameCount; ++f) {
         int triggeredRow = -1;
         int triggeredPat = -1;
-        if (m_sequencer.advanceSample(triggeredRow, triggeredPat)) {
+        int triggeredSongOrder = -1;
+        if (m_sequencer.advanceSample(triggeredRow, triggeredPat, triggeredSongOrder)) {
             m_uiCurrentRow.store(triggeredRow, std::memory_order_relaxed);
             m_uiCurrentPattern.store(triggeredPat, std::memory_order_relaxed);
-            m_uiSongOrderIndex.store(m_sequencer.getSongOrderIndex(), std::memory_order_relaxed);
+            m_uiSongOrderIndex.store(triggeredSongOrder, std::memory_order_relaxed);
 
             for (int t = 0; t < numTracks; ++t) {
                 TrackerCell cell = m_sequencer.getPatternCell(triggeredPat, t, triggeredRow);

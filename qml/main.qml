@@ -11,7 +11,7 @@ Item {
     property real meterPeakL: 0.0
     property real meterPeakR: 0.0
     property bool bottomDeckCollapsed: false
-    property real bottomDeckHeight: 200
+    property real bottomDeckHeight: 250
 
     Connections {
         target: mymsEngine
@@ -627,6 +627,9 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 engine: mymsEngine
+                onRequestEditInstrument: (track, trackType) => {
+                    editorModal.open(track, trackType)
+                }
             }
 
             // ==========================================
@@ -712,7 +715,7 @@ Item {
                             spacing: 4
 
                             Rectangle {
-                                width: 72
+                                width: 110
                                 height: parent.height - 2
                                 Layout.alignment: Qt.AlignBottom
                                 color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 0) ? theme.bgCard : "transparent"
@@ -722,7 +725,7 @@ Item {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "MIXER"
+                                    text: "🎚 TRACK MIXER"
                                     font.bold: true
                                     font.pixelSize: 10
                                     color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 0) ? theme.accent : theme.textMuted
@@ -737,7 +740,7 @@ Item {
                             }
 
                             Rectangle {
-                                width: 72
+                                width: 115
                                 height: parent.height - 2
                                 Layout.alignment: Qt.AlignBottom
                                 color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? theme.bgCard : "transparent"
@@ -747,7 +750,7 @@ Item {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "SYNTH"
+                                    text: "🎛 SMART MACROS"
                                     font.bold: true
                                     font.pixelSize: 10
                                     color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? theme.accent : theme.textMuted
@@ -757,81 +760,6 @@ Item {
                                     onClicked: {
                                         rootItem.bottomDeckCollapsed = false
                                         bottomStack.currentIndex = 1
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: 78
-                                height: parent.height - 2
-                                Layout.alignment: Qt.AlignBottom
-                                color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 2) ? theme.bgCard : "transparent"
-                                border.color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 2) ? theme.border : "transparent"
-                                border.width: 1
-                                radius: 2
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "FONTBOX"
-                                    font.bold: true
-                                    font.pixelSize: 10
-                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 2) ? "#92ebb5" : theme.textMuted
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: {
-                                        rootItem.bottomDeckCollapsed = false
-                                        bottomStack.currentIndex = 2
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: 78
-                                height: parent.height - 2
-                                Layout.alignment: Qt.AlignBottom
-                                color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 3) ? theme.bgCard : "transparent"
-                                border.color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 3) ? theme.border : "transparent"
-                                border.width: 1
-                                radius: 2
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "BEATPAD"
-                                    font.bold: true
-                                    font.pixelSize: 10
-                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 3) ? "#f7b731" : theme.textMuted
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: {
-                                        rootItem.bottomDeckCollapsed = false
-                                        bottomStack.currentIndex = 3
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: 74
-                                height: parent.height - 2
-                                Layout.alignment: Qt.AlignBottom
-                                color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 4) ? theme.bgCard : "transparent"
-                                border.color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 4) ? theme.border : "transparent"
-                                border.width: 1
-                                radius: 2
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "MACROS"
-                                    font.bold: true
-                                    font.pixelSize: 10
-                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 4) ? theme.accent : theme.textMuted
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: {
-                                        rootItem.bottomDeckCollapsed = false
-                                        bottomStack.currentIndex = 4
                                     }
                                 }
                             }
@@ -870,26 +798,8 @@ Item {
                             id: mixerView
                             engine: mymsEngine
                             onRequestEditInstrument: (track, trackType) => {
-                                if (trackType === 0) {
-                                    bottomStack.currentIndex = 1
-                                } else if (trackType === 1) {
-                                    bottomStack.currentIndex = 2
-                                } else if (trackType === 2) {
-                                    bottomStack.currentIndex = 3
-                                }
+                                editorModal.open(track, trackType)
                             }
-                        }
-
-                        AuraSynthView {
-                            engine: mymsEngine
-                        }
-
-                        FontBoxView {
-                            engine: mymsEngine
-                        }
-
-                        BeatPadView {
-                            engine: mymsEngine
                         }
 
                         MacroView {
@@ -933,5 +843,11 @@ Item {
                 }
             }
         }
+    }
+
+    // Pop-up Instrument Studio Editor Modal (AuraSynth / FontBox / BeatPad)
+    InstrumentEditorModal {
+        id: editorModal
+        engine: mymsEngine
     }
 }
