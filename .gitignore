@@ -1,0 +1,14 @@
+# Compiled libraries
+*.so
+libmyms_audio.so
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary or swap files
+*.swp
+*.swo
+*~
+.DS_Store

@@ -1,0 +1,98 @@
+#ifndef MYMS_SYNTH_ENGINE_H
+#define MYMS_SYNTH_ENGINE_H
+
+#include "synth_voice.h"
+#include <vector>
+#include <array>
+
+namespace myms {
+
+constexpr int MAX_VOICES = 16;
+
+class SynthEngine {
+public:
+    void init(float sampleRate) {
+        m_sampleRate = sampleRate;
+        for (int i = 0; i < MAX_VOICES; ++i) {
+            m_voices[i].init(sampleRate);
+        }
+    }
+
+    void setParams(const SynthParams& params) {
+        m_params = params;
+    }
+
+    SynthParams& getParams() {
+        return m_params;
+    }
+
+    void noteOn(int note, float velocity) {
+        // Find existing voice with same note to retrigger, or an idle voice
+        int targetVoice = -1;
+        for (int i = 0; i < MAX_VOICES; ++i) {
+            if (m_voices[i].isActive() && m_voices[i].getNote() == note) {
+                targetVoice = i;
+                break;
+            }
+        }
+
+        if (targetVoice == -1) {
+            // Find free voice
+            for (int i = 0; i < MAX_VOICES; ++i) {
+                if (!m_voices[i].isActive()) {
+                    targetVoice = i;
+                    break;
+                }
+            }
+        }
+
+        // Voice steal oldest if all busy
+        if (targetVoice == -1) {
+            targetVoice = m_voiceStealIndex;
+            m_voiceStealIndex = (m_voiceStealIndex + 1) % MAX_VOICES;
+        }
+
+        m_voices[targetVoice].noteOn(note, velocity, m_params);
+    }
+
+    void noteOff(int note) {
+        for (int i = 0; i < MAX_VOICES; ++i) {
+            if (m_voices[i].isActive() && m_voices[i].getNote() == note) {
+                m_voices[i].noteOff();
+            }
+        }
+    }
+
+    void allNotesOff() {
+        for (int i = 0; i < MAX_VOICES; ++i) {
+            m_voices[i].reset();
+        }
+    }
+
+    // Process a block of stereo frames (L, R interleaved or separate)
+    inline void processBlock(float* outL, float* outR, int numFrames) {
+        for (int f = 0; f < numFrames; ++f) {
+            float sum = 0.0f;
+            for (int v = 0; v < MAX_VOICES; ++v) {
+                if (m_voices[v].isActive()) {
+                    sum += m_voices[v].renderSample(m_params);
+                }
+            }
+            // Scale gain slightly to leave headroom for polyphony
+            sum *= 0.35f;
+            outL[f] += sum;
+            outR[f] += sum;
+        }
+    }
+
+private:
+    float m_sampleRate = 48000.0f;
+    std::array<SynthVoice, MAX_VOICES> m_voices;
+    SynthParams m_params;
+    int m_voiceStealIndex = 0;
+};
+
+} // namespace myms
+
+#endif // MYMS_SYNTH_ENGINE_H
+
