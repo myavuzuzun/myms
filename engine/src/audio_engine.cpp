@@ -1,6 +1,9 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
 
+#define TSF_IMPLEMENTATION
+#include "tsf.h"
+
 #include "audio_engine.h"
 #include <iostream>
 #include <cstring>
@@ -77,10 +80,15 @@ void AudioEngine::loadDemoGroove() {
 
     m_instrumentNames[0] = "Lead";
     m_instrumentNames[1] = "Bass";
-    m_instrumentNames[2] = "Pluck";
-    m_instrumentNames[3] = "Pad";
+    m_instrumentNames[2] = "Drums";
+    m_instrumentNames[3] = "SoundFont";
 
-    // Track 1
+    setTrackType(0, TRACK_TYPE_SYNTH);
+    setTrackType(1, TRACK_TYPE_SYNTH);
+    setTrackType(2, TRACK_TYPE_DRUMS);
+    setTrackType(3, TRACK_TYPE_SOUNDFONT);
+
+    // Track 1: Synth Lead
     m_sequencer.setCell(0, 0, 60, 1, 255, 0, 0);
     m_sequencer.setCell(0, 4, 63, 1, 220, 0, 0);
     m_sequencer.setCell(0, 8, 67, 1, 255, 0x10, 0xBB);
@@ -93,7 +101,7 @@ void AudioEngine::loadDemoGroove() {
     m_sequencer.setCell(0, 28, 67, 1, 230, 0, 0);
     m_sequencer.setCell(0, 31, NOTE_OFF, 1, 255, 0, 0);
 
-    // Track 2
+    // Track 2: Sub Bass
     m_sequencer.setCell(1, 0, 36, 2, 255, 0, 0);
     m_sequencer.setCell(1, 2, 36, 2, 180, 0, 0);
     m_sequencer.setCell(1, 6, 36, 2, 200, 0, 0);
@@ -103,34 +111,46 @@ void AudioEngine::loadDemoGroove() {
     m_sequencer.setCell(1, 16, 36, 2, 255, 0, 0);
     m_sequencer.setCell(1, 18, 36, 2, 180, 0, 0);
     m_sequencer.setCell(1, 22, 36, 2, 200, 0, 0);
-    m_sequencer.setCell(1, 24, 43, 2, 255, 0, 0);
-    m_sequencer.setCell(1, 28, 41, 2, 220, 0, 0);
+    m_sequencer.setCell(1, 24, 44, 2, 255, 0, 0);
+    m_sequencer.setCell(1, 28, 43, 2, 220, 0, 0);
 
-    // Track 3
+    // Track 3: BeatPad Drums (Kick on 0, 8, 16, 24; Snare on 4, 12, 20, 28; Hats on evens)
     for (int r = 0; r < 32; r += 2) {
-        int notes[] = { 60, 67, 72, 75 };
-        m_sequencer.setCell(2, r, notes[(r / 2) % 4], 3, 160, 0, 0);
+        m_sequencer.setCell(2, r, 39, 3, 180, 0, 0); // Hat (pad 3)
     }
+    m_sequencer.setCell(2, 0, 36, 3, 255, 0, 0); // Kick
+    m_sequencer.setCell(2, 4, 37, 3, 230, 0, 0); // Snare
+    m_sequencer.setCell(2, 8, 36, 3, 255, 0, 0); // Kick
+    m_sequencer.setCell(2, 12, 37, 3, 230, 0, 0); // Snare
+    m_sequencer.setCell(2, 14, 36, 3, 190, 0, 0); // Ghost Kick
+    m_sequencer.setCell(2, 16, 36, 3, 255, 0, 0); // Kick
+    m_sequencer.setCell(2, 20, 37, 3, 230, 0, 0); // Snare
+    m_sequencer.setCell(2, 24, 36, 3, 255, 0, 0); // Kick
+    m_sequencer.setCell(2, 28, 37, 3, 230, 0, 0); // Snare
 
-    // Track 4
-    m_sequencer.setCell(3, 0, 48, 4, 180, 0, 0);
-    m_sequencer.setCell(3, 16, 44, 4, 180, 0, 0);
+    // Track 4: SoundFont Chords / Arp
+    m_sequencer.setCell(3, 0, 48, 4, 200, 0, 0);
+    m_sequencer.setCell(3, 8, 51, 4, 200, 0, 0);
+    m_sequencer.setCell(3, 16, 48, 4, 200, 0, 0);
+    m_sequencer.setCell(3, 24, 53, 4, 200, 0, 0);
 }
 
 bool AudioEngine::init(int sampleRate, int bufferSize) {
     if (m_initialized) return true;
 
     m_sampleRate = static_cast<float>(sampleRate);
-
-    m_instruments.resize(MAX_INSTRUMENTS);
-    for (size_t i = 0; i < m_instruments.size(); ++i) {
-        m_instruments[i].init(m_sampleRate);
-    }
-    m_macros.init(m_sampleRate);
     m_sequencer.init(m_sampleRate);
+    m_macros.init(m_sampleRate);
+    m_soundfont.init(m_sampleRate);
+    m_drumSampler.init(m_sampleRate);
+
+    m_instruments.clear();
+    m_instruments.emplace_back();
+    m_instruments.back().init(m_sampleRate);
+    m_trackTypes.clear();
+    m_trackTypes.push_back(TRACK_TYPE_SYNTH);
 
     setupInitialInstruments();
-    // Starts with 1 empty track and clean empty pattern (zero presets hardcoded)
 
     m_device = std::make_unique<ma_device>();
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
@@ -142,28 +162,34 @@ bool AudioEngine::init(int sampleRate, int bufferSize) {
     config.periodSizeInFrames = bufferSize;
 
     if (ma_device_init(nullptr, &config, m_device.get()) != MA_SUCCESS) {
-        std::cerr << "[myms] Failed to initialize audio playback device!" << std::endl;
+        std::cerr << "[myms] Failed to initialize miniaudio device!" << std::endl;
         m_device.reset();
         return false;
     }
 
     if (ma_device_start(m_device.get()) != MA_SUCCESS) {
-        std::cerr << "[myms] Failed to start audio playback device!" << std::endl;
+        std::cerr << "[myms] Failed to start miniaudio playback!" << std::endl;
         ma_device_uninit(m_device.get());
         m_device.reset();
         return false;
     }
 
     m_initialized = true;
+    std::cout << "[myms] Audio engine initialized at " << sampleRate << "Hz, " 
+              << bufferSize << " frames buffer." << std::endl;
     return true;
 }
 
 void AudioEngine::shutdown() {
-    if (m_initialized && m_device) {
+    if (!m_initialized) return;
+
+    if (m_device) {
+        ma_device_stop(m_device.get());
         ma_device_uninit(m_device.get());
         m_device.reset();
-        m_initialized = false;
     }
+    m_initialized = false;
+    std::cout << "[myms] Audio engine shut down cleanly." << std::endl;
 }
 
 void AudioEngine::play() {
@@ -173,6 +199,7 @@ void AudioEngine::play() {
 void AudioEngine::pause() {
     m_sequencer.pause();
     allNotesOff();
+    m_uiCurrentRow.store(m_sequencer.getCurrentRow(), std::memory_order_relaxed);
 }
 
 void AudioEngine::stop() {
@@ -223,10 +250,23 @@ int AudioEngine::getNumTracks() const {
 }
 
 void AudioEngine::addTrack() {
+    m_instruments.emplace_back();
+    m_instruments.back().init(m_sampleRate);
+    m_trackTypes.push_back(TRACK_TYPE_SYNTH);
+
+    // Initialize with default synth patch
+    SynthParams p = m_instruments[0].getParams();
+    m_instruments.back().setParams(p);
+
     m_sequencer.addTrack();
 }
 
 void AudioEngine::removeTrack(int trackIdx) {
+    if (m_instruments.size() <= 1 || trackIdx < 0 || trackIdx >= static_cast<int>(m_instruments.size())) return;
+    m_instruments.erase(m_instruments.begin() + trackIdx);
+    if (trackIdx < static_cast<int>(m_trackTypes.size())) {
+        m_trackTypes.erase(m_trackTypes.begin() + trackIdx);
+    }
     m_sequencer.removeTrack(trackIdx);
 }
 
@@ -234,15 +274,43 @@ int AudioEngine::getNumInstruments() const {
     return static_cast<int>(m_instruments.size());
 }
 
+void AudioEngine::setTrackType(int track, int type) {
+    if (track >= 0 && track < static_cast<int>(m_trackTypes.size())) {
+        m_trackTypes[track] = std::clamp(type, 0, 2);
+    }
+}
+
+int AudioEngine::getTrackType(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_trackTypes.size())) {
+        return m_trackTypes[track];
+    }
+    return TRACK_TYPE_SYNTH;
+}
+
 void AudioEngine::noteOn(int inst, int note, float velocity) {
-    if (inst >= 0 && inst < static_cast<int>(m_instruments.size())) {
-        m_instruments[inst].noteOn(note, velocity);
+    int type = getTrackType(inst);
+    if (type == TRACK_TYPE_SOUNDFONT) {
+        m_soundfont.noteOn(note, velocity);
+    } else if (type == TRACK_TYPE_DRUMS) {
+        int pad = (note >= 36 && note <= 43) ? (note - 36) : (note % NUM_DRUM_PADS);
+        m_drumSampler.triggerPad(pad, velocity);
+    } else {
+        if (inst >= 0 && inst < static_cast<int>(m_instruments.size())) {
+            m_instruments[inst].noteOn(note, velocity);
+        }
     }
 }
 
 void AudioEngine::noteOff(int inst, int note) {
-    if (inst >= 0 && inst < static_cast<int>(m_instruments.size())) {
-        m_instruments[inst].noteOff(note);
+    int type = getTrackType(inst);
+    if (type == TRACK_TYPE_SOUNDFONT) {
+        m_soundfont.noteOff(note);
+    } else if (type == TRACK_TYPE_DRUMS) {
+        // One-shot drum hits decay naturally
+    } else {
+        if (inst >= 0 && inst < static_cast<int>(m_instruments.size())) {
+            m_instruments[inst].noteOff(note);
+        }
     }
 }
 
@@ -250,6 +318,8 @@ void AudioEngine::allNotesOff() {
     for (size_t i = 0; i < m_instruments.size(); ++i) {
         m_instruments[i].allNotesOff();
     }
+    m_soundfont.allNotesOff();
+    m_drumSampler.allNotesOff();
 }
 
 void AudioEngine::setInstrumentOsc1(int inst, int wave) {
@@ -310,24 +380,166 @@ SynthParams AudioEngine::getInstrumentParams(int inst) {
     return SynthParams();
 }
 
+// SoundFont Player Controls (FontBox)
+bool AudioEngine::loadSoundFont(const std::string& filepath) {
+    return m_soundfont.loadSoundFont(filepath);
+}
+
+bool AudioEngine::isSoundFontLoaded() const {
+    return m_soundfont.isLoaded();
+}
+
+int AudioEngine::getSoundFontPresetCount() {
+    return m_soundfont.getPresetCount();
+}
+
+std::string AudioEngine::getSoundFontPresetName(int index) {
+    return m_soundfont.getPresetName(index);
+}
+
+void AudioEngine::setSoundFontPreset(int index) {
+    m_soundfont.setPreset(index);
+}
+
+int AudioEngine::getSoundFontPreset() const {
+    return m_soundfont.getPreset();
+}
+
+void AudioEngine::setSoundFontVolume(float vol) {
+    m_soundfont.setVolume(vol);
+}
+
+float AudioEngine::getSoundFontVolume() const {
+    return m_soundfont.getVolume();
+}
+
+std::string AudioEngine::getSoundFontPath() {
+    return m_soundfont.getLoadedPath();
+}
+
+// Drum Sampler Controls (BeatPad)
+bool AudioEngine::loadDrumSample(int pad, const std::string& filepath) {
+    return m_drumSampler.loadSample(pad, filepath);
+}
+
+void AudioEngine::triggerDrumPad(int pad, float velocity) {
+    m_drumSampler.triggerPad(pad, velocity);
+}
+
+void AudioEngine::setDrumPadPitch(int pad, float semi) {
+    m_drumSampler.setPadPitch(pad, semi);
+}
+
+float AudioEngine::getDrumPadPitch(int pad) const {
+    return m_drumSampler.getPadPitch(pad);
+}
+
+void AudioEngine::setDrumPadDecay(int pad, float sec) {
+    m_drumSampler.setPadDecay(pad, sec);
+}
+
+float AudioEngine::getDrumPadDecay(int pad) const {
+    return m_drumSampler.getPadDecay(pad);
+}
+
+void AudioEngine::setDrumPadVolume(int pad, float vol) {
+    m_drumSampler.setPadVolume(pad, vol);
+}
+
+float AudioEngine::getDrumPadVolume(int pad) const {
+    return m_drumSampler.getPadVolume(pad);
+}
+
+void AudioEngine::setDrumPadPan(int pad, float pan) {
+    m_drumSampler.setPadPan(pad, pan);
+}
+
+float AudioEngine::getDrumPadPan(int pad) const {
+    return m_drumSampler.getPadPan(pad);
+}
+
+void AudioEngine::setDrumPadReverse(int pad, bool rev) {
+    m_drumSampler.setPadReverse(pad, rev);
+}
+
+bool AudioEngine::getDrumPadReverse(int pad) const {
+    return m_drumSampler.getPadReverse(pad);
+}
+
+std::string AudioEngine::getDrumPadName(int pad) const {
+    return m_drumSampler.getPadName(pad);
+}
+
+std::string AudioEngine::getDrumPadFilePath(int pad) const {
+    return m_drumSampler.getPadFilePath(pad);
+}
+
+// Pattern & Song Management
+int AudioEngine::getNumPatterns() const {
+    return m_sequencer.getNumPatterns();
+}
+
+int AudioEngine::getCurrentPattern() const {
+    return m_sequencer.getCurrentPattern();
+}
+
+void AudioEngine::setCurrentPattern(int pat) {
+    m_sequencer.setCurrentPattern(pat);
+    m_uiCurrentPattern.store(m_sequencer.getCurrentPattern(), std::memory_order_relaxed);
+}
+
+int AudioEngine::addPattern() {
+    int idx = m_sequencer.addPattern();
+    m_uiCurrentPattern.store(idx, std::memory_order_relaxed);
+    return idx;
+}
+
+int AudioEngine::duplicatePattern(int sourcePat) {
+    int idx = m_sequencer.duplicatePattern(sourcePat);
+    m_uiCurrentPattern.store(idx, std::memory_order_relaxed);
+    return idx;
+}
+
+bool AudioEngine::removePattern(int pat) {
+    bool ok = m_sequencer.removePattern(pat);
+    m_uiCurrentPattern.store(m_sequencer.getCurrentPattern(), std::memory_order_relaxed);
+    return ok;
+}
+
+void AudioEngine::setSongMode(bool songMode) {
+    m_sequencer.setSongMode(songMode);
+}
+
+bool AudioEngine::isSongMode() const {
+    return m_sequencer.isSongMode();
+}
+
+void AudioEngine::setPatternCell(int pat, int track, int row, uint8_t note, uint8_t instrument, uint8_t volume, uint8_t effectType, uint8_t effectParam) {
+    m_sequencer.setPatternCell(pat, track, row, note, instrument, volume, effectType, effectParam);
+}
+
+TrackerCell AudioEngine::getPatternCell(int pat, int track, int row) const {
+    return m_sequencer.getPatternCell(pat, track, row);
+}
+
 void AudioEngine::setMacroPunch(float val) {
-    m_macros.getControls().punch = std::clamp(val, 0.0f, 1.0f);
+    m_macros.getControls().punch = val;
 }
 
 void AudioEngine::setMacroWarmth(float val) {
-    m_macros.getControls().warmth = std::clamp(val, 0.0f, 1.0f);
+    m_macros.getControls().warmth = val;
 }
 
 void AudioEngine::setMacroTone(float val) {
-    m_macros.getControls().tone = std::clamp(val, 0.0f, 1.0f);
+    m_macros.getControls().tone = val;
 }
 
 void AudioEngine::setMacroSpace(float val) {
-    m_macros.getControls().space = std::clamp(val, 0.0f, 1.0f);
+    m_macros.getControls().space = val;
 }
 
 void AudioEngine::setMasterVolume(float val) {
-    m_macros.getControls().volume = std::clamp(val, 0.0f, 2.0f);
+    m_macros.getControls().volume = val;
 }
 
 float AudioEngine::getMasterPeakL() const {
@@ -351,22 +563,24 @@ TrackerCell AudioEngine::getTrackerCell(int track, int row) {
 }
 
 void AudioEngine::clearTrack(int track) {
-    for (int r = 0; r < m_sequencer.getNumRows(); ++r) {
-        m_sequencer.setCell(track, r, NOTE_EMPTY, 0, 255, 0, 0);
+    int nRows = m_sequencer.getNumRows();
+    for (int r = 0; r < nRows; ++r) {
+        m_sequencer.setCell(track, r, NO_NOTE, 0, 255, 0, 0);
     }
 }
 
 void AudioEngine::clearAllTracks() {
-    int numTracks = m_sequencer.getNumTracks();
-    for (int t = 0; t < numTracks; ++t) {
+    int nTracks = m_sequencer.getNumTracks();
+    for (int t = 0; t < nTracks; ++t) {
         clearTrack(t);
     }
 }
 
 void AudioEngine::transposeTrack(int track, int semitones) {
-    for (int r = 0; r < m_sequencer.getNumRows(); ++r) {
+    int nRows = m_sequencer.getNumRows();
+    for (int r = 0; r < nRows; ++r) {
         TrackerCell c = m_sequencer.getCell(track, r);
-        if (c.note <= 127) {
+        if (c.note != NO_NOTE && c.note != NOTE_OFF) {
             int newNote = std::clamp(static_cast<int>(c.note) + semitones, 0, 127);
             m_sequencer.setCell(track, r, static_cast<uint8_t>(newNote), c.instrument, c.volume, c.effectType, c.effectParam);
         }
@@ -384,8 +598,10 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
 
     for (int f = 0; f < frameCount; ++f) {
         int triggeredRow = -1;
-        if (m_sequencer.advanceSample(triggeredRow)) {
+        int triggeredPat = -1;
+        if (m_sequencer.advanceSample(triggeredRow, triggeredPat)) {
             m_uiCurrentRow.store(triggeredRow, std::memory_order_relaxed);
+            m_uiCurrentPattern.store(triggeredPat, std::memory_order_relaxed);
 
             for (int t = 0; t < numTracks; ++t) {
                 TrackerCell cell = m_sequencer.getCell(t, triggeredRow);
@@ -394,26 +610,51 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
                               ? (cell.instrument - 1) 
                               : (t % m_instruments.size());
 
+                int type = getTrackType(t);
+
                 if (cell.note == NOTE_OFF) {
-                    m_instruments[instIdx].allNotesOff();
+                    if (type == TRACK_TYPE_SOUNDFONT) {
+                        m_soundfont.allNotesOff();
+                    } else if (type == TRACK_TYPE_SYNTH) {
+                        m_instruments[instIdx].allNotesOff();
+                    }
                 } else if (cell.note <= 127) {
                     float vel = (cell.volume == 255) ? 1.0f : (cell.volume / 128.0f);
                     
-                    if (cell.effectType == 0x10) {
-                        float cutoff = 150.0f + (cell.effectParam / 255.0f) * 10000.0f;
-                        m_instruments[instIdx].getParams().filterCutoff = cutoff;
+                    if (type == TRACK_TYPE_SOUNDFONT) {
+                        m_soundfont.noteOn(cell.note, vel);
+                    } else if (type == TRACK_TYPE_DRUMS) {
+                        int pad = (cell.note >= 36 && cell.note <= 43) ? (cell.note - 36) : (cell.note % NUM_DRUM_PADS);
+                        m_drumSampler.triggerPad(pad, vel);
+                    } else {
+                        if (cell.effectType == 0x10) {
+                            float cutoff = 150.0f + (cell.effectParam / 255.0f) * 10000.0f;
+                            m_instruments[instIdx].getParams().filterCutoff = cutoff;
+                        }
+                        m_instruments[instIdx].noteOn(cell.note, vel);
                     }
-                    m_instruments[instIdx].noteOn(cell.note, vel);
                 }
             }
         }
 
         float sL = 0.0f;
         float sR = 0.0f;
+
+        // 1. Process AuraSynth tracks
         for (size_t inst = 0; inst < m_instruments.size(); ++inst) {
             m_instruments[inst].processBlock(&sL, &sR, 1);
         }
 
+        // 2. Process SoundFont player
+        m_soundfont.processSample(sL, sR);
+
+        // 3. Process 8-slot Drum Sampler
+        float drumBuf[2] = {0.0f, 0.0f};
+        m_drumSampler.processBlock(drumBuf, 1);
+        sL += drumBuf[0];
+        sR += drumBuf[1];
+
+        // 4. Smart Macros & Master Soft Limiter
         m_macros.processSample(sL, sR);
         MacroProcessor::masterBusProcess(sL, sR);
 

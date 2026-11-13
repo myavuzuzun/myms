@@ -418,6 +418,91 @@ Item {
 
                     Rectangle { width: 1; height: 18; color: theme.border }
 
+                    // Pattern Selector & Multi-Pattern Controls
+                    RowLayout {
+                        spacing: 2
+                        Text { text: "PAT"; font.pixelSize: 9; font.bold: true; color: theme.textMuted }
+                        Rectangle {
+                            width: 76
+                            height: 24
+                            color: theme.bgCard
+                            radius: 2
+                            border.color: theme.border
+
+                            RowLayout {
+                                anchors.fill: parent
+                                spacing: 0
+                                Rectangle {
+                                    width: 16
+                                    height: parent.height
+                                    color: patMinusMouse.containsMouse ? theme.btnHover : "transparent"
+                                    Text { anchors.centerIn: parent; text: "-"; font.bold: true; color: theme.textMain }
+                                    MouseArea {
+                                        id: patMinusMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: if (mymsEngine && mymsEngine.currentPattern > 0) mymsEngine.setCurrentPattern(mymsEngine.currentPattern - 1)
+                                    }
+                                }
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: mymsEngine ? ((mymsEngine.currentPattern < 10 ? "0" + mymsEngine.currentPattern : "" + mymsEngine.currentPattern) + "/" + (mymsEngine.numPatterns < 10 ? "0" + mymsEngine.numPatterns : "" + mymsEngine.numPatterns)) : "00/01"
+                                    font.bold: true
+                                    font.pixelSize: 10
+                                    font.family: "Monospace"
+                                    color: theme.accent
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+                                Rectangle {
+                                    width: 16
+                                    height: parent.height
+                                    color: patPlusMouse.containsMouse ? theme.btnHover : "transparent"
+                                    Text { anchors.centerIn: parent; text: "+"; font.bold: true; color: theme.textMain }
+                                    MouseArea {
+                                        id: patPlusMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            if (mymsEngine) {
+                                                if (mymsEngine.currentPattern < mymsEngine.numPatterns - 1) {
+                                                    mymsEngine.setCurrentPattern(mymsEngine.currentPattern + 1)
+                                                } else {
+                                                    mymsEngine.addPattern()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Song Mode Toggle
+                    Button {
+                        id: songModeBtn
+                        implicitWidth: 46
+                        implicitHeight: 24
+                        checkable: true
+                        checked: mymsEngine ? mymsEngine.isSongMode : false
+                        onClicked: if (mymsEngine) mymsEngine.toggleSongMode()
+
+                        background: Rectangle {
+                            color: songModeBtn.checked ? theme.accent : (songModeBtn.hovered ? theme.btnHover : theme.btnBg)
+                            radius: 2
+                            border.color: songModeBtn.checked ? theme.accent : theme.border
+                        }
+
+                        contentItem: Text {
+                            anchors.centerIn: parent
+                            text: (mymsEngine && mymsEngine.isSongMode) ? "SONG" : "PAT"
+                            font.bold: true
+                            font.pixelSize: 9
+                            color: songModeBtn.checked ? "#ffffff" : theme.textMuted
+                        }
+                    }
+
+                    Rectangle { width: 1; height: 18; color: theme.border }
+
                     // Row & Track Badges
                     Rectangle {
                         height: 24
@@ -618,7 +703,7 @@ Item {
                             spacing: 4
 
                             Rectangle {
-                                width: 80
+                                width: 72
                                 height: parent.height - 2
                                 Layout.alignment: Qt.AlignBottom
                                 color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 0) ? theme.bgCard : "transparent"
@@ -643,7 +728,7 @@ Item {
                             }
 
                             Rectangle {
-                                width: 80
+                                width: 78
                                 height: parent.height - 2
                                 Layout.alignment: Qt.AlignBottom
                                 color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? theme.bgCard : "transparent"
@@ -653,16 +738,66 @@ Item {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "MACROS"
+                                    text: "FONTBOX"
                                     font.bold: true
                                     font.pixelSize: 10
-                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? theme.accent : theme.textMuted
+                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? "#92ebb5" : theme.textMuted
                                 }
                                 MouseArea {
                                     anchors.fill: parent
                                     onClicked: {
                                         rootItem.bottomDeckCollapsed = false
                                         bottomStack.currentIndex = 1
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                width: 78
+                                height: parent.height - 2
+                                Layout.alignment: Qt.AlignBottom
+                                color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 2) ? theme.bgCard : "transparent"
+                                border.color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 2) ? theme.border : "transparent"
+                                border.width: 1
+                                radius: 2
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "BEATPAD"
+                                    font.bold: true
+                                    font.pixelSize: 10
+                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 2) ? "#f7b731" : theme.textMuted
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        rootItem.bottomDeckCollapsed = false
+                                        bottomStack.currentIndex = 2
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                width: 74
+                                height: parent.height - 2
+                                Layout.alignment: Qt.AlignBottom
+                                color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 3) ? theme.bgCard : "transparent"
+                                border.color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 3) ? theme.border : "transparent"
+                                border.width: 1
+                                radius: 2
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "MACROS"
+                                    font.bold: true
+                                    font.pixelSize: 10
+                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 3) ? theme.accent : theme.textMuted
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        rootItem.bottomDeckCollapsed = false
+                                        bottomStack.currentIndex = 3
                                     }
                                 }
                             }
@@ -698,6 +833,14 @@ Item {
                         currentIndex: 0
 
                         AuraSynthView {
+                            engine: mymsEngine
+                        }
+
+                        FontBoxView {
+                            engine: mymsEngine
+                        }
+
+                        BeatPadView {
                             engine: mymsEngine
                         }
 

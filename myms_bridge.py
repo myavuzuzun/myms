@@ -27,8 +27,15 @@ class MymsEngine(QObject):
     requestSaveProjectAs = pyqtSignal()
     requestNewProject = pyqtSignal()
 
+    # Phase 2 Signals
+    trackTypeChanged = pyqtSignal(int, int)
+    sf2Changed = pyqtSignal()
+    drumPadsChanged = pyqtSignal()
+    numPatternsChanged = pyqtSignal(int)
+    currentPatternChanged = pyqtSignal(int)
+    songModeChanged = pyqtSignal(bool)
+
     def _detect_system_keyboard_layout(self):
-        # 1. Check system XKB configuration (/etc/default/keyboard)
         try:
             if os.path.exists("/etc/default/keyboard"):
                 with open("/etc/default/keyboard", "r", encoding="utf-8") as f:
@@ -38,13 +45,11 @@ class MymsEngine(QObject):
         except Exception:
             pass
 
-        # 2. Check environment locale
         for var in ("LANG", "LC_ALL", "LC_MESSAGES"):
             val = os.environ.get(var, "").lower()
             if "tr_" in val or "turkish" in val:
                 return "tr"
 
-        # 3. Check setxkbmap if available
         try:
             import subprocess
             out = subprocess.check_output(["setxkbmap", "-query"], stderr=subprocess.DEVNULL, text=True)
@@ -53,7 +58,6 @@ class MymsEngine(QObject):
         except Exception:
             pass
 
-        # Default to Turkish Q as requested
         return "tr"
 
     def __init__(self, parent=None):
@@ -73,11 +77,14 @@ class MymsEngine(QObject):
         self._is_playing = False
         self._bpm = 120.0
         self._current_row = 0
+        self._current_pattern = 0
+        self._num_patterns = 1
+        self._is_song_mode = False
         self._num_rows = self.lib.myms_get_num_rows()
         self._num_tracks = self.lib.myms_get_num_tracks()
         self._is_looping = self.lib.myms_is_looping()
-        self._is_edit_mode = True # True = Edit/Stamp, False = Jam mode
-        self._base_octave = 4     # LMMS default octave
+        self._is_edit_mode = True
+        self._base_octave = 4
         self._selected_instrument = 0
         self._keyboard_layout = self._detect_system_keyboard_layout()
         self._is_paused = False
@@ -115,6 +122,9 @@ class MymsEngine(QObject):
         self.lib.myms_get_num_tracks.restype = ctypes.c_int
         self.lib.myms_add_track.restype = None
         self.lib.myms_remove_track.argtypes = [ctypes.c_int]
+        self.lib.myms_set_track_type.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_get_track_type.argtypes = [ctypes.c_int]
+        self.lib.myms_get_track_type.restype = ctypes.c_int
 
         self.lib.myms_set_inst_name.argtypes = [ctypes.c_int, ctypes.c_char_p]
         self.lib.myms_get_inst_name.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
@@ -136,6 +146,59 @@ class MymsEngine(QObject):
             ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float),
             ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float),
             ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float)
+        ]
+
+        # SoundFont (FontBox)
+        self.lib.myms_sf2_load.argtypes = [ctypes.c_char_p]
+        self.lib.myms_sf2_load.restype = ctypes.c_bool
+        self.lib.myms_sf2_is_loaded.restype = ctypes.c_bool
+        self.lib.myms_sf2_get_preset_count.restype = ctypes.c_int
+        self.lib.myms_sf2_get_preset_name.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.lib.myms_sf2_set_preset.argtypes = [ctypes.c_int]
+        self.lib.myms_sf2_get_preset.restype = ctypes.c_int
+        self.lib.myms_sf2_set_volume.argtypes = [ctypes.c_float]
+        self.lib.myms_sf2_get_volume.restype = ctypes.c_float
+        self.lib.myms_sf2_get_path.argtypes = [ctypes.c_char_p, ctypes.c_int]
+
+        # Drum Sampler (BeatPad)
+        self.lib.myms_drum_load_sample.argtypes = [ctypes.c_int, ctypes.c_char_p]
+        self.lib.myms_drum_load_sample.restype = ctypes.c_bool
+        self.lib.myms_drum_trigger.argtypes = [ctypes.c_int, ctypes.c_float]
+        self.lib.myms_drum_set_pitch.argtypes = [ctypes.c_int, ctypes.c_float]
+        self.lib.myms_drum_get_pitch.argtypes = [ctypes.c_int]
+        self.lib.myms_drum_get_pitch.restype = ctypes.c_float
+        self.lib.myms_drum_set_decay.argtypes = [ctypes.c_int, ctypes.c_float]
+        self.lib.myms_drum_get_decay.argtypes = [ctypes.c_int]
+        self.lib.myms_drum_get_decay.restype = ctypes.c_float
+        self.lib.myms_drum_set_volume.argtypes = [ctypes.c_int, ctypes.c_float]
+        self.lib.myms_drum_get_volume.argtypes = [ctypes.c_int]
+        self.lib.myms_drum_get_volume.restype = ctypes.c_float
+        self.lib.myms_drum_set_pan.argtypes = [ctypes.c_int, ctypes.c_float]
+        self.lib.myms_drum_get_pan.argtypes = [ctypes.c_int]
+        self.lib.myms_drum_get_pan.restype = ctypes.c_float
+        self.lib.myms_drum_set_reverse.argtypes = [ctypes.c_int, ctypes.c_bool]
+        self.lib.myms_drum_get_reverse.argtypes = [ctypes.c_int]
+        self.lib.myms_drum_get_reverse.restype = ctypes.c_bool
+        self.lib.myms_drum_get_name.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.lib.myms_drum_get_filepath.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+
+        # Pattern & Song Sequencer
+        self.lib.myms_get_num_patterns.restype = ctypes.c_int
+        self.lib.myms_get_current_pattern.restype = ctypes.c_int
+        self.lib.myms_set_current_pattern.argtypes = [ctypes.c_int]
+        self.lib.myms_add_pattern.restype = ctypes.c_int
+        self.lib.myms_duplicate_pattern.argtypes = [ctypes.c_int]
+        self.lib.myms_duplicate_pattern.restype = ctypes.c_int
+        self.lib.myms_remove_pattern.argtypes = [ctypes.c_int]
+        self.lib.myms_remove_pattern.restype = ctypes.c_bool
+        self.lib.myms_set_song_mode.argtypes = [ctypes.c_bool]
+        self.lib.myms_get_song_mode.restype = ctypes.c_bool
+        self.lib.myms_set_pattern_cell.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_uint8, ctypes.c_uint8, ctypes.c_uint8, ctypes.c_uint8, ctypes.c_uint8]
+        self.lib.myms_get_pattern_cell.argtypes = [
+            ctypes.c_int, ctypes.c_int, ctypes.c_int,
+            ctypes.POINTER(ctypes.c_uint8), ctypes.POINTER(ctypes.c_uint8),
+            ctypes.POINTER(ctypes.c_uint8), ctypes.POINTER(ctypes.c_uint8),
+            ctypes.POINTER(ctypes.c_uint8)
         ]
 
         self.lib.myms_set_macro_punch.argtypes = [ctypes.c_float]
@@ -169,6 +232,11 @@ class MymsEngine(QObject):
         if row != self._current_row:
             self._current_row = row
             self.currentRowChanged.emit(self._current_row)
+
+        pat = self.lib.myms_get_current_pattern()
+        if pat != self._current_pattern:
+            self._current_pattern = pat
+            self.currentPatternChanged.emit(self._current_pattern)
 
         tracks = self.lib.myms_get_num_tracks()
         if tracks != self._num_tracks:
@@ -239,22 +307,6 @@ class MymsEngine(QObject):
     def masterVolume(self):
         return self._master_volume
 
-    @pyqtSlot()
-    def promptOpenProject(self):
-        self.requestOpenProject.emit()
-
-    @pyqtSlot()
-    def promptSaveProject(self):
-        self.requestSaveProject.emit()
-
-    @pyqtSlot()
-    def promptSaveProjectAs(self):
-        self.requestSaveProjectAs.emit()
-
-    @pyqtSlot()
-    def promptNewProject(self):
-        self.requestNewProject.emit()
-
     @pyqtProperty(bool, notify=editModeChanged)
     def isEditMode(self):
         return self._is_edit_mode
@@ -266,6 +318,41 @@ class MymsEngine(QObject):
     @pyqtProperty(str, notify=keyboardLayoutChanged)
     def keyboardLayout(self):
         return self._keyboard_layout
+
+    # Phase 2 Properties
+    @pyqtProperty(bool, notify=sf2Changed)
+    def sf2Loaded(self):
+        return self.lib.myms_sf2_is_loaded()
+
+    @pyqtProperty(str, notify=sf2Changed)
+    def sf2Path(self):
+        buf = ctypes.create_string_buffer(512)
+        self.lib.myms_sf2_get_path(buf, 512)
+        return buf.value.decode('utf-8', errors='ignore')
+
+    @pyqtProperty(int, notify=sf2Changed)
+    def sf2PresetCount(self):
+        return self.lib.myms_sf2_get_preset_count()
+
+    @pyqtProperty(int, notify=sf2Changed)
+    def sf2CurrentPreset(self):
+        return self.lib.myms_sf2_get_preset()
+
+    @pyqtProperty(float, notify=sf2Changed)
+    def sf2Volume(self):
+        return self.lib.myms_sf2_get_volume()
+
+    @pyqtProperty(int, notify=numPatternsChanged)
+    def numPatterns(self):
+        return self.lib.myms_get_num_patterns()
+
+    @pyqtProperty(int, notify=currentPatternChanged)
+    def currentPattern(self):
+        return self.lib.myms_get_current_pattern()
+
+    @pyqtProperty(bool, notify=songModeChanged)
+    def isSongMode(self):
+        return self.lib.myms_get_song_mode()
 
     @pyqtSlot(str)
     def setKeyboardLayout(self, layout):
@@ -284,22 +371,257 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int)
     def setSelectedInstrument(self, inst):
-        if 0 <= inst < 32:
+        if inst >= 0 and inst < self.numTracks and inst != self._selected_instrument:
             self._selected_instrument = inst
-            self.instrumentChanged.emit(inst)
+            self.instrumentChanged.emit(self._selected_instrument)
 
-    @pyqtSlot(int, str)
-    def setInstrumentName(self, inst, name):
-        if 0 <= inst < 32 and name:
-            self.lib.myms_set_inst_name(inst, name.encode('utf-8'))
-            self.instrumentNameChanged.emit(inst, name)
+    # Track Engine Type Slot (0 = Synth, 1 = SoundFont, 2 = Drum Sampler)
+    @pyqtSlot(int, result=int)
+    def getTrackType(self, track):
+        return self.lib.myms_get_track_type(track)
+
+    @pyqtSlot(int, int)
+    def setTrackType(self, track, type_idx):
+        self.lib.myms_set_track_type(track, type_idx)
+        self.trackTypeChanged.emit(track, type_idx)
+
+    # SoundFont Player Slots (FontBox)
+    @pyqtSlot(str, result=bool)
+    def loadSoundFont(self, filepath):
+        ok = self.lib.myms_sf2_load(filepath.encode('utf-8'))
+        if ok:
+            self.sf2Changed.emit()
+        return ok
+
+    @pyqtSlot(int)
+    def setSoundFontPreset(self, index):
+        self.lib.myms_sf2_set_preset(index)
+        self.sf2Changed.emit()
+
+    @pyqtSlot(int, result=str)
+    def getSoundFontPresetName(self, index):
+        buf = ctypes.create_string_buffer(256)
+        self.lib.myms_sf2_get_preset_name(index, buf, 256)
+        return buf.value.decode('utf-8', errors='ignore')
+
+    @pyqtSlot(float)
+    def setSoundFontVolume(self, vol):
+        self.lib.myms_sf2_set_volume(vol)
+        self.sf2Changed.emit()
+
+    # Drum Sampler Slots (BeatPad)
+    @pyqtSlot(int, float)
+    def triggerDrumPad(self, pad, velocity=1.0):
+        self.lib.myms_drum_trigger(pad, ctypes.c_float(velocity))
+
+    @pyqtSlot(int, str, result=bool)
+    def loadDrumSample(self, pad, filepath):
+        ok = self.lib.myms_drum_load_sample(pad, filepath.encode('utf-8'))
+        if ok:
+            self.drumPadsChanged.emit()
+        return ok
+
+    @pyqtSlot(int, result=str)
+    def getDrumPadName(self, pad):
+        buf = ctypes.create_string_buffer(256)
+        self.lib.myms_drum_get_name(pad, buf, 256)
+        return buf.value.decode('utf-8', errors='ignore')
+
+    @pyqtSlot(int, result=str)
+    def getDrumPadFilePath(self, pad):
+        buf = ctypes.create_string_buffer(512)
+        self.lib.myms_drum_get_filepath(pad, buf, 512)
+        return buf.value.decode('utf-8', errors='ignore')
+
+    @pyqtSlot(int, result=float)
+    def getDrumPadPitch(self, pad):
+        return self.lib.myms_drum_get_pitch(pad)
+
+    @pyqtSlot(int, float)
+    def setDrumPadPitch(self, pad, semi):
+        self.lib.myms_drum_set_pitch(pad, ctypes.c_float(semi))
+        self.drumPadsChanged.emit()
+
+    @pyqtSlot(int, result=float)
+    def getDrumPadDecay(self, pad):
+        return self.lib.myms_drum_get_decay(pad)
+
+    @pyqtSlot(int, float)
+    def setDrumPadDecay(self, pad, sec):
+        self.lib.myms_drum_set_decay(pad, ctypes.c_float(sec))
+        self.drumPadsChanged.emit()
+
+    @pyqtSlot(int, result=float)
+    def getDrumPadVolume(self, pad):
+        return self.lib.myms_drum_get_volume(pad)
+
+    @pyqtSlot(int, float)
+    def setDrumPadVolume(self, pad, vol):
+        self.lib.myms_drum_set_volume(pad, ctypes.c_float(vol))
+        self.drumPadsChanged.emit()
+
+    @pyqtSlot(int, result=float)
+    def getDrumPadPan(self, pad):
+        return self.lib.myms_drum_get_pan(pad)
+
+    @pyqtSlot(int, float)
+    def setDrumPadPan(self, pad, pan):
+        self.lib.myms_drum_set_pan(pad, ctypes.c_float(pan))
+        self.drumPadsChanged.emit()
+
+    @pyqtSlot(int, result=bool)
+    def getDrumPadReverse(self, pad):
+        return self.lib.myms_drum_get_reverse(pad)
+
+    @pyqtSlot(int, bool)
+    def setDrumPadReverse(self, pad, rev):
+        self.lib.myms_drum_set_reverse(pad, ctypes.c_bool(rev))
+        self.drumPadsChanged.emit()
+
+    # Pattern & Song Sequencer Slots
+    @pyqtSlot(int)
+    def setCurrentPattern(self, pat):
+        self.lib.myms_set_current_pattern(pat)
+        self._current_pattern = self.lib.myms_get_current_pattern()
+        self.currentPatternChanged.emit(self._current_pattern)
+        self.gridCellChanged.emit(0, 0)
+
+    @pyqtSlot(result=int)
+    def addPattern(self):
+        idx = self.lib.myms_add_pattern()
+        self._num_patterns = self.lib.myms_get_num_patterns()
+        self._current_pattern = idx
+        self.numPatternsChanged.emit(self._num_patterns)
+        self.currentPatternChanged.emit(self._current_pattern)
+        return idx
+
+    @pyqtSlot(int, result=int)
+    def duplicatePattern(self, source_pat):
+        idx = self.lib.myms_duplicate_pattern(source_pat)
+        self._num_patterns = self.lib.myms_get_num_patterns()
+        self._current_pattern = idx
+        self.numPatternsChanged.emit(self._num_patterns)
+        self.currentPatternChanged.emit(self._current_pattern)
+        return idx
+
+    @pyqtSlot(int, result=bool)
+    def removePattern(self, pat):
+        ok = self.lib.myms_remove_pattern(pat)
+        if ok:
+            self._num_patterns = self.lib.myms_get_num_patterns()
+            self._current_pattern = self.lib.myms_get_current_pattern()
+            self.numPatternsChanged.emit(self._num_patterns)
+            self.currentPatternChanged.emit(self._current_pattern)
+        return ok
+
+    @pyqtSlot(bool)
+    def setSongMode(self, song_mode):
+        self.lib.myms_set_song_mode(song_mode)
+        self._is_song_mode = song_mode
+        self.songModeChanged.emit(self._is_song_mode)
+
+    @pyqtSlot()
+    def toggleSongMode(self):
+        self.setSongMode(not self.isSongMode)
+
+    @pyqtSlot()
+    def promptOpenProject(self):
+        self.requestOpenProject.emit()
+
+    @pyqtSlot()
+    def promptSaveProject(self):
+        self.requestSaveProject.emit()
+
+    @pyqtSlot()
+    def promptSaveProjectAs(self):
+        self.requestSaveProjectAs.emit()
+
+    @pyqtSlot()
+    def promptNewProject(self):
+        self.requestNewProject.emit()
 
     @pyqtSlot(int, result=str)
     def getInstrumentName(self, inst):
         buf = ctypes.create_string_buffer(64)
         self.lib.myms_get_inst_name(inst, buf, 64)
-        val = buf.value.decode('utf-8', errors='ignore')
-        return val if val else f"Synth {inst + 1}"
+        name = buf.value.decode('utf-8', errors='ignore')
+        return name if name else f"Synth {inst + 1}"
+
+    @pyqtSlot(int, str)
+    def setInstrumentName(self, inst, name):
+        if not name:
+            name = f"Synth {inst + 1}"
+        self.lib.myms_set_inst_name(inst, name.encode('utf-8'))
+        self.instrumentNameChanged.emit(inst, name)
+
+    @pyqtSlot()
+    def play(self):
+        self._is_paused = False
+        self.pausedChanged.emit(False)
+        self.lib.myms_play()
+
+    @pyqtSlot()
+    def pause(self):
+        self.lib.myms_pause()
+        self._is_paused = True
+        self._current_row = self.lib.myms_get_current_row()
+        self.pausedChanged.emit(True)
+        self.currentRowChanged.emit(self._current_row)
+
+    @pyqtSlot()
+    def togglePlay(self):
+        if self._is_playing:
+            self.pause()
+        else:
+            self.play()
+
+    @pyqtSlot()
+    def stop(self):
+        self.lib.myms_stop()
+        self._is_paused = False
+        self._current_row = 0
+        self.pausedChanged.emit(False)
+        self.currentRowChanged.emit(0)
+
+    @pyqtSlot(float)
+    def setBpm(self, bpm):
+        self.lib.myms_set_bpm(bpm)
+        self._bpm = bpm
+        self.bpmChanged.emit(bpm)
+
+    @pyqtSlot(int)
+    def setCurrentRow(self, row):
+        nRows = self.numRows
+        target_row = max(0, min(row, nRows - 1)) if nRows > 0 else 0
+        self.lib.myms_set_current_row(target_row)
+        self._current_row = target_row
+        self.currentRowChanged.emit(self._current_row)
+
+    @pyqtSlot(int)
+    def setNumRows(self, rows):
+        self.lib.myms_set_num_rows(rows)
+        self._num_rows = self.lib.myms_get_num_rows()
+        self.numRowsChanged.emit(self._num_rows)
+        if self._current_row >= self._num_rows:
+            self.setCurrentRow(0)
+
+    @pyqtSlot(bool)
+    def setLooping(self, loop):
+        self.lib.myms_set_looping(loop)
+        self._is_looping = loop
+        self.loopingChanged.emit(loop)
+
+    @pyqtSlot(bool)
+    def setEditMode(self, edit_mode):
+        self._is_edit_mode = edit_mode
+        self.editModeChanged.emit(edit_mode)
+
+    @pyqtSlot(int)
+    def setBaseOctave(self, oct_val):
+        oct_val = max(1, min(7, oct_val))
+        if oct_val != self._base_octave:
+            self._base_octave = oct_val
+            self.baseOctaveChanged.emit(oct_val)
 
     @pyqtSlot()
     def addTrack(self):
@@ -312,85 +634,12 @@ class MymsEngine(QObject):
         self.lib.myms_remove_track(track_idx)
         self._num_tracks = self.lib.myms_get_num_tracks()
         self.numTracksChanged.emit(self._num_tracks)
-
-    @pyqtSlot(int)
-    def setNumRows(self, rows):
-        if rows in (16, 32, 48, 64, 128):
-            self.lib.myms_set_num_rows(rows)
-            self._num_rows = rows
-            self.numRowsChanged.emit(rows)
-
-    @pyqtSlot(bool)
-    def setLooping(self, loop):
-        self._is_looping = loop
-        self.lib.myms_set_looping(loop)
-        self.loopingChanged.emit(loop)
-
-    @pyqtSlot(bool)
-    def setEditMode(self, mode):
-        self._is_edit_mode = mode
-        self.editModeChanged.emit(mode)
-
-    @pyqtSlot(int)
-    def setBaseOctave(self, oct_val):
-        oct_val = max(1, min(7, oct_val))
-        self._base_octave = oct_val
-        self.baseOctaveChanged.emit(oct_val)
-
-    @pyqtSlot()
-    def togglePlay(self):
-        if self._is_playing:
-            self.pause()
-        else:
-            self.play()
-
-    @pyqtSlot()
-    def play(self):
-        self.lib.myms_play()
-        self._is_playing = True
-        self._is_paused = False
-        self.playingChanged.emit(True)
-        self.pausedChanged.emit(False)
-
-    @pyqtSlot()
-    def pause(self):
-        self.lib.myms_pause()
-        self._is_playing = False
-        self._is_paused = True
-        self.playingChanged.emit(False)
-        self.pausedChanged.emit(True)
-
-    @pyqtSlot()
-    def stop(self):
-        self.lib.myms_stop()
-        self._is_playing = False
-        self._is_paused = False
-        self._current_row = 0
-        self.playingChanged.emit(False)
-        self.pausedChanged.emit(False)
-        self.currentRowChanged.emit(0)
-
-    @pyqtSlot()
-    def playFromStart(self):
-        self.setCurrentRow(0)
-        self.play()
-
-    @pyqtSlot(float)
-    def setBpm(self, bpm):
-        self.lib.myms_set_bpm(ctypes.c_float(bpm))
-        self.bpmChanged.emit(bpm)
-
-    @pyqtSlot(int)
-    def setCurrentRow(self, row):
-        self.lib.myms_set_current_row(row)
-        self._current_row = row
-        self._is_paused = False
-        self.pausedChanged.emit(False)
-        self.currentRowChanged.emit(row)
+        if self._selected_instrument >= self._num_tracks:
+            self.setSelectedInstrument(max(0, self._num_tracks - 1))
 
     @pyqtSlot(int, int, float)
-    def noteOnInst(self, inst, note, velocity=1.0):
-        self.lib.myms_note_on_inst(inst, note, ctypes.c_float(velocity))
+    def noteOnInst(self, inst, note, vel=1.0):
+        self.lib.myms_note_on_inst(inst, note, vel)
 
     @pyqtSlot(int, int)
     def noteOffInst(self, inst, note):
@@ -406,34 +655,38 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, float)
     def setInstOscMix(self, inst, mix):
-        self.lib.myms_set_inst_osc_mix(inst, ctypes.c_float(mix))
+        self.lib.myms_set_inst_osc_mix(inst, mix)
 
     @pyqtSlot(int, float, float)
     def setInstDetune(self, inst, semi, cents):
-        self.lib.myms_set_inst_detune(inst, ctypes.c_float(semi), ctypes.c_float(cents))
+        self.lib.myms_set_inst_detune(inst, semi, cents)
 
     @pyqtSlot(int, float, float, float)
-    def setInstFilter(self, inst, cutoff, resonance, env_amount):
-        self.lib.myms_set_inst_filter(inst, ctypes.c_float(cutoff), ctypes.c_float(resonance), ctypes.c_float(env_amount))
+    def setInstFilter(self, inst, cutoff, res, env_amt):
+        self.lib.myms_set_inst_filter(inst, cutoff, res, env_amt)
 
     @pyqtSlot(int, float, float, float, float)
     def setInstAmpEnv(self, inst, a, d, s, r):
-        self.lib.myms_set_inst_amp_env(inst, ctypes.c_float(a), ctypes.c_float(d), ctypes.c_float(s), ctypes.c_float(r))
+        self.lib.myms_set_inst_amp_env(inst, a, d, s, r)
+
+    @pyqtSlot(int, float, float, float, float)
+    def setInstFilterEnv(self, inst, a, d, s, r):
+        self.lib.myms_set_inst_filter_env(inst, a, d, s, r)
 
     @pyqtSlot(int, result="QVariantMap")
     def getInstParams(self, inst):
         o1 = ctypes.c_int(0)
         o2 = ctypes.c_int(0)
-        mix = ctypes.c_float(0)
-        semi = ctypes.c_float(0)
-        cents = ctypes.c_float(0)
-        cutoff = ctypes.c_float(0)
-        res = ctypes.c_float(0)
-        env_amt = ctypes.c_float(0)
-        aa = ctypes.c_float(0)
-        ad = ctypes.c_float(0)
-        as_ = ctypes.c_float(0)
-        ar = ctypes.c_float(0)
+        mix = ctypes.c_float(0.0)
+        semi = ctypes.c_float(0.0)
+        cents = ctypes.c_float(0.0)
+        cutoff = ctypes.c_float(0.0)
+        res = ctypes.c_float(0.0)
+        env_amt = ctypes.c_float(0.0)
+        aa = ctypes.c_float(0.0)
+        ad = ctypes.c_float(0.0)
+        as_ = ctypes.c_float(0.0)
+        ar = ctypes.c_float(0.0)
 
         self.lib.myms_get_inst_params(
             inst,
@@ -442,6 +695,7 @@ class MymsEngine(QObject):
             ctypes.byref(cutoff), ctypes.byref(res), ctypes.byref(env_amt),
             ctypes.byref(aa), ctypes.byref(ad), ctypes.byref(as_), ctypes.byref(ar)
         )
+
         return {
             "osc1": o1.value,
             "osc2": o2.value,
@@ -494,37 +748,38 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int, result="QVariantMap")
     def getCell(self, track, row):
-        note = ctypes.c_uint8(0)
+        n = ctypes.c_uint8(0)
         inst = ctypes.c_uint8(0)
         vol = ctypes.c_uint8(0)
-        fx_t = ctypes.c_uint8(0)
-        fx_p = ctypes.c_uint8(0)
-
+        fxT = ctypes.c_uint8(0)
+        fxP = ctypes.c_uint8(0)
         self.lib.myms_get_cell(
             track, row,
-            ctypes.byref(note), ctypes.byref(inst),
-            ctypes.byref(vol), ctypes.byref(fx_t),
-            ctypes.byref(fx_p)
+            ctypes.byref(n), ctypes.byref(inst),
+            ctypes.byref(vol), ctypes.byref(fxT), ctypes.byref(fxP)
         )
         return {
-            "note": note.value,
+            "note": n.value,
             "instrument": inst.value,
             "volume": vol.value,
-            "effectType": fx_t.value,
-            "effectParam": fx_p.value
+            "effectType": fxT.value,
+            "effectParam": fxP.value
         }
 
     @pyqtSlot(int)
     def clearTrack(self, track):
         self.lib.myms_clear_track(track)
+        self.gridCellChanged.emit(track, 0)
 
     @pyqtSlot()
     def clearAllTracks(self):
         self.lib.myms_clear_all_tracks()
+        self.gridCellChanged.emit(0, 0)
 
     @pyqtSlot(int, int)
     def transposeTrack(self, track, semitones):
         self.lib.myms_transpose_track(track, semitones)
+        self.gridCellChanged.emit(track, 0)
 
     @pyqtSlot(str, result=bool)
     def saveProject(self, filepath=""):
@@ -535,14 +790,22 @@ class MymsEngine(QObject):
         try:
             import json
             data = {
-                "format_version": 1,
+                "format_version": 2,
                 "app": "myms",
                 "bpm": self.bpm,
                 "num_rows": self.numRows,
                 "num_tracks": self.numTracks,
+                "num_patterns": self.numPatterns,
                 "is_looping": self.isLooping,
+                "is_song_mode": self.isSongMode,
                 "base_octave": self.baseOctave,
                 "keyboard_layout": self.keyboardLayout,
+                "soundfont": {
+                    "path": self.sf2Path,
+                    "preset": self.sf2CurrentPreset,
+                    "volume": self.sf2Volume
+                },
+                "drum_pads": [],
                 "macros": {
                     "punch": self._macro_punch,
                     "warmth": self._macro_warmth,
@@ -551,14 +814,27 @@ class MymsEngine(QObject):
                     "master_volume": self._master_volume
                 },
                 "tracks": [],
-                "cells": []
+                "patterns": []
             }
+
+            for p in range(8):
+                data["drum_pads"].append({
+                    "name": self.getDrumPadName(p),
+                    "file_path": self.getDrumPadFilePath(p),
+                    "pitch": self.getDrumPadPitch(p),
+                    "decay": self.getDrumPadDecay(p),
+                    "volume": self.getDrumPadVolume(p),
+                    "pan": self.getDrumPadPan(p),
+                    "reverse": self.getDrumPadReverse(p)
+                })
 
             for t in range(self.numTracks):
                 p = self.getInstParams(t)
                 name = self.getInstrumentName(t)
+                trk_type = self.getTrackType(t)
                 data["tracks"].append({
                     "name": name,
+                    "type": trk_type,
                     "synth": {
                         "osc1_wave": p.get("osc1", 0),
                         "osc2_wave": p.get("osc2", 1),
@@ -575,19 +851,33 @@ class MymsEngine(QObject):
                     }
                 })
 
-            for r in range(self.numRows):
+            # Save all patterns
+            cur_pat = self.currentPattern
+            for pat_idx in range(self.numPatterns):
+                pat_cells = []
                 for t in range(self.numTracks):
-                    c = self.getCell(t, r)
-                    if c and (c.get("note", 255) != 255 or c.get("effectType", 0) != 0):
-                        data["cells"].append({
-                            "track": t,
-                            "row": r,
-                            "note": c.get("note", 255),
-                            "instrument": c.get("instrument", t + 1),
-                            "volume": c.get("volume", 255),
-                            "effect_type": c.get("effectType", 0),
-                            "effect_param": c.get("effectParam", 0)
-                        })
+                    for r in range(self.numRows):
+                        n = ctypes.c_uint8(0)
+                        inst = ctypes.c_uint8(0)
+                        vol = ctypes.c_uint8(0)
+                        fxT = ctypes.c_uint8(0)
+                        fxP = ctypes.c_uint8(0)
+                        self.lib.myms_get_pattern_cell(
+                            pat_idx, t, r,
+                            ctypes.byref(n), ctypes.byref(inst),
+                            ctypes.byref(vol), ctypes.byref(fxT), ctypes.byref(fxP)
+                        )
+                        if n.value != 255:
+                            pat_cells.append({
+                                "track": t,
+                                "row": r,
+                                "note": n.value,
+                                "instrument": inst.value,
+                                "volume": vol.value,
+                                "effect_type": fxT.value,
+                                "effect_param": fxP.value
+                            })
+                data["patterns"].append(pat_cells)
 
             with open(target_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
@@ -611,18 +901,17 @@ class MymsEngine(QObject):
             with open(filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
 
-            if data.get("app") != "myms":
-                print(f"[myms] Warning: Not a standard myms project file: {filepath}")
-
             self.stop()
 
-            # 1. Transport settings
+            # 1. Global metadata
             if "bpm" in data:
                 self.setBpm(float(data["bpm"]))
             if "num_rows" in data:
                 self.setNumRows(int(data["num_rows"]))
             if "is_looping" in data:
                 self.setLooping(bool(data["is_looping"]))
+            if "is_song_mode" in data:
+                self.setSongMode(bool(data["is_song_mode"]))
             if "base_octave" in data:
                 self.setBaseOctave(int(data["base_octave"]))
             if "keyboard_layout" in data:
@@ -636,7 +925,26 @@ class MymsEngine(QObject):
             if "space" in macros: self.setMacroSpace(float(macros["space"]))
             if "master_volume" in macros: self.setMasterVolume(float(macros["master_volume"]))
 
-            # 3. Synchronize Tracks count
+            # 3. SoundFont
+            sf2 = data.get("soundfont", {})
+            if "path" in sf2 and sf2["path"] and os.path.exists(sf2["path"]):
+                self.loadSoundFont(sf2["path"])
+                if "preset" in sf2: self.setSoundFontPreset(int(sf2["preset"]))
+                if "volume" in sf2: self.setSoundFontVolume(float(sf2["volume"]))
+
+            # 4. Drum Pads
+            drum_pads = data.get("drum_pads", [])
+            for p_idx, pad in enumerate(drum_pads):
+                if p_idx < 8:
+                    if "pitch" in pad: self.setDrumPadPitch(p_idx, float(pad["pitch"]))
+                    if "decay" in pad: self.setDrumPadDecay(p_idx, float(pad["decay"]))
+                    if "volume" in pad: self.setDrumPadVolume(p_idx, float(pad["volume"]))
+                    if "pan" in pad: self.setDrumPadPan(p_idx, float(pad["pan"]))
+                    if "reverse" in pad: self.setDrumPadReverse(p_idx, bool(pad["reverse"]))
+                    if "file_path" in pad and pad["file_path"] and os.path.exists(pad["file_path"]):
+                        self.loadDrumSample(p_idx, pad["file_path"])
+
+            # 5. Synchronize Tracks count
             tracks = data.get("tracks", [])
             target_tracks = max(1, len(tracks))
             while self.numTracks < target_tracks:
@@ -644,12 +952,15 @@ class MymsEngine(QObject):
             while self.numTracks > target_tracks:
                 self.removeTrack(self.numTracks - 1)
 
-            # 4. Load Instruments & Synths
+            # 6. Load Instruments & Synths
             for t, trk in enumerate(tracks):
                 if t >= self.numTracks:
                     break
                 if "name" in trk:
                     self.setInstrumentName(t, trk["name"])
+                if "type" in trk:
+                    self.setTrackType(t, int(trk["type"]))
+
                 synth = trk.get("synth", {})
                 if "osc1_wave" in synth: self.setInstOsc1(t, synth["osc1_wave"])
                 if "osc2_wave" in synth: self.setInstOsc2(t, synth["osc2_wave"])
@@ -661,21 +972,43 @@ class MymsEngine(QObject):
                 if "amp_attack" in synth:
                     self.setInstAmpEnv(t, synth["amp_attack"], synth.get("amp_decay", 0.25), synth.get("amp_sustain", 0.65), synth.get("amp_release", 0.25))
 
-            # 5. Clear pattern cells and populate loaded cells
+            # 7. Patterns & Cells
             self.clearAllTracks()
-            for cell in data.get("cells", []):
-                t = cell.get("track", 0)
-                r = cell.get("row", 0)
-                if t < self.numTracks and r < self.numRows:
-                    self.setCell(
-                        t, r,
-                        cell.get("note", 255),
-                        cell.get("instrument", t + 1),
-                        cell.get("volume", 255),
-                        cell.get("effect_type", 0),
-                        cell.get("effect_param", 0)
-                    )
+            patterns_data = data.get("patterns", [])
+            if patterns_data:
+                # Synchronize patterns count
+                while self.numPatterns < len(patterns_data):
+                    self.addPattern()
+                while self.numPatterns > len(patterns_data):
+                    self.removePattern(self.numPatterns - 1)
 
+                for p_idx, p_cells in enumerate(patterns_data):
+                    for cell in p_cells:
+                        t = cell.get("track", 0)
+                        r = cell.get("row", 0)
+                        self.lib.myms_set_pattern_cell(
+                            p_idx, t, r,
+                            cell.get("note", 255),
+                            cell.get("instrument", t + 1),
+                            cell.get("volume", 255),
+                            cell.get("effect_type", 0),
+                            cell.get("effect_param", 0)
+                        )
+            elif "cells" in data: # v1 backward compatibility
+                for cell in data.get("cells", []):
+                    t = cell.get("track", 0)
+                    r = cell.get("row", 0)
+                    if t < self.numTracks and r < self.numRows:
+                        self.setCell(
+                            t, r,
+                            cell.get("note", 255),
+                            cell.get("instrument", t + 1),
+                            cell.get("volume", 255),
+                            cell.get("effect_type", 0),
+                            cell.get("effect_param", 0)
+                        )
+
+            self.setCurrentPattern(0)
             self.setSelectedInstrument(0)
             self._current_project_path = filepath
             self.currentProjectPathChanged.emit(filepath)
@@ -692,15 +1025,20 @@ class MymsEngine(QObject):
         self.clearAllTracks()
         while self.numTracks > 1:
             self.removeTrack(self.numTracks - 1)
+        while self.numPatterns > 1:
+            self.removePattern(self.numPatterns - 1)
+        self.setTrackType(0, 0) # Synth
         self.setInstrumentName(0, "Synth 1")
         self.setBpm(120.0)
         self.setNumRows(32)
         self.setLooping(False)
+        self.setSongMode(False)
         self.setMacroPunch(0.20)
         self.setMacroWarmth(0.25)
         self.setMacroTone(0.50)
         self.setMacroSpace(0.15)
         self.setMasterVolume(0.85)
+        self.setCurrentPattern(0)
         self.setSelectedInstrument(0)
         self._current_project_path = ""
         self.currentProjectPathChanged.emit("")

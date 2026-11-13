@@ -1,26 +1,29 @@
-#ifndef MYMS_TRACKER_SEQUENCER_H
-#define MYMS_TRACKER_SEQUENCER_H
+#pragma once
 
 #include <vector>
 #include <cstdint>
-#include <atomic>
+#include <cmath>
 #include <algorithm>
+#include <iostream>
 
 namespace myms {
 
-constexpr uint8_t NOTE_EMPTY = 255;
-constexpr uint8_t NOTE_OFF   = 254;
-
 constexpr int DEFAULT_NUM_ROWS = 32;
-constexpr int DEFAULT_NUM_TRACKS = 1; // Start with exactly 1 empty track
+constexpr int DEFAULT_NUM_TRACKS = 1;
 constexpr int MAX_TRACKS = 32;
+constexpr uint8_t NOTE_OFF = 254;
+constexpr uint8_t NO_NOTE = 255;
 
 struct TrackerCell {
-    uint8_t note = NOTE_EMPTY;
+    uint8_t note = NO_NOTE;
     uint8_t instrument = 0;
     uint8_t volume = 255;
     uint8_t effectType = 0;
     uint8_t effectParam = 0;
+
+    TrackerCell() = default;
+    TrackerCell(uint8_t n, uint8_t inst, uint8_t vol = 255, uint8_t fxT = 0, uint8_t fxP = 0)
+        : note(n), instrument(inst), volume(vol), effectType(fxT), effectParam(fxP) {}
 };
 
 struct TrackerPattern {
@@ -28,15 +31,8 @@ struct TrackerPattern {
     int numTracks = DEFAULT_NUM_TRACKS;
     std::vector<std::vector<TrackerCell>> rows;
 
-    TrackerPattern(int r = DEFAULT_NUM_ROWS, int t = DEFAULT_NUM_TRACKS) 
-        : numRows(r), numTracks(t) 
-    {
-        resize(r, t);
-    }
-
-    void resize(int r, int t) {
-        numRows = std::clamp(r, 8, 256);
-        numTracks = std::clamp(t, 1, MAX_TRACKS);
+    TrackerPattern(int r = DEFAULT_NUM_ROWS, int t = DEFAULT_NUM_TRACKS)
+        : numRows(r), numTracks(t) {
         rows.resize(numRows);
         for (int i = 0; i < numRows; ++i) {
             rows[i].resize(numTracks);
@@ -80,6 +76,10 @@ public:
         m_samplesUntilNextRow = 0;
         m_isPlaying = false;
         m_isLooping = true;
+        m_isSongMode = false;
+        m_currentPattern = 0;
+        m_songOrderIndex = 0;
+        m_songOrder = {0};
 
         m_patterns.clear();
         m_patterns.emplace_back(DEFAULT_NUM_ROWS, DEFAULT_NUM_TRACKS);
@@ -113,6 +113,14 @@ public:
         return m_isLooping;
     }
 
+    void setSongMode(bool songMode) {
+        m_isSongMode = songMode;
+    }
+
+    bool isSongMode() const {
+        return m_isSongMode;
+    }
+
     void play() {
         m_samplesUntilNextRow = 0;
         m_isPlaying = true;
@@ -126,6 +134,7 @@ public:
     void stop() {
         m_isPlaying = false;
         m_currentRow = 0;
+        m_songOrderIndex = 0;
         m_samplesUntilNextRow = 0;
     }
 
@@ -138,21 +147,26 @@ public:
     }
 
     void setCurrentRow(int row) {
-        if (!m_patterns.empty()) {
-            m_currentRow = row % m_patterns[0].numRows;
+        int curPat = getCurrentPattern();
+        if (curPat >= 0 && curPat < static_cast<int>(m_patterns.size())) {
+            m_currentRow = row % m_patterns[curPat].numRows;
             m_samplesUntilNextRow = 0;
         }
     }
 
     int getNumRows() const {
-        if (m_patterns.empty()) return DEFAULT_NUM_ROWS;
-        return m_patterns[0].numRows;
+        int curPat = getCurrentPattern();
+        if (curPat >= 0 && curPat < static_cast<int>(m_patterns.size())) {
+            return m_patterns[curPat].numRows;
+        }
+        return DEFAULT_NUM_ROWS;
     }
 
     void setNumRows(int rows) {
-        if (!m_patterns.empty()) {
-            m_patterns[0].setRowsCount(rows);
-            if (m_currentRow >= m_patterns[0].numRows) {
+        int curPat = getCurrentPattern();
+        if (curPat >= 0 && curPat < static_cast<int>(m_patterns.size())) {
+            m_patterns[curPat].setRowsCount(rows);
+            if (m_currentRow >= m_patterns[curPat].numRows) {
                 m_currentRow = 0;
             }
         }
@@ -164,52 +178,143 @@ public:
     }
 
     void addTrack() {
-        if (!m_patterns.empty()) {
-            m_patterns[0].addTrack();
+        for (auto& pat : m_patterns) {
+            pat.addTrack();
         }
     }
 
     void removeTrack(int trackIdx) {
-        if (!m_patterns.empty()) {
-            m_patterns[0].removeTrack(trackIdx);
+        for (auto& pat : m_patterns) {
+            pat.removeTrack(trackIdx);
         }
+    }
+
+    // Pattern Management
+    int getNumPatterns() const {
+        return static_cast<int>(m_patterns.size());
+    }
+
+    int getCurrentPattern() const {
+        return std::clamp(m_currentPattern, 0, std::max(0, static_cast<int>(m_patterns.size()) - 1));
+    }
+
+    void setCurrentPattern(int pat) {
+        if (pat >= 0 && pat < static_cast<int>(m_patterns.size())) {
+            m_currentPattern = pat;
+            if (m_currentRow >= m_patterns[m_currentPattern].numRows) {
+                m_currentRow = 0;
+            }
+        }
+    }
+
+    int addPattern() {
+        int rows = getNumRows();
+        int tracks = getNumTracks();
+        m_patterns.emplace_back(rows, tracks);
+        int newIdx = static_cast<int>(m_patterns.size()) - 1;
+        m_songOrder.push_back(newIdx);
+        m_currentPattern = newIdx;
+        return newIdx;
+    }
+
+    int duplicatePattern(int sourceIdx) {
+        if (sourceIdx < 0 || sourceIdx >= static_cast<int>(m_patterns.size())) {
+            return addPattern();
+        }
+        TrackerPattern clone = m_patterns[sourceIdx];
+        m_patterns.push_back(clone);
+        int newIdx = static_cast<int>(m_patterns.size()) - 1;
+        m_songOrder.push_back(newIdx);
+        m_currentPattern = newIdx;
+        return newIdx;
+    }
+
+    bool removePattern(int patIdx) {
+        if (m_patterns.size() <= 1 || patIdx < 0 || patIdx >= static_cast<int>(m_patterns.size())) {
+            return false;
+        }
+        m_patterns.erase(m_patterns.begin() + patIdx);
+        if (m_currentPattern >= static_cast<int>(m_patterns.size())) {
+            m_currentPattern = static_cast<int>(m_patterns.size()) - 1;
+        }
+        // Clean song order
+        std::vector<int> newOrder;
+        for (int p : m_songOrder) {
+            if (p == patIdx) continue;
+            newOrder.push_back(p > patIdx ? p - 1 : p);
+        }
+        if (newOrder.empty()) newOrder.push_back(0);
+        m_songOrder = newOrder;
+        m_songOrderIndex = 0;
+        return true;
+    }
+
+    std::vector<int> getSongOrder() const {
+        return m_songOrder;
+    }
+
+    void setSongOrder(const std::vector<int>& order) {
+        if (!order.empty()) {
+            m_songOrder = order;
+            m_songOrderIndex = 0;
+        }
+    }
+
+    void setPatternCell(int pat, int track, int row, uint8_t note, uint8_t instrument, uint8_t volume, uint8_t effectType, uint8_t effectParam) {
+        if (pat >= 0 && pat < static_cast<int>(m_patterns.size())) {
+            TrackerPattern& p = m_patterns[pat];
+            if (row >= 0 && row < p.numRows && track >= 0 && track < p.numTracks) {
+                TrackerCell& c = p.rows[row][track];
+                c.note = note;
+                c.instrument = instrument;
+                c.volume = volume;
+                c.effectType = effectType;
+                c.effectParam = effectParam;
+            }
+        }
+    }
+
+    TrackerCell getPatternCell(int pat, int track, int row) const {
+        if (pat >= 0 && pat < static_cast<int>(m_patterns.size())) {
+            const TrackerPattern& p = m_patterns[pat];
+            if (row >= 0 && row < p.numRows && track >= 0 && track < p.numTracks) {
+                return p.rows[row][track];
+            }
+        }
+        return TrackerCell();
     }
 
     void setCell(int track, int row, uint8_t note, uint8_t instrument, uint8_t volume, uint8_t effectType, uint8_t effectParam) {
-        if (m_patterns.empty()) return;
-        if (row >= 0 && row < m_patterns[0].numRows && track >= 0 && track < m_patterns[0].numTracks) {
-            TrackerCell& c = m_patterns[0].rows[row][track];
-            c.note = note;
-            c.instrument = instrument;
-            c.volume = volume;
-            c.effectType = effectType;
-            c.effectParam = effectParam;
-        }
+        setPatternCell(getCurrentPattern(), track, row, note, instrument, volume, effectType, effectParam);
     }
 
     TrackerCell getCell(int track, int row) const {
-        if (!m_patterns.empty() && row >= 0 && row < m_patterns[0].numRows && track >= 0 && track < m_patterns[0].numTracks) {
-            return m_patterns[0].rows[row][track];
-        }
-        return TrackerCell();
+        return getPatternCell(getCurrentPattern(), track, row);
     }
 
     inline int getSamplesPerRow() const {
         return static_cast<int>((m_sampleRate * 60.0f) / (m_bpm * static_cast<float>(m_lpb)));
     }
 
-    inline bool advanceSample(int& outRow) {
+    inline bool advanceSample(int& outRow, int& outPattern) {
         if (!m_isPlaying || m_patterns.empty()) {
             return false;
         }
+
+        int curPat = getCurrentPattern();
+        outPattern = curPat;
 
         if (m_samplesUntilNextRow <= 0) {
             outRow = m_currentRow;
             m_samplesUntilNextRow = getSamplesPerRow();
             
             int nextRow = m_currentRow + 1;
-            if (nextRow >= m_patterns[0].numRows) {
-                if (m_isLooping) {
+            if (nextRow >= m_patterns[curPat].numRows) {
+                if (m_isSongMode && !m_songOrder.empty()) {
+                    m_songOrderIndex = (m_songOrderIndex + 1) % m_songOrder.size();
+                    m_currentPattern = std::clamp(m_songOrder[m_songOrderIndex], 0, static_cast<int>(m_patterns.size()) - 1);
+                    m_currentRow = 0;
+                } else if (m_isLooping) {
                     m_currentRow = 0;
                 } else {
                     m_isPlaying = false;
@@ -231,13 +336,16 @@ private:
     float m_bpm = 120.0f;
     int m_lpb = 4;
     int m_currentRow = 0;
+    int m_currentPattern = 0;
     int m_samplesUntilNextRow = 0;
     bool m_isPlaying = false;
     bool m_isLooping = true;
+    bool m_isSongMode = false;
+
+    std::vector<int> m_songOrder = {0};
+    int m_songOrderIndex = 0;
 
     std::vector<TrackerPattern> m_patterns;
 };
 
 } // namespace myms
-
-#endif // MYMS_TRACKER_SEQUENCER_H

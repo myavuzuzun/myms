@@ -1,8 +1,7 @@
 #include "myms_c_api.h"
 #include "audio_engine.h"
 #include <cstring>
-
-extern "C" {
+#include <iostream>
 
 bool myms_init(int sample_rate, int buffer_size) {
     return myms::AudioEngine::instance().init(sample_rate, buffer_size);
@@ -72,6 +71,14 @@ void myms_remove_track(int track_idx) {
     myms::AudioEngine::instance().removeTrack(track_idx);
 }
 
+void myms_set_track_type(int track, int type) {
+    myms::AudioEngine::instance().setTrackType(track, type);
+}
+
+int myms_get_track_type(int track) {
+    return myms::AudioEngine::instance().getTrackType(track);
+}
+
 void myms_set_inst_name(int inst, const char* name) {
     if (name) {
         myms::AudioEngine::instance().setInstrumentName(inst, std::string(name));
@@ -79,11 +86,10 @@ void myms_set_inst_name(int inst, const char* name) {
 }
 
 void myms_get_inst_name(int inst, char* out_name, int max_len) {
-    if (out_name && max_len > 0) {
-        std::string n = myms::AudioEngine::instance().getInstrumentName(inst);
-        std::strncpy(out_name, n.c_str(), max_len - 1);
-        out_name[max_len - 1] = '\0';
-    }
+    if (!out_name || max_len <= 0) return;
+    std::string name = myms::AudioEngine::instance().getInstrumentName(inst);
+    std::strncpy(out_name, name.c_str(), max_len - 1);
+    out_name[max_len - 1] = '\0';
 }
 
 void myms_note_on_inst(int inst, int note, float velocity) {
@@ -144,6 +150,161 @@ void myms_get_inst_params(
     if (out_amp_r) *out_amp_r = p.ampRelease;
 }
 
+// SoundFont Player Controls (FontBox)
+bool myms_sf2_load(const char* filepath) {
+    if (!filepath) return false;
+    return myms::AudioEngine::instance().loadSoundFont(filepath);
+}
+
+bool myms_sf2_is_loaded() {
+    return myms::AudioEngine::instance().isSoundFontLoaded();
+}
+
+int myms_sf2_get_preset_count() {
+    return myms::AudioEngine::instance().getSoundFontPresetCount();
+}
+
+void myms_sf2_get_preset_name(int index, char* out_name, int max_len) {
+    if (!out_name || max_len <= 0) return;
+    std::string name = myms::AudioEngine::instance().getSoundFontPresetName(index);
+    std::strncpy(out_name, name.c_str(), max_len - 1);
+    out_name[max_len - 1] = '\0';
+}
+
+void myms_sf2_set_preset(int index) {
+    myms::AudioEngine::instance().setSoundFontPreset(index);
+}
+
+int myms_sf2_get_preset() {
+    return myms::AudioEngine::instance().getSoundFontPreset();
+}
+
+void myms_sf2_set_volume(float vol) {
+    myms::AudioEngine::instance().setSoundFontVolume(vol);
+}
+
+float myms_sf2_get_volume() {
+    return myms::AudioEngine::instance().getSoundFontVolume();
+}
+
+void myms_sf2_get_path(char* out_path, int max_len) {
+    if (!out_path || max_len <= 0) return;
+    std::string path = myms::AudioEngine::instance().getSoundFontPath();
+    std::strncpy(out_path, path.c_str(), max_len - 1);
+    out_path[max_len - 1] = '\0';
+}
+
+// Drum Sampler Controls (BeatPad)
+bool myms_drum_load_sample(int pad, const char* filepath) {
+    if (!filepath) return false;
+    return myms::AudioEngine::instance().loadDrumSample(pad, filepath);
+}
+
+void myms_drum_trigger(int pad, float velocity) {
+    myms::AudioEngine::instance().triggerDrumPad(pad, velocity);
+}
+
+void myms_drum_set_pitch(int pad, float semi) {
+    myms::AudioEngine::instance().setDrumPadPitch(pad, semi);
+}
+
+float myms_drum_get_pitch(int pad) {
+    return myms::AudioEngine::instance().getDrumPadPitch(pad);
+}
+
+void myms_drum_set_decay(int pad, float sec) {
+    myms::AudioEngine::instance().setDrumPadDecay(pad, sec);
+}
+
+float myms_drum_get_decay(int pad) {
+    return myms::AudioEngine::instance().getDrumPadDecay(pad);
+}
+
+void myms_drum_set_volume(int pad, float vol) {
+    myms::AudioEngine::instance().setDrumPadVolume(pad, vol);
+}
+
+float myms_drum_get_volume(int pad) {
+    return myms::AudioEngine::instance().getDrumPadVolume(pad);
+}
+
+void myms_drum_set_pan(int pad, float pan) {
+    myms::AudioEngine::instance().setDrumPadPan(pad, pan);
+}
+
+float myms_drum_get_pan(int pad) {
+    return myms::AudioEngine::instance().getDrumPadPan(pad);
+}
+
+void myms_drum_set_reverse(int pad, bool rev) {
+    myms::AudioEngine::instance().setDrumPadReverse(pad, rev);
+}
+
+bool myms_drum_get_reverse(int pad) {
+    return myms::AudioEngine::instance().getDrumPadReverse(pad);
+}
+
+void myms_drum_get_name(int pad, char* out_name, int max_len) {
+    if (!out_name || max_len <= 0) return;
+    std::string name = myms::AudioEngine::instance().getDrumPadName(pad);
+    std::strncpy(out_name, name.c_str(), max_len - 1);
+    out_name[max_len - 1] = '\0';
+}
+
+void myms_drum_get_filepath(int pad, char* out_path, int max_len) {
+    if (!out_path || max_len <= 0) return;
+    std::string path = myms::AudioEngine::instance().getDrumPadFilePath(pad);
+    std::strncpy(out_path, path.c_str(), max_len - 1);
+    out_path[max_len - 1] = '\0';
+}
+
+// Pattern & Song Sequencer
+int myms_get_num_patterns() {
+    return myms::AudioEngine::instance().getNumPatterns();
+}
+
+int myms_get_current_pattern() {
+    return myms::AudioEngine::instance().getCurrentPattern();
+}
+
+void myms_set_current_pattern(int pat) {
+    myms::AudioEngine::instance().setCurrentPattern(pat);
+}
+
+int myms_add_pattern() {
+    return myms::AudioEngine::instance().addPattern();
+}
+
+int myms_duplicate_pattern(int source_pat) {
+    return myms::AudioEngine::instance().duplicatePattern(source_pat);
+}
+
+bool myms_remove_pattern(int pat) {
+    return myms::AudioEngine::instance().removePattern(pat);
+}
+
+void myms_set_song_mode(bool song_mode) {
+    myms::AudioEngine::instance().setSongMode(song_mode);
+}
+
+bool myms_get_song_mode() {
+    return myms::AudioEngine::instance().isSongMode();
+}
+
+void myms_set_pattern_cell(int pat, int track, int row, uint8_t note, uint8_t instrument, uint8_t volume, uint8_t effect_type, uint8_t effect_param) {
+    myms::AudioEngine::instance().setPatternCell(pat, track, row, note, instrument, volume, effect_type, effect_param);
+}
+
+void myms_get_pattern_cell(int pat, int track, int row, uint8_t* out_note, uint8_t* out_instrument, uint8_t* out_volume, uint8_t* out_effect_type, uint8_t* out_effect_param) {
+    myms::TrackerCell c = myms::AudioEngine::instance().getPatternCell(pat, track, row);
+    if (out_note) *out_note = c.note;
+    if (out_instrument) *out_instrument = c.instrument;
+    if (out_volume) *out_volume = c.volume;
+    if (out_effect_type) *out_effect_type = c.effectType;
+    if (out_effect_param) *out_effect_param = c.effectParam;
+}
+
+// Smart Macro Strip
 void myms_set_macro_punch(float punch) {
     myms::AudioEngine::instance().setMacroPunch(punch);
 }
@@ -170,8 +331,9 @@ void myms_get_meters(float* out_peak_l, float* out_peak_r, float* out_rms) {
     if (out_rms) *out_rms = myms::AudioEngine::instance().getMasterRms();
 }
 
-void myms_set_cell(int track, int row, uint8_t note, uint8_t instrument, uint8_t volume, uint8_t effect_type, uint8_t effectParam) {
-    myms::AudioEngine::instance().setTrackerCell(track, row, note, instrument, volume, effect_type, effectParam);
+// Tracker Pattern Editing (Current Pattern)
+void myms_set_cell(int track, int row, uint8_t note, uint8_t instrument, uint8_t volume, uint8_t effect_type, uint8_t effect_param) {
+    myms::AudioEngine::instance().setTrackerCell(track, row, note, instrument, volume, effect_type, effect_param);
 }
 
 void myms_get_cell(int track, int row, uint8_t* out_note, uint8_t* out_instrument, uint8_t* out_volume, uint8_t* out_effect_type, uint8_t* out_effect_param) {
@@ -198,5 +360,3 @@ void myms_transpose_track(int track, int semitones) {
 void myms_load_demo() {
     myms::AudioEngine::instance().loadDemoGroove();
 }
-
-} // extern "C"

@@ -39,11 +39,19 @@ Rectangle {
         function onGridCellChanged(track, row) {
             root.gridModified()
         }
+        function onTrackTypeChanged(track, type) {
+            root.gridModified()
+        }
     }
 
-    function getNoteString(noteVal) {
+    function getNoteString(noteVal, trackIdx) {
         if (noteVal === 255) return "---"
         if (noteVal === 254) return "OFF"
+        if (trackIdx !== undefined && engine && engine.getTrackType(trackIdx) === 2) {
+            let pad = (noteVal >= 36 && noteVal <= 43) ? (noteVal - 36) : (noteVal % 8)
+            const drumLabels = ["KICK", "SNAR", "CLAP", "CH-1", "OH-1", "LTOM", "RIM1", "CRSH"]
+            return drumLabels[pad]
+        }
         const names = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"]
         let octave = Math.floor(noteVal / 12) - 1
         let noteIdx = noteVal % 12
@@ -339,6 +347,49 @@ Rectangle {
                                 Layout.fillWidth: true
                             }
 
+                            // Track Engine Badge (SYNTH / SF2 / DRUMS)
+                            Rectangle {
+                                width: 34
+                                height: 14
+                                radius: 2
+                                property int trkType: engine ? engine.getTrackType(index) : 0
+                                color: (root.selectedTrack === index) ? "rgba(0,0,0,0.3)" : theme.bgWell
+                                border.color: (root.selectedTrack === index) ? "#ffffff" : theme.border
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: {
+                                        let t = parent.trkType
+                                        if (t === 1) return "SF2"
+                                        if (t === 2) return "DRUM"
+                                        return "SYN"
+                                    }
+                                    font.bold: true
+                                    font.pixelSize: 8
+                                    color: {
+                                        let t = parent.trkType
+                                        if (t === 1) return "#92ebb5"
+                                        if (t === 2) return "#f7b731"
+                                        return "#5cd6e8"
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (engine) {
+                                            let nextType = (parent.trkType + 1) % 3
+                                            engine.setTrackType(index, nextType)
+                                            root.gridModified()
+                                        }
+                                    }
+                                    ToolTip.visible: containsMouse
+                                    ToolTip.text: "Track Engine: Click to cycle (SYNTH / SF2 / DRUMS)"
+                                    ToolTip.delay: 400
+                                }
+                            }
+
                             // Delete track button
                             Rectangle {
                                 width: 14
@@ -557,7 +608,7 @@ Rectangle {
                                     spacing: 5
 
                                     Text {
-                                        text: root.getNoteString(cellItem.cellData ? cellItem.cellData.note : 255)
+                                        text: root.getNoteString(cellItem.cellData ? cellItem.cellData.note : 255, cellItem.trackIdx)
                                         font.pixelSize: 10
                                         font.bold: (cellItem.cellData && cellItem.cellData.note <= 127)
                                         font.family: "Monospace, JetBrains Mono, Hack, Noto Sans Mono"
