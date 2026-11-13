@@ -11,6 +11,8 @@
 
 namespace myms {
 
+constexpr int MAX_SF2_CHANNELS = 32;
+
 struct SoundFontPreset {
     int index;
     std::string name;
@@ -19,7 +21,14 @@ struct SoundFontPreset {
 class SoundFontPlayer {
 public:
     SoundFontPlayer() 
-        : m_tsf(nullptr), m_currentPreset(0), m_volume(0.85f), m_sampleRate(48000.0f) {}
+        : m_tsf(nullptr), m_masterVolume(0.85f), m_sampleRate(48000.0f) {
+        for (int i = 0; i < MAX_SF2_CHANNELS; ++i) {
+            m_channelPresets[i] = 0;
+            m_channelVolumes[i] = 1.0f;
+            m_channelPans[i] = 0.5f;
+            m_channelMutes[i] = false;
+        }
+    }
 
     ~SoundFontPlayer() {
         close();
@@ -62,12 +71,20 @@ public:
             presets.push_back(p);
         }
 
+        // Apply channel presets & parameters to new tsf
+        for (int ch = 0; ch < MAX_SF2_CHANNELS; ++ch) {
+            if (m_channelPresets[ch] < count) {
+                tsf_channel_set_presetindex(newTsf, ch, m_channelPresets[ch]);
+            }
+            tsf_channel_set_volume(newTsf, ch, m_channelVolumes[ch]);
+            tsf_channel_set_pan(newTsf, ch, m_channelPans[ch]);
+        }
+
         tsf* oldTsf = m_tsf.exchange(newTsf, std::memory_order_acq_rel);
         {
             std::lock_guard<std::mutex> lock(m_metaMutex);
             m_loadedPath = filepath;
             m_presets = std::move(presets);
-            m_currentPreset.store(0, std::memory_order_relaxed);
         }
 
         if (oldTsf) {
@@ -106,57 +123,126 @@ public:
         return "";
     }
 
+    // Global / Default Channel 0 Helpers
     void setPreset(int index) {
-        std::lock_guard<std::mutex> lock(m_metaMutex);
-        if (!m_presets.empty()) {
-            m_currentPreset.store(std::clamp(index, 0, static_cast<int>(m_presets.size()) - 1), std::memory_order_relaxed);
-        }
+        setChannelPreset(0, index);
     }
 
     int getPreset() const {
-        return m_currentPreset.load(std::memory_order_relaxed);
+        return getChannelPreset(0);
     }
 
     void setVolume(float vol) {
-        m_volume.store(std::clamp(vol, 0.0f, 2.0f), std::memory_order_relaxed);
+        setMasterVolume(vol);
     }
 
     float getVolume() const {
-        return m_volume.load(std::memory_order_relaxed);
+        return getMasterVolume();
     }
 
     inline void noteOn(int note, float velocity) {
-        tsf* f = m_tsf.load(std::memory_order_acquire);
-        if (!f) return;
-        int preset = m_currentPreset.load(std::memory_order_relaxed);
-        tsf_note_on(f, preset, note, velocity);
+        noteOn(0, note, velocity);
     }
 
     inline void noteOff(int note) {
-        tsf* f = m_tsf.load(std::memory_order_acquire);
-        if (!f) return;
-        int preset = m_currentPreset.load(std::memory_order_relaxed);
-        tsf_note_off(f, preset, note);
+        noteOff(0, note);
     }
 
-    inline void allNotesOff() {
+    // Per-Channel (Per-Track) SoundFont Preset Control
+    void setChannelPreset(int channel, int presetIndex) {
+        if (channel < 0 || channel >= MAX_SF2_CHANNELS) return;
+        m_channelPresets[channel] = std::max(0, presetIndex);
+
         tsf* f = m_tsf.load(std::memory_order_acquire);
-        if (!f) return;
-        tsf_note_off_all(f);
+        if (f) {
+            tsf_channel_set_presetindex(f, channel, m_channelPresets[channel]);
+        }
     }
 
-    // Process a block of samples (mixing into sL and sR)
+    int getChannelPreset(int channel) const {
+        if (channel < 0 || channel >= MAX_SF2_CHANNELS) return 0;
+        return m_channelPresets[channel];
+    }
+
+    void setChannelVolume(int channel, float vol) {
+        if (channel < 0 || channel >= MAX_SF2_CHANNELS) return;
+        m_channelVolumes[channel] = std::clamp(vol, 0.0f, 2.0f);
+        tsf* f = m_tsf.load(std::memory_order_acquire);
+        if (f) {
+            float effVol = m_channelMutes[channel] ? 0.0f : m_channelVolumes[channel];
+            tsf_channel_set_volume(f, channel, effVol);
+        }
+    }
+
+    float getChannelVolume(int channel) const {
+        if (channel < 0 || channel >= MAX_SF2_CHANNELS) return 1.0f;
+        return m_channelVolumes[channel];
+    }
+
+    void setChannelPan(int channel, float pan) {
+        if (channel < 0 || channel >= MAX_SF2_CHANNELS) return;
+        m_channelPans[channel] = std::clamp(pan, 0.0f, 1.0f);
+        tsf* f = m_tsf.load(std::memory_order_acquire);
+        if (f) {
+            tsf_channel_set_pan(f, channel, m_channelPans[channel]);
+        }
+    }
+
+    void setChannelMute(int channel, bool mute) {
+        if (channel < 0 || channel >= MAX_SF2_CHANNELS) return;
+        m_channelMutes[channel] = mute;
+        tsf* f = m_tsf.load(std::memory_order_acquire);
+        if (f) {
+            float effVol = mute ? 0.0f : m_channelVolumes[channel];
+            tsf_channel_set_volume(f, channel, effVol);
+        }
+    }
+
+    void setMasterVolume(float vol) {
+        m_masterVolume.store(std::clamp(vol, 0.0f, 2.0f), std::memory_order_relaxed);
+    }
+
+    float getMasterVolume() const {
+        return m_masterVolume.load(std::memory_order_relaxed);
+    }
+
+    // Per-Channel Note Triggering
+    inline void noteOn(int channel, int note, float velocity) {
+        tsf* f = m_tsf.load(std::memory_order_acquire);
+        if (!f) return;
+        int ch = std::clamp(channel, 0, MAX_SF2_CHANNELS - 1);
+        tsf_channel_set_presetindex(f, ch, m_channelPresets[ch]);
+        tsf_channel_note_on(f, ch, note, velocity);
+    }
+
+    inline void noteOff(int channel, int note) {
+        tsf* f = m_tsf.load(std::memory_order_acquire);
+        if (!f) return;
+        int ch = std::clamp(channel, 0, MAX_SF2_CHANNELS - 1);
+        tsf_channel_note_off(f, ch, note);
+    }
+
+    inline void allNotesOff(int channel = -1) {
+        tsf* f = m_tsf.load(std::memory_order_acquire);
+        if (!f) return;
+        if (channel >= 0 && channel < MAX_SF2_CHANNELS) {
+            tsf_channel_sounds_off_all(f, channel);
+        } else {
+            tsf_note_off_all(f);
+        }
+    }
+
+    // Render all active SoundFont channels into interleaved stereo buffer
     inline void processSample(float& outL, float& outR) {
         tsf* f = m_tsf.load(std::memory_order_acquire);
         if (!f) return;
         float buf[2] = {0.0f, 0.0f};
         tsf_render_float(f, buf, 1, 0);
-        float vol = m_volume.load(std::memory_order_relaxed);
-        outL += buf[0] * vol;
-        outR += buf[1] * vol;
+        float master = m_masterVolume.load(std::memory_order_relaxed);
+        outL += buf[0] * master;
+        outR += buf[1] * master;
     }
 
-    // Process multi-frame block
     void processBlock(float* outStereoInterleaved, int frames) {
         tsf* f = m_tsf.load(std::memory_order_acquire);
         if (!f) return;
@@ -165,9 +251,13 @@ public:
 
 private:
     std::atomic<tsf*> m_tsf{nullptr};
-    std::atomic<int> m_currentPreset{0};
-    std::atomic<float> m_volume{0.85f};
+    std::atomic<float> m_masterVolume{0.85f};
     float m_sampleRate{48000.0f};
+
+    int m_channelPresets[MAX_SF2_CHANNELS];
+    float m_channelVolumes[MAX_SF2_CHANNELS];
+    float m_channelPans[MAX_SF2_CHANNELS];
+    bool m_channelMutes[MAX_SF2_CHANNELS];
 
     std::mutex m_metaMutex;
     std::string m_loadedPath;

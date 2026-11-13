@@ -149,6 +149,8 @@ bool AudioEngine::init(int sampleRate, int bufferSize) {
     m_instruments.back().init(m_sampleRate);
     m_trackTypes.clear();
     m_trackTypes.push_back(TRACK_TYPE_SYNTH);
+    m_trackMixers.clear();
+    m_trackMixers.emplace_back();
 
     setupInitialInstruments();
 
@@ -253,6 +255,7 @@ void AudioEngine::addTrack() {
     m_instruments.emplace_back();
     m_instruments.back().init(m_sampleRate);
     m_trackTypes.push_back(TRACK_TYPE_SYNTH);
+    m_trackMixers.emplace_back();
 
     // Initialize with default synth patch
     SynthParams p = m_instruments[0].getParams();
@@ -267,6 +270,9 @@ void AudioEngine::removeTrack(int trackIdx) {
     if (trackIdx < static_cast<int>(m_trackTypes.size())) {
         m_trackTypes.erase(m_trackTypes.begin() + trackIdx);
     }
+    if (trackIdx < static_cast<int>(m_trackMixers.size())) {
+        m_trackMixers.erase(m_trackMixers.begin() + trackIdx);
+    }
     m_sequencer.removeTrack(trackIdx);
 }
 
@@ -275,22 +281,138 @@ int AudioEngine::getNumInstruments() const {
 }
 
 void AudioEngine::setTrackType(int track, int type) {
+    if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
+        m_trackMixers[track].type = std::clamp(type, 0, 2);
+    }
     if (track >= 0 && track < static_cast<int>(m_trackTypes.size())) {
         m_trackTypes[track] = std::clamp(type, 0, 2);
     }
 }
 
 int AudioEngine::getTrackType(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
+        return m_trackMixers[track].type;
+    }
     if (track >= 0 && track < static_cast<int>(m_trackTypes.size())) {
         return m_trackTypes[track];
     }
     return TRACK_TYPE_SYNTH;
 }
 
+// Track Mixer Controls
+void AudioEngine::setTrackVolume(int track, float vol) {
+    if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
+        m_trackMixers[track].volume = std::clamp(vol, 0.0f, 2.0f);
+    }
+}
+
+float AudioEngine::getTrackVolume(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
+        return m_trackMixers[track].volume;
+    }
+    return 1.0f;
+}
+
+void AudioEngine::setTrackPan(int track, float pan) {
+    if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
+        m_trackMixers[track].pan = std::clamp(pan, 0.0f, 1.0f);
+    }
+}
+
+float AudioEngine::getTrackPan(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
+        return m_trackMixers[track].pan;
+    }
+    return 0.5f;
+}
+
+void AudioEngine::setTrackMute(int track, bool mute) {
+    if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
+        m_trackMixers[track].mute = mute;
+    }
+}
+
+bool AudioEngine::getTrackMute(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
+        return m_trackMixers[track].mute;
+    }
+    return false;
+}
+
+void AudioEngine::setTrackSolo(int track, bool solo) {
+    if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
+        m_trackMixers[track].solo = solo;
+    }
+}
+
+bool AudioEngine::getTrackSolo(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
+        return m_trackMixers[track].solo;
+    }
+    return false;
+}
+
+void AudioEngine::setTrackSf2Preset(int track, int presetIndex) {
+    if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
+        m_trackMixers[track].sf2Preset = std::max(0, presetIndex);
+        m_soundfont.setChannelPreset(track, m_trackMixers[track].sf2Preset);
+    }
+}
+
+int AudioEngine::getTrackSf2Preset(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
+        return m_trackMixers[track].sf2Preset;
+    }
+    return 0;
+}
+
+void AudioEngine::getTrackMeters(int track, float* outPeakL, float* outPeakR) {
+    if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
+        if (outPeakL) *outPeakL = m_trackMixers[track].peakL.load(std::memory_order_relaxed);
+        if (outPeakR) *outPeakR = m_trackMixers[track].peakR.load(std::memory_order_relaxed);
+    } else {
+        if (outPeakL) *outPeakL = 0.0f;
+        if (outPeakR) *outPeakR = 0.0f;
+    }
+}
+
+// Song Order Sequencer Methods
+int AudioEngine::getSongOrderLength() const {
+    return m_sequencer.getSongOrderLength();
+}
+
+int AudioEngine::getSongOrderStep(int step) const {
+    return m_sequencer.getSongOrderStep(step);
+}
+
+void AudioEngine::setSongOrderStep(int step, int pat) {
+    m_sequencer.setSongOrderStep(step, pat);
+}
+
+void AudioEngine::addSongOrderStep(int pat) {
+    m_sequencer.addSongOrderStep(pat);
+}
+
+void AudioEngine::removeSongOrderStep(int step) {
+    m_sequencer.removeSongOrderStep(step);
+}
+
+int AudioEngine::getSongOrderIndex() const {
+    return m_uiSongOrderIndex.load(std::memory_order_relaxed);
+}
+
+void AudioEngine::setSongOrderIndex(int step) {
+    m_sequencer.setSongOrderIndex(step);
+    m_uiSongOrderIndex.store(step, std::memory_order_relaxed);
+    m_uiCurrentPattern.store(m_sequencer.getCurrentPattern(), std::memory_order_relaxed);
+}
+
 void AudioEngine::noteOn(int inst, int note, float velocity) {
     int type = getTrackType(inst);
     if (type == TRACK_TYPE_SOUNDFONT) {
-        m_soundfont.noteOn(note, velocity);
+        int preset = getTrackSf2Preset(inst);
+        m_soundfont.setChannelPreset(inst, preset);
+        m_soundfont.noteOn(inst, note, velocity);
     } else if (type == TRACK_TYPE_DRUMS) {
         int pad = (note >= 36 && note <= 43) ? (note - 36) : (note % NUM_DRUM_PADS);
         m_drumSampler.triggerPad(pad, velocity);
@@ -304,7 +426,7 @@ void AudioEngine::noteOn(int inst, int note, float velocity) {
 void AudioEngine::noteOff(int inst, int note) {
     int type = getTrackType(inst);
     if (type == TRACK_TYPE_SOUNDFONT) {
-        m_soundfont.noteOff(note);
+        m_soundfont.noteOff(inst, note);
     } else if (type == TRACK_TYPE_DRUMS) {
         // One-shot drum hits decay naturally
     } else {
@@ -595,6 +717,27 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
     float sumSq = 0.0f;
 
     int numTracks = m_sequencer.getNumTracks();
+    float trkPeakL[MAX_INSTRUMENTS] = {0.0f};
+    float trkPeakR[MAX_INSTRUMENTS] = {0.0f};
+
+    // Determine solo state
+    bool anySolo = false;
+    for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
+        if (m_trackMixers[t].solo) {
+            anySolo = true;
+            break;
+        }
+    }
+
+    // Configure SoundFont channel volumes and pans
+    for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
+        if (m_trackMixers[t].type == TRACK_TYPE_SOUNDFONT) {
+            bool audible = anySolo ? m_trackMixers[t].solo : !m_trackMixers[t].mute;
+            float effVol = audible ? m_trackMixers[t].volume : 0.0f;
+            m_soundfont.setChannelVolume(t, effVol);
+            m_soundfont.setChannelPan(t, m_trackMixers[t].pan);
+        }
+    }
 
     for (int f = 0; f < frameCount; ++f) {
         int triggeredRow = -1;
@@ -602,36 +745,36 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
         if (m_sequencer.advanceSample(triggeredRow, triggeredPat)) {
             m_uiCurrentRow.store(triggeredRow, std::memory_order_relaxed);
             m_uiCurrentPattern.store(triggeredPat, std::memory_order_relaxed);
+            m_uiSongOrderIndex.store(m_sequencer.getSongOrderIndex(), std::memory_order_relaxed);
 
             for (int t = 0; t < numTracks; ++t) {
-                TrackerCell cell = m_sequencer.getCell(t, triggeredRow);
-                
-                int instIdx = (cell.instrument > 0 && cell.instrument <= static_cast<int>(m_instruments.size())) 
-                              ? (cell.instrument - 1) 
-                              : (t % m_instruments.size());
-
+                TrackerCell cell = m_sequencer.getPatternCell(triggeredPat, t, triggeredRow);
                 int type = getTrackType(t);
 
                 if (cell.note == NOTE_OFF) {
                     if (type == TRACK_TYPE_SOUNDFONT) {
-                        m_soundfont.allNotesOff();
-                    } else if (type == TRACK_TYPE_SYNTH) {
-                        m_instruments[instIdx].allNotesOff();
+                        m_soundfont.noteOff(t, cell.note);
+                    } else if (type == TRACK_TYPE_SYNTH && t < static_cast<int>(m_instruments.size())) {
+                        m_instruments[t].noteOff(cell.note);
                     }
                 } else if (cell.note <= 127) {
                     float vel = (cell.volume == 255) ? 1.0f : (cell.volume / 128.0f);
                     
                     if (type == TRACK_TYPE_SOUNDFONT) {
-                        m_soundfont.noteOn(cell.note, vel);
+                        int preset = getTrackSf2Preset(t);
+                        m_soundfont.setChannelPreset(t, preset);
+                        m_soundfont.noteOn(t, cell.note, vel);
                     } else if (type == TRACK_TYPE_DRUMS) {
                         int pad = (cell.note >= 36 && cell.note <= 43) ? (cell.note - 36) : (cell.note % NUM_DRUM_PADS);
                         m_drumSampler.triggerPad(pad, vel);
                     } else {
-                        if (cell.effectType == 0x10) {
+                        if (cell.effectType == 0x10 && t < static_cast<int>(m_instruments.size())) {
                             float cutoff = 150.0f + (cell.effectParam / 255.0f) * 10000.0f;
-                            m_instruments[instIdx].getParams().filterCutoff = cutoff;
+                            m_instruments[t].getParams().filterCutoff = cutoff;
                         }
-                        m_instruments[instIdx].noteOn(cell.note, vel);
+                        if (t < static_cast<int>(m_instruments.size())) {
+                            m_instruments[t].noteOn(cell.note, vel);
+                        }
                     }
                 }
             }
@@ -640,19 +783,68 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
         float sL = 0.0f;
         float sR = 0.0f;
 
-        // 1. Process AuraSynth tracks
-        for (size_t inst = 0; inst < m_instruments.size(); ++inst) {
-            m_instruments[inst].processBlock(&sL, &sR, 1);
+        // 1. Process AuraSynth tracks with per-track volume & panning
+        for (int t = 0; t < numTracks && t < static_cast<int>(m_instruments.size()) && t < static_cast<int>(m_trackMixers.size()); ++t) {
+            if (m_trackMixers[t].type == TRACK_TYPE_SYNTH) {
+                float instL = 0.0f, instR = 0.0f;
+                m_instruments[t].processBlock(&instL, &instR, 1);
+                
+                bool audible = anySolo ? m_trackMixers[t].solo : !m_trackMixers[t].mute;
+                float effVol = audible ? m_trackMixers[t].volume : 0.0f;
+                float pan = m_trackMixers[t].pan;
+                float panL = (pan <= 0.5f) ? 1.0f : (1.0f - pan) * 2.0f;
+                float panR = (pan >= 0.5f) ? 1.0f : pan * 2.0f;
+                
+                instL *= effVol * panL;
+                instR *= effVol * panR;
+                sL += instL;
+                sR += instR;
+
+                float absL = std::abs(instL);
+                float absR = std::abs(instR);
+                if (absL > trkPeakL[t]) trkPeakL[t] = absL;
+                if (absR > trkPeakR[t]) trkPeakR[t] = absR;
+            }
         }
 
-        // 2. Process SoundFont player
-        m_soundfont.processSample(sL, sR);
+        // 2. Process SoundFont player (renders all active channels)
+        float sfL = 0.0f, sfR = 0.0f;
+        m_soundfont.processSample(sfL, sfR);
+        sL += sfL;
+        sR += sfR;
 
-        // 3. Process 8-slot Drum Sampler
+        // Track peaks for SoundFont channels
+        for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
+            if (m_trackMixers[t].type == TRACK_TYPE_SOUNDFONT) {
+                float absL = std::abs(sfL);
+                float absR = std::abs(sfR);
+                if (absL > trkPeakL[t]) trkPeakL[t] = absL;
+                if (absR > trkPeakR[t]) trkPeakR[t] = absR;
+            }
+        }
+
+        // 3. Process BeatPad Drum Sampler
         float drumBuf[2] = {0.0f, 0.0f};
         m_drumSampler.processBlock(drumBuf, 1);
-        sL += drumBuf[0];
-        sR += drumBuf[1];
+        for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
+            if (m_trackMixers[t].type == TRACK_TYPE_DRUMS) {
+                bool audible = anySolo ? m_trackMixers[t].solo : !m_trackMixers[t].mute;
+                float effVol = audible ? m_trackMixers[t].volume : 0.0f;
+                float pan = m_trackMixers[t].pan;
+                float panL = (pan <= 0.5f) ? 1.0f : (1.0f - pan) * 2.0f;
+                float panR = (pan >= 0.5f) ? 1.0f : pan * 2.0f;
+
+                float dL = drumBuf[0] * effVol * panL;
+                float dR = drumBuf[1] * effVol * panR;
+                sL += dL;
+                sR += dR;
+
+                float absL = std::abs(dL);
+                float absR = std::abs(dR);
+                if (absL > trkPeakL[t]) trkPeakL[t] = absL;
+                if (absR > trkPeakR[t]) trkPeakR[t] = absR;
+            }
+        }
 
         // 4. Smart Macros & Master Soft Limiter
         m_macros.processSample(sL, sR);
@@ -670,6 +862,14 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
         if (absL > peakL) peakL = absL;
         if (absR > peakR) peakR = absR;
         sumSq += (sL * sL + sR * sR) * 0.5f;
+    }
+
+    // Update track peak meters with smooth decay
+    for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
+        float prevL = m_trackMixers[t].peakL.load(std::memory_order_relaxed);
+        float prevR = m_trackMixers[t].peakR.load(std::memory_order_relaxed);
+        m_trackMixers[t].peakL.store(std::max(trkPeakL[t], prevL * 0.90f), std::memory_order_relaxed);
+        m_trackMixers[t].peakR.store(std::max(trkPeakR[t], prevR * 0.90f), std::memory_order_relaxed);
     }
 
     float prevPeakL = m_peakL.load(std::memory_order_relaxed);

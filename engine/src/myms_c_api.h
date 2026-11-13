@@ -33,6 +33,19 @@ void myms_remove_track(int track_idx);
 void myms_set_track_type(int track, int type);
 int myms_get_track_type(int track);
 
+// Track Mixer Controls (Channel Strip)
+void myms_set_track_volume(int track, float vol);
+float myms_get_track_volume(int track);
+void myms_set_track_pan(int track, float pan);
+float myms_get_track_pan(int track);
+void myms_set_track_mute(int track, bool mute);
+bool myms_get_track_mute(int track);
+void myms_set_track_solo(int track, bool solo);
+bool myms_get_track_solo(int track);
+void myms_set_track_sf2_preset(int track, int preset);
+int myms_get_track_sf2_preset(int track);
+void myms_get_track_meters(int track, float* out_peak_l, float* out_peak_r);
+
 // Custom Instrument Naming
 void myms_set_inst_name(int inst, const char* name);
 void myms_get_inst_name(int inst, char* out_name, int max_len);
@@ -94,6 +107,13 @@ int myms_duplicate_pattern(int source_pat);
 bool myms_remove_pattern(int pat);
 void myms_set_song_mode(bool song_mode);
 bool myms_get_song_mode();
+int myms_get_song_order_length();
+int myms_get_song_order_step(int step);
+void myms_set_song_order_step(int step, int pat);
+void myms_add_song_order_step(int pat);
+void myms_remove_song_order_step(int step);
+int myms_get_song_order_index();
+void myms_set_song_order_index(int step);
 
 void myms_set_pattern_cell(int pat, int track, int row, uint8_t note, uint8_t instrument, uint8_t volume, uint8_t effect_type, uint8_t effect_param);
 void myms_get_pattern_cell(int pat, int track, int row, uint8_t* out_note, uint8_t* out_instrument, uint8_t* out_volume, uint8_t* out_effect_type, uint8_t* out_effect_param);

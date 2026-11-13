@@ -11,7 +11,7 @@ Item {
     property real meterPeakL: 0.0
     property real meterPeakR: 0.0
     property bool bottomDeckCollapsed: false
-    property real bottomDeckHeight: 165
+    property real bottomDeckHeight: 200
 
     Connections {
         target: mymsEngine
@@ -611,6 +611,15 @@ Item {
             }
 
             // ==========================================
+            // SONG SEQUENCE ARRANGER BAR
+            // ==========================================
+            SongArrangerBar {
+                id: songArrangerBar
+                Layout.fillWidth: true
+                engine: mymsEngine
+            }
+
+            // ==========================================
             // 2. MAIN TRACKER MATRIX (Center)
             // ==========================================
             TrackerView {
@@ -713,7 +722,7 @@ Item {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "SYNTH"
+                                    text: "MIXER"
                                     font.bold: true
                                     font.pixelSize: 10
                                     color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 0) ? theme.accent : theme.textMuted
@@ -728,7 +737,7 @@ Item {
                             }
 
                             Rectangle {
-                                width: 78
+                                width: 72
                                 height: parent.height - 2
                                 Layout.alignment: Qt.AlignBottom
                                 color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? theme.bgCard : "transparent"
@@ -738,10 +747,10 @@ Item {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "FONTBOX"
+                                    text: "SYNTH"
                                     font.bold: true
                                     font.pixelSize: 10
-                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? "#92ebb5" : theme.textMuted
+                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? theme.accent : theme.textMuted
                                 }
                                 MouseArea {
                                     anchors.fill: parent
@@ -763,10 +772,10 @@ Item {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "BEATPAD"
+                                    text: "FONTBOX"
                                     font.bold: true
                                     font.pixelSize: 10
-                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 2) ? "#f7b731" : theme.textMuted
+                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 2) ? "#92ebb5" : theme.textMuted
                                 }
                                 MouseArea {
                                     anchors.fill: parent
@@ -778,7 +787,7 @@ Item {
                             }
 
                             Rectangle {
-                                width: 74
+                                width: 78
                                 height: parent.height - 2
                                 Layout.alignment: Qt.AlignBottom
                                 color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 3) ? theme.bgCard : "transparent"
@@ -788,16 +797,41 @@ Item {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "MACROS"
+                                    text: "BEATPAD"
                                     font.bold: true
                                     font.pixelSize: 10
-                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 3) ? theme.accent : theme.textMuted
+                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 3) ? "#f7b731" : theme.textMuted
                                 }
                                 MouseArea {
                                     anchors.fill: parent
                                     onClicked: {
                                         rootItem.bottomDeckCollapsed = false
                                         bottomStack.currentIndex = 3
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                width: 74
+                                height: parent.height - 2
+                                Layout.alignment: Qt.AlignBottom
+                                color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 4) ? theme.bgCard : "transparent"
+                                border.color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 4) ? theme.border : "transparent"
+                                border.width: 1
+                                radius: 2
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "MACROS"
+                                    font.bold: true
+                                    font.pixelSize: 10
+                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 4) ? theme.accent : theme.textMuted
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        rootItem.bottomDeckCollapsed = false
+                                        bottomStack.currentIndex = 4
                                     }
                                 }
                             }
@@ -831,6 +865,20 @@ Item {
                         Layout.fillHeight: true
                         visible: !rootItem.bottomDeckCollapsed
                         currentIndex: 0
+
+                        MixerView {
+                            id: mixerView
+                            engine: mymsEngine
+                            onRequestEditInstrument: (track, trackType) => {
+                                if (trackType === 0) {
+                                    bottomStack.currentIndex = 1
+                                } else if (trackType === 1) {
+                                    bottomStack.currentIndex = 2
+                                } else if (trackType === 2) {
+                                    bottomStack.currentIndex = 3
+                                }
+                            }
+                        }
 
                         AuraSynthView {
                             engine: mymsEngine

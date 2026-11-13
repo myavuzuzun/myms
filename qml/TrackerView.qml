@@ -42,6 +42,12 @@ Rectangle {
         function onTrackTypeChanged(track, type) {
             root.gridModified()
         }
+        function onCurrentPatternChanged() {
+            root.gridModified()
+        }
+        function onNumPatternsChanged() {
+            root.gridModified()
+        }
     }
 
     function getNoteString(noteVal, trackIdx) {

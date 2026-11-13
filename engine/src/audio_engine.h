@@ -23,6 +23,37 @@ enum TrackType {
     TRACK_TYPE_DRUMS = 2
 };
 
+struct TrackMixerState {
+    int type = TRACK_TYPE_SYNTH;
+    int sf2Preset = 0;
+    float volume = 1.0f;
+    float pan = 0.5f;
+    bool mute = false;
+    bool solo = false;
+    std::atomic<float> peakL{0.0f};
+    std::atomic<float> peakR{0.0f};
+
+    TrackMixerState() = default;
+    TrackMixerState(const TrackMixerState& o)
+        : type(o.type), sf2Preset(o.sf2Preset), volume(o.volume), pan(o.pan), mute(o.mute), solo(o.solo) {
+        peakL.store(o.peakL.load(std::memory_order_relaxed));
+        peakR.store(o.peakR.load(std::memory_order_relaxed));
+    }
+    TrackMixerState& operator=(const TrackMixerState& o) {
+        if (this != &o) {
+            type = o.type;
+            sf2Preset = o.sf2Preset;
+            volume = o.volume;
+            pan = o.pan;
+            mute = o.mute;
+            solo = o.solo;
+            peakL.store(o.peakL.load(std::memory_order_relaxed));
+            peakR.store(o.peakR.load(std::memory_order_relaxed));
+        }
+        return *this;
+    }
+};
+
 class AudioEngine {
 public:
     static AudioEngine& instance();
@@ -55,6 +86,28 @@ public:
     // Track Engine Types (0 = Synth, 1 = SoundFont, 2 = Drum Sampler)
     void setTrackType(int track, int type);
     int getTrackType(int track) const;
+
+    // Per-Track Mixer Controls (MuseScore-style Channel Strip)
+    void setTrackVolume(int track, float vol);
+    float getTrackVolume(int track) const;
+    void setTrackPan(int track, float pan);
+    float getTrackPan(int track) const;
+    void setTrackMute(int track, bool mute);
+    bool getTrackMute(int track) const;
+    void setTrackSolo(int track, bool solo);
+    bool getTrackSolo(int track) const;
+    void setTrackSf2Preset(int track, int presetIndex);
+    int getTrackSf2Preset(int track) const;
+    void getTrackMeters(int track, float* outPeakL, float* outPeakR);
+
+    // Song Order Sequencer
+    int getSongOrderLength() const;
+    int getSongOrderStep(int step) const;
+    void setSongOrderStep(int step, int pat);
+    void addSongOrderStep(int pat);
+    void removeSongOrderStep(int step);
+    int getSongOrderIndex() const;
+    void setSongOrderIndex(int step);
 
     // Custom Instrument Naming
     void setInstrumentName(int inst, const std::string& name);
@@ -150,6 +203,7 @@ private:
     std::vector<SynthEngine> m_instruments;
     std::vector<std::string> m_instrumentNames;
     std::vector<int> m_trackTypes;
+    std::vector<TrackMixerState> m_trackMixers;
 
     SoundFontPlayer m_soundfont;
     DrumSampler m_drumSampler;
@@ -162,6 +216,7 @@ private:
     std::atomic<float> m_rms{0.0f};
     std::atomic<int> m_uiCurrentRow{0};
     std::atomic<int> m_uiCurrentPattern{0};
+    std::atomic<int> m_uiSongOrderIndex{0};
 };
 
 } // namespace myms

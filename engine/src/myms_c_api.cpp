@@ -79,6 +79,51 @@ int myms_get_track_type(int track) {
     return myms::AudioEngine::instance().getTrackType(track);
 }
 
+// Track Mixer Controls
+void myms_set_track_volume(int track, float vol) {
+    myms::AudioEngine::instance().setTrackVolume(track, vol);
+}
+
+float myms_get_track_volume(int track) {
+    return myms::AudioEngine::instance().getTrackVolume(track);
+}
+
+void myms_set_track_pan(int track, float pan) {
+    myms::AudioEngine::instance().setTrackPan(track, pan);
+}
+
+float myms_get_track_pan(int track) {
+    return myms::AudioEngine::instance().getTrackPan(track);
+}
+
+void myms_set_track_mute(int track, bool mute) {
+    myms::AudioEngine::instance().setTrackMute(track, mute);
+}
+
+bool myms_get_track_mute(int track) {
+    return myms::AudioEngine::instance().getTrackMute(track);
+}
+
+void myms_set_track_solo(int track, bool solo) {
+    myms::AudioEngine::instance().setTrackSolo(track, solo);
+}
+
+bool myms_get_track_solo(int track) {
+    return myms::AudioEngine::instance().getTrackSolo(track);
+}
+
+void myms_set_track_sf2_preset(int track, int preset) {
+    myms::AudioEngine::instance().setTrackSf2Preset(track, preset);
+}
+
+int myms_get_track_sf2_preset(int track) {
+    return myms::AudioEngine::instance().getTrackSf2Preset(track);
+}
+
+void myms_get_track_meters(int track, float* out_peak_l, float* out_peak_r) {
+    myms::AudioEngine::instance().getTrackMeters(track, out_peak_l, out_peak_r);
+}
+
 void myms_set_inst_name(int inst, const char* name) {
     if (name) {
         myms::AudioEngine::instance().setInstrumentName(inst, std::string(name));
@@ -289,6 +334,34 @@ void myms_set_song_mode(bool song_mode) {
 
 bool myms_get_song_mode() {
     return myms::AudioEngine::instance().isSongMode();
+}
+
+int myms_get_song_order_length() {
+    return myms::AudioEngine::instance().getSongOrderLength();
+}
+
+int myms_get_song_order_step(int step) {
+    return myms::AudioEngine::instance().getSongOrderStep(step);
+}
+
+void myms_set_song_order_step(int step, int pat) {
+    myms::AudioEngine::instance().setSongOrderStep(step, pat);
+}
+
+void myms_add_song_order_step(int pat) {
+    myms::AudioEngine::instance().addSongOrderStep(pat);
+}
+
+void myms_remove_song_order_step(int step) {
+    myms::AudioEngine::instance().removeSongOrderStep(step);
+}
+
+int myms_get_song_order_index() {
+    return myms::AudioEngine::instance().getSongOrderIndex();
+}
+
+void myms_set_song_order_index(int step) {
+    myms::AudioEngine::instance().setSongOrderIndex(step);
 }
 
 void myms_set_pattern_cell(int pat, int track, int row, uint8_t note, uint8_t instrument, uint8_t volume, uint8_t effect_type, uint8_t effect_param) {

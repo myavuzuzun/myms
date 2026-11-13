@@ -260,6 +260,48 @@ public:
         }
     }
 
+    int getSongOrderLength() const {
+        return static_cast<int>(m_songOrder.size());
+    }
+
+    int getSongOrderStep(int step) const {
+        if (step >= 0 && step < static_cast<int>(m_songOrder.size())) {
+            return m_songOrder[step];
+        }
+        return 0;
+    }
+
+    void setSongOrderStep(int step, int pat) {
+        if (step >= 0 && step < static_cast<int>(m_songOrder.size())) {
+            m_songOrder[step] = std::clamp(pat, 0, std::max(0, static_cast<int>(m_patterns.size()) - 1));
+        }
+    }
+
+    void addSongOrderStep(int pat) {
+        m_songOrder.push_back(std::clamp(pat, 0, std::max(0, static_cast<int>(m_patterns.size()) - 1)));
+    }
+
+    void removeSongOrderStep(int step) {
+        if (m_songOrder.size() > 1 && step >= 0 && step < static_cast<int>(m_songOrder.size())) {
+            m_songOrder.erase(m_songOrder.begin() + step);
+            if (m_songOrderIndex >= static_cast<int>(m_songOrder.size())) {
+                m_songOrderIndex = 0;
+            }
+        }
+    }
+
+    int getSongOrderIndex() const {
+        return m_songOrderIndex;
+    }
+
+    void setSongOrderIndex(int step) {
+        if (step >= 0 && step < static_cast<int>(m_songOrder.size())) {
+            m_songOrderIndex = step;
+            m_currentPattern = std::clamp(m_songOrder[m_songOrderIndex], 0, static_cast<int>(m_patterns.size()) - 1);
+            m_currentRow = 0;
+        }
+    }
+
     void setPatternCell(int pat, int track, int row, uint8_t note, uint8_t instrument, uint8_t volume, uint8_t effectType, uint8_t effectParam) {
         if (pat >= 0 && pat < static_cast<int>(m_patterns.size())) {
             TrackerPattern& p = m_patterns[pat];
@@ -301,15 +343,14 @@ public:
             return false;
         }
 
-        int curPat = getCurrentPattern();
-        outPattern = curPat;
-
         if (m_samplesUntilNextRow <= 0) {
             outRow = m_currentRow;
+            outPattern = getCurrentPattern();
             m_samplesUntilNextRow = getSamplesPerRow();
             
+            int curRows = (outPattern < static_cast<int>(m_patterns.size())) ? m_patterns[outPattern].numRows : DEFAULT_NUM_ROWS;
             int nextRow = m_currentRow + 1;
-            if (nextRow >= m_patterns[curPat].numRows) {
+            if (nextRow >= curRows) {
                 if (m_isSongMode && !m_songOrder.empty()) {
                     m_songOrderIndex = (m_songOrderIndex + 1) % m_songOrder.size();
                     m_currentPattern = std::clamp(m_songOrder[m_songOrderIndex], 0, static_cast<int>(m_patterns.size()) - 1);

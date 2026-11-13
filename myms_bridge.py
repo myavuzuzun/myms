@@ -29,11 +29,14 @@ class MymsEngine(QObject):
 
     # Phase 2 Signals
     trackTypeChanged = pyqtSignal(int, int)
+    trackMixerChanged = pyqtSignal(int)
     sf2Changed = pyqtSignal()
     drumPadsChanged = pyqtSignal()
     numPatternsChanged = pyqtSignal(int)
     currentPatternChanged = pyqtSignal(int)
     songModeChanged = pyqtSignal(bool)
+    songOrderChanged = pyqtSignal()
+    songOrderIndexChanged = pyqtSignal(int)
 
     def _detect_system_keyboard_layout(self):
         try:
@@ -80,6 +83,7 @@ class MymsEngine(QObject):
         self._current_pattern = 0
         self._num_patterns = 1
         self._is_song_mode = False
+        self._song_order_index = 0
         self._num_rows = self.lib.myms_get_num_rows()
         self._num_tracks = self.lib.myms_get_num_tracks()
         self._is_looping = self.lib.myms_is_looping()
@@ -125,6 +129,24 @@ class MymsEngine(QObject):
         self.lib.myms_set_track_type.argtypes = [ctypes.c_int, ctypes.c_int]
         self.lib.myms_get_track_type.argtypes = [ctypes.c_int]
         self.lib.myms_get_track_type.restype = ctypes.c_int
+
+        # Mixer Controls
+        self.lib.myms_set_track_volume.argtypes = [ctypes.c_int, ctypes.c_float]
+        self.lib.myms_get_track_volume.argtypes = [ctypes.c_int]
+        self.lib.myms_get_track_volume.restype = ctypes.c_float
+        self.lib.myms_set_track_pan.argtypes = [ctypes.c_int, ctypes.c_float]
+        self.lib.myms_get_track_pan.argtypes = [ctypes.c_int]
+        self.lib.myms_get_track_pan.restype = ctypes.c_float
+        self.lib.myms_set_track_mute.argtypes = [ctypes.c_int, ctypes.c_bool]
+        self.lib.myms_get_track_mute.argtypes = [ctypes.c_int]
+        self.lib.myms_get_track_mute.restype = ctypes.c_bool
+        self.lib.myms_set_track_solo.argtypes = [ctypes.c_int, ctypes.c_bool]
+        self.lib.myms_get_track_solo.argtypes = [ctypes.c_int]
+        self.lib.myms_get_track_solo.restype = ctypes.c_bool
+        self.lib.myms_set_track_sf2_preset.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_get_track_sf2_preset.argtypes = [ctypes.c_int]
+        self.lib.myms_get_track_sf2_preset.restype = ctypes.c_int
+        self.lib.myms_get_track_meters.argtypes = [ctypes.c_int, ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float)]
 
         self.lib.myms_set_inst_name.argtypes = [ctypes.c_int, ctypes.c_char_p]
         self.lib.myms_get_inst_name.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
@@ -193,6 +215,16 @@ class MymsEngine(QObject):
         self.lib.myms_remove_pattern.restype = ctypes.c_bool
         self.lib.myms_set_song_mode.argtypes = [ctypes.c_bool]
         self.lib.myms_get_song_mode.restype = ctypes.c_bool
+
+        # Song Order Sequencer
+        self.lib.myms_get_song_order_length.restype = ctypes.c_int
+        self.lib.myms_get_song_order_step.argtypes = [ctypes.c_int]
+        self.lib.myms_get_song_order_step.restype = ctypes.c_int
+        self.lib.myms_set_song_order_step.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_add_song_order_step.argtypes = [ctypes.c_int]
+        self.lib.myms_remove_song_order_step.argtypes = [ctypes.c_int]
+        self.lib.myms_get_song_order_index.restype = ctypes.c_int
+        self.lib.myms_set_song_order_index.argtypes = [ctypes.c_int]
         self.lib.myms_set_pattern_cell.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_uint8, ctypes.c_uint8, ctypes.c_uint8, ctypes.c_uint8, ctypes.c_uint8]
         self.lib.myms_get_pattern_cell.argtypes = [
             ctypes.c_int, ctypes.c_int, ctypes.c_int,
@@ -237,6 +269,11 @@ class MymsEngine(QObject):
         if pat != self._current_pattern:
             self._current_pattern = pat
             self.currentPatternChanged.emit(self._current_pattern)
+
+        so_idx = self.lib.myms_get_song_order_index()
+        if so_idx != self._song_order_index:
+            self._song_order_index = so_idx
+            self.songOrderIndexChanged.emit(self._song_order_index)
 
         tracks = self.lib.myms_get_num_tracks()
         if tracks != self._num_tracks:
@@ -354,6 +391,14 @@ class MymsEngine(QObject):
     def isSongMode(self):
         return self.lib.myms_get_song_mode()
 
+    @pyqtProperty(int, notify=songOrderIndexChanged)
+    def songOrderIndex(self):
+        return self._song_order_index
+
+    @pyqtProperty(int, notify=songOrderChanged)
+    def songOrderLength(self):
+        return self.lib.myms_get_song_order_length()
+
     @pyqtSlot(str)
     def setKeyboardLayout(self, layout):
         if layout in ("tr", "us") and layout != self._keyboard_layout:
@@ -384,6 +429,59 @@ class MymsEngine(QObject):
     def setTrackType(self, track, type_idx):
         self.lib.myms_set_track_type(track, type_idx)
         self.trackTypeChanged.emit(track, type_idx)
+
+    # Per-Track Mixer Slots (MuseScore-style Channel Strip)
+    @pyqtSlot(int, result=float)
+    def getTrackVolume(self, track):
+        return self.lib.myms_get_track_volume(track)
+
+    @pyqtSlot(int, float)
+    def setTrackVolume(self, track, vol):
+        self.lib.myms_set_track_volume(track, vol)
+        self.trackMixerChanged.emit(track)
+
+    @pyqtSlot(int, result=float)
+    def getTrackPan(self, track):
+        return self.lib.myms_get_track_pan(track)
+
+    @pyqtSlot(int, float)
+    def setTrackPan(self, track, pan):
+        self.lib.myms_set_track_pan(track, pan)
+        self.trackMixerChanged.emit(track)
+
+    @pyqtSlot(int, result=bool)
+    def getTrackMute(self, track):
+        return self.lib.myms_get_track_mute(track)
+
+    @pyqtSlot(int, bool)
+    def setTrackMute(self, track, mute):
+        self.lib.myms_set_track_mute(track, mute)
+        self.trackMixerChanged.emit(track)
+
+    @pyqtSlot(int, result=bool)
+    def getTrackSolo(self, track):
+        return self.lib.myms_get_track_solo(track)
+
+    @pyqtSlot(int, bool)
+    def setTrackSolo(self, track, solo):
+        self.lib.myms_set_track_solo(track, solo)
+        self.trackMixerChanged.emit(track)
+
+    @pyqtSlot(int, result=int)
+    def getTrackSf2Preset(self, track):
+        return self.lib.myms_get_track_sf2_preset(track)
+
+    @pyqtSlot(int, int)
+    def setTrackSf2Preset(self, track, preset):
+        self.lib.myms_set_track_sf2_preset(track, preset)
+        self.trackMixerChanged.emit(track)
+
+    @pyqtSlot(int, result=list)
+    def getTrackMeters(self, track):
+        pL = ctypes.c_float(0)
+        pR = ctypes.c_float(0)
+        self.lib.myms_get_track_meters(track, ctypes.byref(pL), ctypes.byref(pR))
+        return [pL.value, pR.value]
 
     # SoundFont Player Slots (FontBox)
     @pyqtSlot(str, result=bool)
@@ -523,6 +621,39 @@ class MymsEngine(QObject):
     @pyqtSlot()
     def toggleSongMode(self):
         self.setSongMode(not self.isSongMode)
+
+    # Song Order Sequencer Slots
+    @pyqtSlot(result=list)
+    def getSongOrderList(self):
+        length = self.lib.myms_get_song_order_length()
+        return [self.lib.myms_get_song_order_step(i) for i in range(length)]
+
+    @pyqtSlot(int, result=int)
+    def getSongOrderStep(self, step):
+        return self.lib.myms_get_song_order_step(step)
+
+    @pyqtSlot(int, int)
+    def setSongOrderStep(self, step, pat):
+        self.lib.myms_set_song_order_step(step, pat)
+        self.songOrderChanged.emit()
+
+    @pyqtSlot(int)
+    def addSongOrderStep(self, pat):
+        self.lib.myms_add_song_order_step(pat)
+        self.songOrderChanged.emit()
+
+    @pyqtSlot(int)
+    def removeSongOrderStep(self, step):
+        self.lib.myms_remove_song_order_step(step)
+        self.songOrderChanged.emit()
+
+    @pyqtSlot(int)
+    def setSongOrderIndex(self, step):
+        self.lib.myms_set_song_order_index(step)
+        self._song_order_index = step
+        self.songOrderIndexChanged.emit(self._song_order_index)
+        self._current_pattern = self.lib.myms_get_current_pattern()
+        self.currentPatternChanged.emit(self._current_pattern)
 
     @pyqtSlot()
     def promptOpenProject(self):
@@ -835,6 +966,11 @@ class MymsEngine(QObject):
                 data["tracks"].append({
                     "name": name,
                     "type": trk_type,
+                    "volume": self.getTrackVolume(t),
+                    "pan": self.getTrackPan(t),
+                    "mute": self.getTrackMute(t),
+                    "solo": self.getTrackSolo(t),
+                    "sf2_preset": self.getTrackSf2Preset(t),
                     "synth": {
                         "osc1_wave": p.get("osc1", 0),
                         "osc2_wave": p.get("osc2", 1),
@@ -850,6 +986,8 @@ class MymsEngine(QObject):
                         "amp_release": p.get("ampR", 0.25)
                     }
                 })
+
+            data["song_order"] = self.getSongOrderList()
 
             # Save all patterns
             cur_pat = self.currentPattern
@@ -960,6 +1098,16 @@ class MymsEngine(QObject):
                     self.setInstrumentName(t, trk["name"])
                 if "type" in trk:
                     self.setTrackType(t, int(trk["type"]))
+                if "volume" in trk:
+                    self.setTrackVolume(t, float(trk["volume"]))
+                if "pan" in trk:
+                    self.setTrackPan(t, float(trk["pan"]))
+                if "mute" in trk:
+                    self.setTrackMute(t, bool(trk["mute"]))
+                if "solo" in trk:
+                    self.setTrackSolo(t, bool(trk["solo"]))
+                if "sf2_preset" in trk:
+                    self.setTrackSf2Preset(t, int(trk["sf2_preset"]))
 
                 synth = trk.get("synth", {})
                 if "osc1_wave" in synth: self.setInstOsc1(t, synth["osc1_wave"])
@@ -1008,7 +1156,16 @@ class MymsEngine(QObject):
                             cell.get("effect_param", 0)
                         )
 
+            # 8. Restore song order
+            if "song_order" in data and isinstance(data["song_order"], list) and len(data["song_order"]) > 0:
+                self.setSongOrderStep(0, int(data["song_order"][0]))
+                while self.songOrderLength > 1:
+                    self.removeSongOrderStep(self.songOrderLength - 1)
+                for step_pat in data["song_order"][1:]:
+                    self.addSongOrderStep(int(step_pat))
+
             self.setCurrentPattern(0)
+            self.setSongOrderIndex(0)
             self.setSelectedInstrument(0)
             self._current_project_path = filepath
             self.currentProjectPathChanged.emit(filepath)
@@ -1029,6 +1186,14 @@ class MymsEngine(QObject):
             self.removePattern(self.numPatterns - 1)
         self.setTrackType(0, 0) # Synth
         self.setInstrumentName(0, "Synth 1")
+        self.setTrackVolume(0, 1.0)
+        self.setTrackPan(0, 0.5)
+        self.setTrackMute(0, False)
+        self.setTrackSolo(0, False)
+        self.setTrackSf2Preset(0, 0)
+        self.setSongOrderStep(0, 0)
+        while self.songOrderLength > 1:
+            self.removeSongOrderStep(self.songOrderLength - 1)
         self.setBpm(120.0)
         self.setNumRows(32)
         self.setLooping(False)
@@ -1039,6 +1204,7 @@ class MymsEngine(QObject):
         self.setMacroSpace(0.15)
         self.setMasterVolume(0.85)
         self.setCurrentPattern(0)
+        self.setSongOrderIndex(0)
         self.setSelectedInstrument(0)
         self._current_project_path = ""
         self.currentProjectPathChanged.emit("")

@@ -122,6 +122,11 @@ class AppWindow(QMainWindow):
         act_stop.triggered.connect(self.engine.stop)
         play_menu.addAction(act_stop)
 
+        act_song_mode = QAction("Toggle &Song / Pattern Mode", self)
+        act_song_mode.setShortcut(QKeySequence("Ctrl+M"))
+        act_song_mode.triggered.connect(self.engine.toggleSongMode)
+        play_menu.addAction(act_song_mode)
+
         play_menu.addSeparator()
 
         act_bpm_up = QAction("Increase Tempo (+5 BPM)", self)
@@ -157,6 +162,12 @@ class AppWindow(QMainWindow):
 
         # --- Track & Instrument Menu ---
         track_menu = mb.addMenu("&Tracks")
+        act_add_track = QAction("&Add New Track", self)
+        act_add_track.setShortcut(QKeySequence("Ctrl+T"))
+        act_add_track.triggered.connect(self.engine.addTrack)
+        track_menu.addAction(act_add_track)
+        track_menu.addSeparator()
+
         for i in range(8):
             act_inst = QAction(f"Select Track / Instrument {i+1}", self)
             act_inst.setShortcut(QKeySequence(f"Ctrl+{i+1}"))
