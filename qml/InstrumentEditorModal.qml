@@ -201,10 +201,12 @@ Item {
 
                 AuraSynthView {
                     engine: root.engine
+                    currentInstrument: root.targetTrack
                 }
 
                 FontBoxView {
                     engine: root.engine
+                    currentTrack: root.targetTrack
                 }
 
                 BeatPadView {
@@ -219,3 +221,4 @@ Item {
         root.close()
     }
 }
+

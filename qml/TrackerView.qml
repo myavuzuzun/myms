@@ -323,10 +323,11 @@ Rectangle {
                     height: parent.height
                     Text {
                         anchors.centerIn: parent
-                        text: "ROW"
-                        font.pixelSize: 9
+                        text: "P" + (engine ? (engine.currentPattern < 10 ? "0" + engine.currentPattern : "" + engine.currentPattern) : "00")
+                        font.pixelSize: 10
                         font.bold: true
-                        color: theme.textMuted
+                        font.family: "Monospace"
+                        color: theme.accent
                     }
                 }
 
@@ -603,7 +604,12 @@ Rectangle {
                                 Layout.fillWidth: true
                                 height: parent.height
                                 property int trackIdx: index
-                                property var cellData: engine ? engine.getCell(trackIdx, rowIndex) : null
+                                property int activePattern: engine ? engine.currentPattern : 0
+                                property var cellData: (engine && activePattern >= 0) ? engine.getCell(trackIdx, rowIndex) : null
+
+                                onActivePatternChanged: {
+                                    if (engine) cellItem.cellData = engine.getCell(cellItem.trackIdx, rowIndex)
+                                }
 
                                 Connections {
                                     target: root

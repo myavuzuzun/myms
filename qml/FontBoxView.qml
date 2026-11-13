@@ -14,6 +14,28 @@ Rectangle {
 
     property var engine
     property string searchQuery: ""
+    property int currentTrack: engine ? engine.selectedInstrument : 0
+    property int currentTrackPreset: engine ? engine.getTrackSf2Preset(root.currentTrack) : 0
+
+    Connections {
+        target: engine
+        function onTrackMixerChanged(t) {
+            if (t === root.currentTrack || t === -1) {
+                root.currentTrackPreset = engine ? engine.getTrackSf2Preset(root.currentTrack) : 0
+            }
+        }
+        function onInstrumentChanged(t) {
+            root.currentTrack = t
+            root.currentTrackPreset = engine ? engine.getTrackSf2Preset(root.currentTrack) : 0
+        }
+        function onProjectLoaded() {
+            root.currentTrackPreset = engine ? engine.getTrackSf2Preset(root.currentTrack) : 0
+        }
+    }
+
+    onCurrentTrackChanged: {
+        root.currentTrackPreset = engine ? engine.getTrackSf2Preset(root.currentTrack) : 0
+    }
 
     FileDialog {
         id: sf2FileDialog
@@ -87,6 +109,41 @@ Rectangle {
                         font.bold: true
                         color: (engine && engine.sf2Loaded) ? theme.textMain : theme.stopAccent
                         elide: Text.ElideMiddle
+                    }
+                }
+            }
+
+            // Target Track & Active Preset Indicator
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 44
+                color: theme.bgWell
+                radius: 2
+                border.color: theme.accent
+                border.width: 1
+
+                Column {
+                    anchors.fill: parent
+                    anchors.margins: 4
+                    spacing: 2
+
+                    Text {
+                        text: "TARGET TRACK #" + (root.currentTrack + 1) + " (" + (engine ? engine.getInstrumentName(root.currentTrack) : "Track") + ")"
+                        font.pixelSize: 8
+                        font.bold: true
+                        color: theme.accent
+                    }
+                    Text {
+                        width: parent.width
+                        text: {
+                            if (!engine || !engine.sf2Loaded) return "No SF2 Loaded"
+                            let name = engine.getSoundFontPresetName(root.currentTrackPreset)
+                            return (root.currentTrackPreset < 10 ? "00" + root.currentTrackPreset : (root.currentTrackPreset < 100 ? "0" + root.currentTrackPreset : "" + root.currentTrackPreset)) + ": " + (name ? name : "Preset")
+                        }
+                        font.pixelSize: 10
+                        font.bold: true
+                        color: theme.textMain
+                        elide: Text.ElideRight
                     }
                 }
             }
@@ -210,12 +267,14 @@ Rectangle {
                         property bool matchesSearch: root.searchQuery === "" || presetName.toLowerCase().indexOf(root.searchQuery) !== -1
                         visible: matchesSearch
 
+                        property bool isTrackPreset: (root.currentTrackPreset === index)
+
                         color: {
-                            if (engine && engine.sf2CurrentPreset === index) return theme.accent
+                            if (isTrackPreset) return theme.accent
                             if (mouseArea.containsMouse) return theme.btnHover
                             return theme.bgCard
                         }
-                        border.color: (engine && engine.sf2CurrentPreset === index) ? theme.accent : theme.border
+                        border.color: isTrackPreset ? theme.accent : theme.border
 
                         RowLayout {
                             anchors.fill: parent
@@ -227,15 +286,15 @@ Rectangle {
                                 text: "" + index
                                 font.pixelSize: 8
                                 font.family: "Monospace"
-                                color: (engine && engine.sf2CurrentPreset === index) ? "#ffffff" : theme.textDim
+                                color: isTrackPreset ? "#ffffff" : theme.textDim
                             }
 
                             Text {
                                 Layout.fillWidth: true
                                 text: presetName
                                 font.pixelSize: 9
-                                font.bold: (engine && engine.sf2CurrentPreset === index)
-                                color: (engine && engine.sf2CurrentPreset === index) ? "#ffffff" : theme.textMain
+                                font.bold: isTrackPreset
+                                color: isTrackPreset ? "#ffffff" : theme.textMain
                                 elide: Text.ElideRight
                             }
                         }
@@ -247,9 +306,10 @@ Rectangle {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
                                 if (engine) {
-                                    engine.setSoundFontPreset(index)
-                                    // Audition note C-4 (60)
-                                    engine.noteOnInst(engine.selectedInstrument, 60, 0.9)
+                                    engine.setTrackSf2Preset(root.currentTrack, index)
+                                    root.currentTrackPreset = index
+                                    // Audition note C-4 (60) on target track
+                                    engine.noteOnInst(root.currentTrack, 60, 0.9)
                                 }
                             }
                         }

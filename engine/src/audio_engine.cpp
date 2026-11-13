@@ -208,6 +208,8 @@ void AudioEngine::stop() {
     m_sequencer.stop();
     allNotesOff();
     m_uiCurrentRow.store(0, std::memory_order_relaxed);
+    m_uiCurrentPattern.store(m_sequencer.getCurrentPattern(), std::memory_order_relaxed);
+    m_uiSongOrderIndex.store(m_sequencer.getSongOrderIndex(), std::memory_order_relaxed);
 }
 
 bool AudioEngine::isPlaying() const {

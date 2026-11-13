@@ -65,6 +65,10 @@ Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }
+
+                ToolTip.visible: hovered
+                ToolTip.text: (engine && engine.isSongMode) ? "Currently playing entire song sequence" : "Currently looping single active pattern"
+                ToolTip.delay: 400
             }
         }
 
@@ -90,18 +94,18 @@ Rectangle {
                     // Single Arranger Step Card
                     Rectangle {
                         id: stepCard
-                        width: 96
+                        width: 104
                         height: 32
                         radius: 4
 
                         property int stepIdx: index
                         property int patNum: engine ? engine.getSongOrderStep(stepIdx) : 0
                         property bool isPlayingStep: (engine && engine.isSongMode && engine.isPlaying && engine.songOrderIndex === stepIdx)
-                        property bool isCurrentEditPattern: (engine && engine.currentPattern === patNum)
+                        property bool isSelectedStep: (engine && engine.songOrderIndex === stepIdx)
 
-                        color: isPlayingStep ? theme.playRow : (isCurrentEditPattern ? theme.bgWellHover : theme.bgCard)
-                        border.color: isPlayingStep ? theme.playAccent : (isCurrentEditPattern ? theme.accent : theme.border)
-                        border.width: isPlayingStep ? 2 : (isCurrentEditPattern ? 1.5 : 1)
+                        color: isPlayingStep ? theme.playRow : (isSelectedStep ? theme.bgWellHover : theme.bgCard)
+                        border.color: isPlayingStep ? theme.playAccent : (isSelectedStep ? theme.accent : theme.border)
+                        border.width: (isPlayingStep || isSelectedStep) ? 2 : 1
 
                         RowLayout {
                             anchors.fill: parent
@@ -109,23 +113,30 @@ Rectangle {
                             spacing: 4
 
                             // Step Order Label
-                            Text {
-                                text: "#" + (stepCard.stepIdx < 9 ? "0" + (stepCard.stepIdx + 1) : "" + (stepCard.stepIdx + 1))
-                                font.pixelSize: 9
-                                font.bold: true
-                                color: stepCard.isPlayingStep ? theme.playAccent : theme.textDim
+                            Rectangle {
+                                width: 22
+                                height: parent.height
+                                color: "transparent"
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "#" + (stepCard.stepIdx < 9 ? "0" + (stepCard.stepIdx + 1) : "" + (stepCard.stepIdx + 1))
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: stepCard.isPlayingStep ? theme.playAccent : (stepCard.isSelectedStep ? theme.accent : theme.textDim)
+                                }
                             }
 
                             // Pattern Dropdown Button
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 22
+                                height: 24
                                 radius: 2
-                                color: stepCard.isPlayingStep ? theme.playAccent : (stepCard.isCurrentEditPattern ? theme.accent : theme.btnBg)
+                                color: stepCard.isPlayingStep ? theme.playAccent : (stepCard.isSelectedStep ? theme.accent : (patMouse.containsMouse ? theme.btnHover : theme.btnBg))
+                                border.color: theme.border
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 4
+                                    anchors.leftMargin: 6
                                     anchors.rightMargin: 4
                                     spacing: 2
 
@@ -135,21 +146,29 @@ Rectangle {
                                         font.bold: true
                                         font.pixelSize: 10
                                         font.family: "Monospace"
-                                        color: (stepCard.isPlayingStep || stepCard.isCurrentEditPattern) ? "#ffffff" : theme.textMain
+                                        color: (stepCard.isPlayingStep || stepCard.isSelectedStep) ? "#ffffff" : theme.textMain
                                         horizontalAlignment: Text.AlignHCenter
                                     }
 
                                     Text {
                                         text: "▾"
                                         font.pixelSize: 8
-                                        color: (stepCard.isPlayingStep || stepCard.isCurrentEditPattern) ? "#ffffff" : theme.textMuted
+                                        color: (stepCard.isPlayingStep || stepCard.isSelectedStep) ? "#ffffff" : theme.textMuted
                                     }
                                 }
 
                                 MouseArea {
+                                    id: patMouse
                                     anchors.fill: parent
+                                    hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onClicked: patMenu.open()
+                                    onClicked: {
+                                        if (engine) {
+                                            engine.setSongOrderIndex(stepCard.stepIdx)
+                                            engine.setCurrentPattern(stepCard.patNum)
+                                        }
+                                        patMenu.open()
+                                    }
                                 }
 
                                 Menu {
@@ -161,6 +180,7 @@ Rectangle {
                                             onTriggered: {
                                                 if (engine) {
                                                     engine.setSongOrderStep(stepCard.stepIdx, index)
+                                                    engine.setSongOrderIndex(stepCard.stepIdx)
                                                     engine.setCurrentPattern(index)
                                                 }
                                             }
@@ -197,6 +217,7 @@ Rectangle {
                             }
                         }
 
+                        // Clicking anywhere on card selects this step & pattern
                         MouseArea {
                             anchors.fill: parent
                             z: -1
@@ -210,9 +231,9 @@ Rectangle {
                     }
                 }
 
-                // Add Step Button
+                // Add Duplicate Step Button
                 Button {
-                    implicitWidth: 80
+                    implicitWidth: 72
                     implicitHeight: 28
                     text: "+ STEP"
                     font.bold: true
@@ -235,6 +256,40 @@ Rectangle {
                             engine.addSongOrderStep(cur)
                         }
                     }
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Append duplicate step into song"
+                    ToolTip.delay: 400
+                }
+
+                // Add Fresh Blank Pattern Button
+                Button {
+                    implicitWidth: 86
+                    implicitHeight: 28
+                    text: "+ NEW PAT"
+                    font.bold: true
+                    font.pixelSize: 10
+                    background: Rectangle {
+                        color: parent.hovered ? theme.playAccent : theme.btnBg
+                        border.color: theme.border
+                        radius: 3
+                    }
+                    contentItem: Text {
+                        text: parent.text
+                        font: parent.font
+                        color: parent.parent.hovered ? "#ffffff" : theme.playAccent
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                    onClicked: {
+                        if (engine) {
+                            let newPat = engine.addPattern()
+                            engine.setSongOrderIndex(engine.songOrderLength - 1)
+                            engine.setCurrentPattern(newPat)
+                        }
+                    }
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Create fresh blank pattern and add to song"
+                    ToolTip.delay: 400
                 }
             }
         }

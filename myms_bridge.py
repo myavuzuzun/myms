@@ -591,6 +591,11 @@ class MymsEngine(QObject):
         self._current_pattern = idx
         self.numPatternsChanged.emit(self._num_patterns)
         self.currentPatternChanged.emit(self._current_pattern)
+        self.songOrderChanged.emit()
+        so_idx = self.lib.myms_get_song_order_index()
+        self._song_order_index = so_idx
+        self.songOrderIndexChanged.emit(so_idx)
+        self.gridCellChanged.emit(0, 0)
         return idx
 
     @pyqtSlot(int, result=int)
@@ -600,6 +605,11 @@ class MymsEngine(QObject):
         self._current_pattern = idx
         self.numPatternsChanged.emit(self._num_patterns)
         self.currentPatternChanged.emit(self._current_pattern)
+        self.songOrderChanged.emit()
+        so_idx = self.lib.myms_get_song_order_index()
+        self._song_order_index = so_idx
+        self.songOrderIndexChanged.emit(so_idx)
+        self.gridCellChanged.emit(0, 0)
         return idx
 
     @pyqtSlot(int, result=bool)
@@ -610,6 +620,11 @@ class MymsEngine(QObject):
             self._current_pattern = self.lib.myms_get_current_pattern()
             self.numPatternsChanged.emit(self._num_patterns)
             self.currentPatternChanged.emit(self._current_pattern)
+            self.songOrderChanged.emit()
+            so_idx = self.lib.myms_get_song_order_index()
+            self._song_order_index = so_idx
+            self.songOrderIndexChanged.emit(so_idx)
+            self.gridCellChanged.emit(0, 0)
         return ok
 
     @pyqtSlot(bool)
@@ -617,6 +632,15 @@ class MymsEngine(QObject):
         self.lib.myms_set_song_mode(song_mode)
         self._is_song_mode = song_mode
         self.songModeChanged.emit(self._is_song_mode)
+        cur_pat = self.lib.myms_get_current_pattern()
+        self._current_pattern = cur_pat
+        self.currentPatternChanged.emit(cur_pat)
+        so_idx = self.lib.myms_get_song_order_index()
+        self._song_order_index = so_idx
+        self.songOrderIndexChanged.emit(so_idx)
+        self._current_row = self.lib.myms_get_current_row()
+        self.currentRowChanged.emit(self._current_row)
+        self.gridCellChanged.emit(0, 0)
 
     @pyqtSlot()
     def toggleSongMode(self):
@@ -646,6 +670,13 @@ class MymsEngine(QObject):
     def removeSongOrderStep(self, step):
         self.lib.myms_remove_song_order_step(step)
         self.songOrderChanged.emit()
+        so_idx = self.lib.myms_get_song_order_index()
+        self._song_order_index = so_idx
+        self.songOrderIndexChanged.emit(so_idx)
+        cur_pat = self.lib.myms_get_current_pattern()
+        self._current_pattern = cur_pat
+        self.currentPatternChanged.emit(cur_pat)
+        self.gridCellChanged.emit(0, 0)
 
     @pyqtSlot(int)
     def setSongOrderIndex(self, step):
@@ -654,6 +685,7 @@ class MymsEngine(QObject):
         self.songOrderIndexChanged.emit(self._song_order_index)
         self._current_pattern = self.lib.myms_get_current_pattern()
         self.currentPatternChanged.emit(self._current_pattern)
+        self.gridCellChanged.emit(0, 0)
 
     @pyqtSlot()
     def promptOpenProject(self):
@@ -713,6 +745,11 @@ class MymsEngine(QObject):
         self._current_row = 0
         self.pausedChanged.emit(False)
         self.currentRowChanged.emit(0)
+        self._current_pattern = self.lib.myms_get_current_pattern()
+        self.currentPatternChanged.emit(self._current_pattern)
+        self._song_order_index = self.lib.myms_get_song_order_index()
+        self.songOrderIndexChanged.emit(self._song_order_index)
+        self.gridCellChanged.emit(0, 0)
 
     @pyqtSlot(float)
     def setBpm(self, bpm):

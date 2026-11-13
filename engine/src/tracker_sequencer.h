@@ -139,11 +139,13 @@ public:
     void stop() {
         m_isPlaying = false;
         m_currentRow = 0;
-        m_songOrderIndex = 0;
-        if (!m_songOrder.empty()) {
-            m_currentPattern = std::clamp(m_songOrder[0], 0, static_cast<int>(m_patterns.size()) - 1);
-        } else {
-            m_currentPattern = 0;
+        if (m_isSongMode) {
+            m_songOrderIndex = 0;
+            if (!m_songOrder.empty()) {
+                m_currentPattern = std::clamp(m_songOrder[0], 0, static_cast<int>(m_patterns.size()) - 1);
+            } else {
+                m_currentPattern = 0;
+            }
         }
         m_samplesUntilNextRow = 0;
     }
@@ -363,9 +365,24 @@ public:
             int nextRow = m_currentRow + 1;
             if (nextRow >= curRows) {
                 if (m_isSongMode && !m_songOrder.empty()) {
-                    m_songOrderIndex = (m_songOrderIndex + 1) % m_songOrder.size();
-                    m_currentPattern = std::clamp(m_songOrder[m_songOrderIndex], 0, static_cast<int>(m_patterns.size()) - 1);
-                    m_currentRow = 0;
+                    int nextSongIdx = m_songOrderIndex + 1;
+                    if (nextSongIdx >= static_cast<int>(m_songOrder.size())) {
+                        if (m_isLooping) {
+                            m_songOrderIndex = 0;
+                            m_currentPattern = std::clamp(m_songOrder[0], 0, static_cast<int>(m_patterns.size()) - 1);
+                            m_currentRow = 0;
+                        } else {
+                            m_isPlaying = false;
+                            m_songOrderIndex = 0;
+                            m_currentPattern = std::clamp(m_songOrder[0], 0, static_cast<int>(m_patterns.size()) - 1);
+                            m_currentRow = 0;
+                            return true;
+                        }
+                    } else {
+                        m_songOrderIndex = nextSongIdx;
+                        m_currentPattern = std::clamp(m_songOrder[m_songOrderIndex], 0, static_cast<int>(m_patterns.size()) - 1);
+                        m_currentRow = 0;
+                    }
                 } else if (m_isLooping) {
                     m_currentRow = 0;
                 } else {

@@ -11,7 +11,7 @@ Item {
     property real meterPeakL: 0.0
     property real meterPeakR: 0.0
     property bool bottomDeckCollapsed: false
-    property real bottomDeckHeight: 250
+    property real bottomDeckHeight: 330
 
     Connections {
         target: mymsEngine
