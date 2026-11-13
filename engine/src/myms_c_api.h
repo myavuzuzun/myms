@@ -98,7 +98,7 @@ bool myms_drum_get_reverse(int pad);
 void myms_drum_get_name(int pad, char* out_name, int max_len);
 void myms_drum_get_filepath(int pad, char* out_path, int max_len);
 
-// Plugin Host (VST2 & CLAP)
+// Plugin Host (VST3, CLAP, VST2)
 bool myms_plugin_load(int track, const char* filepath);
 void myms_plugin_unload(int track);
 bool myms_plugin_is_loaded(int track);
@@ -106,6 +106,7 @@ void myms_plugin_get_name(int track, char* out_name, int max_len);
 void myms_plugin_get_vendor(int track, char* out_vendor, int max_len);
 void myms_plugin_get_path(int track, char* out_path, int max_len);
 int myms_plugin_get_format(int track);
+void myms_plugin_get_format_name(int track, char* out_format, int max_len);
 int myms_plugin_get_num_params(int track);
 void myms_plugin_get_param_name(int track, int param_idx, char* out_name, int max_len);
 void myms_plugin_get_param_display(int track, int param_idx, char* out_display, int max_len);
@@ -115,6 +116,23 @@ void myms_plugin_set_param_value(int track, int param_idx, float val);
 bool myms_plugin_has_native_editor(int track);
 bool myms_plugin_open_native_editor(int track, void* parent_window);
 void myms_plugin_close_native_editor(int track);
+
+// Track FX Host (VST3, CLAP, VST2)
+bool myms_track_fx_load(int track, int slot, const char* filepath);
+void myms_track_fx_unload(int track, int slot);
+bool myms_track_fx_is_loaded(int track, int slot);
+void myms_track_fx_get_name(int track, int slot, char* out_name, int max_len);
+void myms_track_fx_get_vendor(int track, int slot, char* out_vendor, int max_len);
+void myms_track_fx_get_path(int track, int slot, char* out_path, int max_len);
+int myms_track_fx_get_format(int track, int slot);
+void myms_track_fx_get_format_name(int track, int slot, char* out_format, int max_len);
+int myms_track_fx_get_num_params(int track, int slot);
+void myms_track_fx_get_param_name(int track, int slot, int param_idx, char* out_name, int max_len);
+float myms_track_fx_get_param_value(int track, int slot, int param_idx);
+void myms_track_fx_set_param_value(int track, int slot, int param_idx, float val);
+bool myms_track_fx_has_native_editor(int track, int slot);
+bool myms_track_fx_open_native_editor(int track, int slot, void* parent_window);
+void myms_track_fx_close_native_editor(int track, int slot);
 
 // Pattern & Song Sequencer
 int myms_get_num_patterns();

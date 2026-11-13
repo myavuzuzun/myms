@@ -473,6 +473,13 @@ int myms_plugin_get_format(int track) {
     return myms::AudioEngine::instance().getTrackPluginFormat(track);
 }
 
+void myms_plugin_get_format_name(int track, char* out_format, int max_len) {
+    if (!out_format || max_len <= 0) return;
+    std::string fmt = myms::AudioEngine::instance().getTrackPluginFormatName(track);
+    std::strncpy(out_format, fmt.c_str(), max_len - 1);
+    out_format[max_len - 1] = '\0';
+}
+
 int myms_plugin_get_num_params(int track) {
     return myms::AudioEngine::instance().getTrackPluginNumParams(track);
 }
@@ -516,4 +523,83 @@ bool myms_plugin_open_native_editor(int track, void* parent_window) {
 
 void myms_plugin_close_native_editor(int track) {
     myms::AudioEngine::instance().closeTrackPluginNativeEditor(track);
+}
+
+// ==========================================
+// Track Insert FX Controls (VST3, CLAP, VST2)
+// ==========================================
+bool myms_track_fx_load(int track, int slot, const char* filepath) {
+    if (!filepath) return false;
+    return myms::AudioEngine::instance().loadTrackFx(track, slot, filepath);
+}
+
+void myms_track_fx_unload(int track, int slot) {
+    myms::AudioEngine::instance().unloadTrackFx(track, slot);
+}
+
+bool myms_track_fx_is_loaded(int track, int slot) {
+    return myms::AudioEngine::instance().isTrackFxLoaded(track, slot);
+}
+
+void myms_track_fx_get_name(int track, int slot, char* out_name, int max_len) {
+    if (!out_name || max_len <= 0) return;
+    std::string name = myms::AudioEngine::instance().getTrackFxName(track, slot);
+    std::strncpy(out_name, name.c_str(), max_len - 1);
+    out_name[max_len - 1] = '\0';
+}
+
+void myms_track_fx_get_vendor(int track, int slot, char* out_vendor, int max_len) {
+    if (!out_vendor || max_len <= 0) return;
+    std::string vendor = myms::AudioEngine::instance().getTrackFxVendor(track, slot);
+    std::strncpy(out_vendor, vendor.c_str(), max_len - 1);
+    out_vendor[max_len - 1] = '\0';
+}
+
+void myms_track_fx_get_path(int track, int slot, char* out_path, int max_len) {
+    if (!out_path || max_len <= 0) return;
+    std::string path = myms::AudioEngine::instance().getTrackFxPath(track, slot);
+    std::strncpy(out_path, path.c_str(), max_len - 1);
+    out_path[max_len - 1] = '\0';
+}
+
+int myms_track_fx_get_format(int track, int slot) {
+    return myms::AudioEngine::instance().getTrackFxFormat(track, slot);
+}
+
+void myms_track_fx_get_format_name(int track, int slot, char* out_format, int max_len) {
+    if (!out_format || max_len <= 0) return;
+    std::string fmt = myms::AudioEngine::instance().getTrackFxFormatName(track, slot);
+    std::strncpy(out_format, fmt.c_str(), max_len - 1);
+    out_format[max_len - 1] = '\0';
+}
+
+int myms_track_fx_get_num_params(int track, int slot) {
+    return myms::AudioEngine::instance().getTrackFxNumParams(track, slot);
+}
+
+void myms_track_fx_get_param_name(int track, int slot, int param_idx, char* out_name, int max_len) {
+    if (!out_name || max_len <= 0) return;
+    std::string name = myms::AudioEngine::instance().getTrackFxParamName(track, slot, param_idx);
+    std::strncpy(out_name, name.c_str(), max_len - 1);
+    out_name[max_len - 1] = '\0';
+}
+
+float myms_track_fx_get_param_value(int track, int slot, int param_idx) {
+    return myms::AudioEngine::instance().getTrackFxParamValue(track, slot, param_idx);
+}
+
+void myms_track_fx_set_param_value(int track, int slot, int param_idx, float val) {
+    myms::AudioEngine::instance().setTrackFxParamValue(track, slot, param_idx, val);
+}
+
+bool myms_track_fx_has_native_editor(int track, int slot) {
+    return myms::AudioEngine::instance().hasTrackFxEditor(track, slot);
+}
+
+bool myms_track_fx_open_native_editor(int track, int slot, void* parent_window) {
+    return myms::AudioEngine::instance().openTrackFxEditor(track, slot, parent_window);
+}
+
+void myms_track_fx_close_native_editor(int track, int slot) {
+    myms::AudioEngine::instance().closeTrackFxEditor(track, slot);
 }

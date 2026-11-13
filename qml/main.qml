@@ -700,7 +700,7 @@ Item {
                             }
 
                             Rectangle {
-                                width: 110
+                                width: 140
                                 height: parent.height - 2
                                 Layout.alignment: Qt.AlignBottom
                                 color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? theme.bgCard : "transparent"
@@ -710,7 +710,7 @@ Item {
 
                                 Text {
                                     anchors.centerIn: parent
-                                    text: "🔌 PLUGIN HOST"
+                                    text: "🔌 PLUGIN INSTRUMENT"
                                     font.bold: true
                                     font.pixelSize: 10
                                     color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? theme.accent : theme.textMuted

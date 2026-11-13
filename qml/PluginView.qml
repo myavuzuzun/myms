@@ -72,7 +72,9 @@ Rectangle {
                     color: {
                         if (!root.isLoaded) return theme.bgWell
                         let fmt = engine ? engine.getTrackPluginFormatName(root.currentTrack) : ""
-                        return (fmt === "CLAP") ? "#6c5ce7" : "#d63031"
+                        if (fmt === "VST3") return "#00b894"
+                        if (fmt === "CLAP") return "#6c5ce7"
+                        return "#3daee9"
                     }
                     Text {
                         anchors.centerIn: parent
@@ -121,6 +123,28 @@ Rectangle {
                 Row {
                     spacing: 6
                     Layout.alignment: Qt.AlignVCenter
+
+                    Button {
+                        text: "🗔 OPEN GUI"
+                        font.bold: true
+                        font.pixelSize: 9
+                        implicitHeight: 28
+                        visible: root.isLoaded && (engine ? engine.hasTrackPluginNativeEditor(root.currentTrack) : false)
+                        background: Rectangle {
+                            color: parent.hovered ? theme.btnHover : theme.accent
+                            radius: 3
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            font: parent.font
+                            color: "#ffffff"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            if (engine) engine.promptOpenPluginGui(root.currentTrack)
+                        }
+                    }
 
                     Button {
                         text: "📁 LOAD PLUGIN..."
@@ -189,7 +213,7 @@ Rectangle {
 
                 Text {
                     Layout.alignment: Qt.AlignHCenter
-                    text: "🎛️"
+                    text: "🔌"
                     font.pixelSize: 36
                 }
 
@@ -203,7 +227,7 @@ Rectangle {
 
                 Text {
                     Layout.alignment: Qt.AlignHCenter
-                    text: "Load any 64-bit Linux VST2 (.so) or CLAP (.clap) synthesizer plugin."
+                    text: "Load any 64-bit Linux VST3 (.vst3), CLAP (.clap), or VST2 (.so) synthesizer plugin."
                     font.pixelSize: 11
                     color: theme.textMuted
                 }
@@ -213,24 +237,24 @@ Rectangle {
                     spacing: 8
 
                     Button {
-                        text: "Load Demo VST2 Synth"
+                        text: "Load Interactive GUI Synth"
                         font.bold: true
                         font.pixelSize: 10
                         implicitHeight: 28
                         background: Rectangle {
                             color: parent.hovered ? theme.btnHover : theme.btnBg
-                            border.color: "#d63031"
+                            border.color: "#00cec9"
                             radius: 3
                         }
                         contentItem: Text {
                             text: parent.text
                             font: parent.font
-                            color: "#ff7675"
+                            color: "#00cec9"
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
                         onClicked: {
-                            if (engine) engine.loadTrackPlugin(root.currentTrack, "plugins/vst2/demo_synth_vst2.so")
+                            if (engine) engine.loadTrackPlugin(root.currentTrack, "plugins/gui_synth/demo_gui_synth.so")
                         }
                     }
 
@@ -253,6 +277,28 @@ Rectangle {
                         }
                         onClicked: {
                             if (engine) engine.loadTrackPlugin(root.currentTrack, "plugins/clap/demo_synth_clap.clap")
+                        }
+                    }
+
+                    Button {
+                        text: "Load Demo VST2 Synth"
+                        font.bold: true
+                        font.pixelSize: 10
+                        implicitHeight: 28
+                        background: Rectangle {
+                            color: parent.hovered ? theme.btnHover : theme.btnBg
+                            border.color: "#d63031"
+                            radius: 3
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            font: parent.font
+                            color: "#ff7675"
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            if (engine) engine.loadTrackPlugin(root.currentTrack, "plugins/vst2/demo_synth_vst2.so")
                         }
                     }
                 }
@@ -361,3 +407,4 @@ Rectangle {
         }
     }
 }
+

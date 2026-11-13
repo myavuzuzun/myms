@@ -191,8 +191,7 @@ Rectangle {
                                     text: {
                                         if (strip.trackType === 1) return "🎻 SOUNDFONT"
                                         if (strip.trackType === 2) return "🥁 BEATPAD"
-                                        if (strip.trackType === 3) return "🎛️ VST2 PLUGIN"
-                                        if (strip.trackType === 4) return "🔌 CLAP PLUGIN"
+                                        if (strip.trackType === 3) return "🔌 PLUGIN INST"
                                         return "🎹 AURASYNTH"
                                     }
                                     font.bold: true
@@ -200,8 +199,7 @@ Rectangle {
                                     color: {
                                         if (strip.trackType === 1) return "#92ebb5"
                                         if (strip.trackType === 2) return "#f7b731"
-                                        if (strip.trackType === 3) return "#ff7675"
-                                        if (strip.trackType === 4) return "#a29bfe"
+                                        if (strip.trackType === 3) return "#3daee9"
                                         return theme.accent
                                     }
                                 }
@@ -243,21 +241,10 @@ Rectangle {
                                     onTriggered: if (engine) engine.setTrackType(strip.trackIdx, 2)
                                 }
                                 MenuItem {
-                                    text: "🎛️ Linux VST2 (.so Plugin)"
+                                    text: "🔌 Plugin Instrument (VST3 / CLAP / VST2)"
                                     onTriggered: {
                                         if (engine) {
                                             engine.setTrackType(strip.trackIdx, 3)
-                                            if (!engine.isTrackPluginLoaded(strip.trackIdx)) {
-                                                engine.promptOpenPlugin(strip.trackIdx)
-                                            }
-                                        }
-                                    }
-                                }
-                                MenuItem {
-                                    text: "🔌 CLAP (.clap Plugin)"
-                                    onTriggered: {
-                                        if (engine) {
-                                            engine.setTrackType(strip.trackIdx, 4)
                                             if (!engine.isTrackPluginLoaded(strip.trackIdx)) {
                                                 engine.promptOpenPlugin(strip.trackIdx)
                                             }
@@ -307,14 +294,14 @@ Rectangle {
                             }
                         }
 
-                        // 3b. Plugin Quick Display (Visible when VST2 or CLAP is active)
+                        // 3b. Plugin Quick Display (Visible when Plugin Instrument is active)
                         Rectangle {
                             Layout.fillWidth: true
                             height: 20
                             color: plgMouse.containsMouse ? theme.btnHover : theme.bgCard
                             radius: 2
                             border.color: (engine && engine.isTrackPluginLoaded(strip.trackIdx)) ? theme.accent : theme.border
-                            visible: (strip.trackType === 3 || strip.trackType === 4)
+                            visible: (strip.trackType === 3)
 
                             Text {
                                 anchors.fill: parent
@@ -352,6 +339,134 @@ Rectangle {
                                 ToolTip.visible: containsMouse
                                 ToolTip.text: "Click to configure plugin"
                                 ToolTip.delay: 400
+                            }
+                        }
+
+                        // 3c. Track Insert FX Chain (Slot 1 & Slot 2)
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Repeater {
+                                model: 2
+                                Rectangle {
+                                    id: fxSlotRect
+                                    Layout.fillWidth: true
+                                    height: 18
+                                    radius: 2
+                                    property int slotIdx: index
+                                    property bool isLoaded: engine ? engine.isTrackFxLoaded(strip.trackIdx, slotIdx) : false
+                                    property string fxName: engine ? engine.getTrackFxName(strip.trackIdx, slotIdx) : ""
+                                    property string fxFmt: engine ? engine.getTrackFxFormatName(strip.trackIdx, slotIdx) : ""
+                                    color: isLoaded ? theme.bgCard : theme.bgWell
+                                    border.color: isLoaded ? theme.accent : theme.border
+
+                                    Connections {
+                                        target: engine
+                                        function onTrackFxChanged(t, s) {
+                                            if ((t === strip.trackIdx || t === -1) && (s === fxSlotRect.slotIdx || s === -1)) {
+                                                fxSlotRect.isLoaded = engine.isTrackFxLoaded(strip.trackIdx, fxSlotRect.slotIdx)
+                                                fxSlotRect.fxName = engine.getTrackFxName(strip.trackIdx, fxSlotRect.slotIdx)
+                                                fxSlotRect.fxFmt = engine.getTrackFxFormatName(strip.trackIdx, fxSlotRect.slotIdx)
+                                            }
+                                        }
+                                        function onProjectLoaded() {
+                                            fxSlotRect.isLoaded = engine ? engine.isTrackFxLoaded(strip.trackIdx, fxSlotRect.slotIdx) : false
+                                            fxSlotRect.fxName = engine ? engine.getTrackFxName(strip.trackIdx, fxSlotRect.slotIdx) : ""
+                                            fxSlotRect.fxFmt = engine ? engine.getTrackFxFormatName(strip.trackIdx, fxSlotRect.slotIdx) : ""
+                                        }
+                                    }
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 4
+                                        anchors.rightMargin: 4
+                                        spacing: 2
+
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: fxSlotRect.isLoaded ? (fxSlotRect.fxFmt + ": " + (fxSlotRect.fxName ? fxSlotRect.fxName : "FX")) : ("+ FX " + (fxSlotRect.slotIdx + 1))
+                                            font.pixelSize: 8
+                                            font.bold: fxSlotRect.isLoaded
+                                            color: fxSlotRect.isLoaded ? theme.textHeading : theme.textMuted
+                                            elide: Text.ElideRight
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+
+                                        // Open Native FX GUI Button
+                                        Rectangle {
+                                            width: 14
+                                            height: 14
+                                            radius: 2
+                                            color: fxGuiMouse.containsMouse ? theme.btnHover : "transparent"
+                                            visible: fxSlotRect.isLoaded
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "🗔"
+                                                font.pixelSize: 8
+                                                color: theme.accent
+                                            }
+                                            MouseArea {
+                                                id: fxGuiMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (engine) engine.promptOpenTrackFxGui(strip.trackIdx, fxSlotRect.slotIdx)
+                                                }
+                                                ToolTip.visible: containsMouse
+                                                ToolTip.text: "Open Effect GUI Window"
+                                                ToolTip.delay: 300
+                                            }
+                                        }
+
+                                        // Unload FX Button
+                                        Rectangle {
+                                            width: 14
+                                            height: 14
+                                            radius: 2
+                                            color: fxDelMouse.containsMouse ? theme.stopAccent : "transparent"
+                                            visible: fxSlotRect.isLoaded
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "✕"
+                                                font.pixelSize: 8
+                                                color: fxDelMouse.containsMouse ? "#ffffff" : theme.textMuted
+                                            }
+                                            MouseArea {
+                                                id: fxDelMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (engine) engine.unloadTrackFx(strip.trackIdx, fxSlotRect.slotIdx)
+                                                }
+                                                ToolTip.visible: containsMouse
+                                                ToolTip.text: "Unload FX"
+                                                ToolTip.delay: 300
+                                            }
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        z: -1
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (engine) {
+                                                if (!fxSlotRect.isLoaded) {
+                                                    engine.promptOpenTrackFxDialog(strip.trackIdx, fxSlotRect.slotIdx)
+                                                } else {
+                                                    engine.promptOpenTrackFxGui(strip.trackIdx, fxSlotRect.slotIdx)
+                                                }
+                                            }
+                                        }
+                                        ToolTip.visible: containsMouse && !fxSlotRect.isLoaded
+                                        ToolTip.text: "Click to load audio effect plugin (VST3, CLAP, VST2)"
+                                        ToolTip.delay: 400
+                                    }
+                                }
                             }
                         }
 

@@ -79,8 +79,7 @@ Item {
                         text: {
                             if (root.trackType === 1) return "🎻"
                             if (root.trackType === 2) return "🥁"
-                            if (root.trackType === 3) return "🎛️"
-                            if (root.trackType === 4) return "🔌"
+                            if (root.trackType === 3) return "🔌"
                             return "🎹"
                         }
                         font.pixelSize: 14
@@ -92,8 +91,7 @@ Item {
                             let engineName = "Polyphonic Subtractive Synth (AuraSynth)"
                             if (root.trackType === 1) engineName = "SoundFont Player (FontBox)"
                             else if (root.trackType === 2) engineName = "8-Slot Drum Sampler (BeatPad)"
-                            else if (root.trackType === 3) engineName = "Linux VST2 Plugin Host"
-                            else if (root.trackType === 4) engineName = "CLAP Plugin Host"
+                            else if (root.trackType === 3) engineName = "Plugin Instrument (VST3 / CLAP / VST2)"
                             return "EDITING TRACK #" + (root.targetTrack + 1) + ": " + trackName + " — " + engineName
                         }
                         font.bold: true
@@ -173,14 +171,14 @@ Item {
                         }
 
                         Rectangle {
-                            width: 64
+                            width: 72
                             height: 24
                             radius: 3
-                            color: root.trackType === 3 ? "#d63031" : theme.btnBg
+                            color: root.trackType === 3 ? "#3daee9" : theme.btnBg
                             border.color: theme.border
                             Text {
                                 anchors.centerIn: parent
-                                text: "VST2"
+                                text: "PLUGIN"
                                 font.bold: true
                                 font.pixelSize: 9
                                 color: root.trackType === 3 ? "#ffffff" : theme.textMuted
@@ -190,28 +188,6 @@ Item {
                                 onClicked: {
                                     root.trackType = 3
                                     if (engine) engine.setTrackType(root.targetTrack, 3)
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            width: 64
-                            height: 24
-                            radius: 3
-                            color: root.trackType === 4 ? "#6c5ce7" : theme.btnBg
-                            border.color: theme.border
-                            Text {
-                                anchors.centerIn: parent
-                                text: "CLAP"
-                                font.bold: true
-                                font.pixelSize: 9
-                                color: root.trackType === 4 ? "#ffffff" : theme.textMuted
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: {
-                                    root.trackType = 4
-                                    if (engine) engine.setTrackType(root.targetTrack, 4)
                                 }
                             }
                         }
@@ -247,7 +223,7 @@ Item {
             StackLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                currentIndex: root.trackType
+                currentIndex: Math.min(3, root.trackType)
 
                 AuraSynthView {
                     engine: root.engine
@@ -261,11 +237,6 @@ Item {
 
                 BeatPadView {
                     engine: root.engine
-                }
-
-                PluginView {
-                    engine: root.engine
-                    currentTrack: root.targetTrack
                 }
 
                 PluginView {

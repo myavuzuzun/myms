@@ -357,6 +357,7 @@ Rectangle {
                             }
 
                             // Track Engine Badge (SYNTH / SF2 / DRUMS)
+                            // Track Engine Badge (SYNTH / SF2 / DRUM / PLUGIN)
                             Rectangle {
                                 width: 34
                                 height: 16
@@ -372,8 +373,7 @@ Rectangle {
                                         let t = parent.trkType
                                         if (t === 1) return "SF2"
                                         if (t === 2) return "DRUM"
-                                        if (t === 3) return "VST"
-                                        if (t === 4) return "CLAP"
+                                        if (t === 3) return "PLG"
                                         return "SYN"
                                     }
                                     font.bold: true
@@ -382,8 +382,7 @@ Rectangle {
                                         let t = parent.trkType
                                         if (t === 1) return "#92ebb5"
                                         if (t === 2) return "#f7b731"
-                                        if (t === 3) return "#ff7675"
-                                        if (t === 4) return "#a29bfe"
+                                        if (t === 3) return "#3daee9"
                                         return "#5cd6e8"
                                     }
                                 }
@@ -393,13 +392,13 @@ Rectangle {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         if (engine) {
-                                            let nextType = (parent.trkType + 1) % 5
+                                            let nextType = (parent.trkType + 1) % 4
                                             engine.setTrackType(index, nextType)
                                             root.gridModified()
                                         }
                                     }
                                     ToolTip.visible: containsMouse
-                                    ToolTip.text: "Track Engine: Click to cycle (SYNTH / SF2 / DRUMS / VST2 / CLAP)"
+                                    ToolTip.text: "Track Engine: Click to cycle (SYNTH / SF2 / DRUM / PLUGIN)"
                                     ToolTip.delay: 400
                                 }
                             }

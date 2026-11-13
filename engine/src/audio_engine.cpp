@@ -154,6 +154,13 @@ bool AudioEngine::init(int sampleRate, int bufferSize) {
     m_plugins.clear();
     m_plugins.emplace_back(std::make_unique<PluginInstance>());
 
+    m_trackFx.clear();
+    std::array<std::unique_ptr<PluginInstance>, MAX_TRACK_FX> initFx;
+    for (int s = 0; s < MAX_TRACK_FX; ++s) {
+        initFx[s] = std::make_unique<PluginInstance>();
+    }
+    m_trackFx.emplace_back(std::move(initFx));
+
     setupInitialInstruments();
 
     m_device = std::make_unique<ma_device>();
@@ -262,6 +269,12 @@ void AudioEngine::addTrack() {
     m_trackMixers.emplace_back();
     m_plugins.emplace_back(std::make_unique<PluginInstance>());
 
+    std::array<std::unique_ptr<PluginInstance>, MAX_TRACK_FX> fxSlots;
+    for (int s = 0; s < MAX_TRACK_FX; ++s) {
+        fxSlots[s] = std::make_unique<PluginInstance>();
+    }
+    m_trackFx.emplace_back(std::move(fxSlots));
+
     // Initialize with default synth patch
     SynthParams p = m_instruments[0].getParams();
     m_instruments.back().setParams(p);
@@ -281,6 +294,9 @@ void AudioEngine::removeTrack(int trackIdx) {
     if (trackIdx < static_cast<int>(m_plugins.size())) {
         m_plugins.erase(m_plugins.begin() + trackIdx);
     }
+    if (trackIdx < static_cast<int>(m_trackFx.size())) {
+        m_trackFx.erase(m_trackFx.begin() + trackIdx);
+    }
     m_sequencer.removeTrack(trackIdx);
 }
 
@@ -290,10 +306,10 @@ int AudioEngine::getNumInstruments() const {
 
 void AudioEngine::setTrackType(int track, int type) {
     if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
-        m_trackMixers[track].type = std::clamp(type, 0, 4);
+        m_trackMixers[track].type = std::clamp(type, 0, 3);
     }
     if (track >= 0 && track < static_cast<int>(m_trackTypes.size())) {
-        m_trackTypes[track] = std::clamp(type, 0, 4);
+        m_trackTypes[track] = std::clamp(type, 0, 3);
     }
 }
 
@@ -427,7 +443,7 @@ void AudioEngine::noteOn(int inst, int note, float velocity) {
     } else if (type == TRACK_TYPE_DRUMS) {
         int pad = (note >= 36 && note <= 43) ? (note - 36) : (note % NUM_DRUM_PADS);
         m_drumSampler.triggerPad(pad, velocity);
-    } else if (type == TRACK_TYPE_VST2 || type == TRACK_TYPE_CLAP) {
+    } else if (type == TRACK_TYPE_PLUGIN) {
         if (inst >= 0 && inst < static_cast<int>(m_plugins.size()) && m_plugins[inst]) {
             m_plugins[inst]->noteOn(note, velocity);
         }
@@ -444,7 +460,7 @@ void AudioEngine::noteOff(int inst, int note) {
         m_soundfont.noteOff(inst, note);
     } else if (type == TRACK_TYPE_DRUMS) {
         // One-shot drum hits decay naturally
-    } else if (type == TRACK_TYPE_VST2 || type == TRACK_TYPE_CLAP) {
+    } else if (type == TRACK_TYPE_PLUGIN) {
         if (inst >= 0 && inst < static_cast<int>(m_plugins.size()) && m_plugins[inst]) {
             m_plugins[inst]->noteOff(note);
         }
@@ -780,7 +796,7 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
                 if (cell.note == NOTE_OFF) {
                     if (type == TRACK_TYPE_SOUNDFONT) {
                         m_soundfont.noteOff(t, cell.note);
-                    } else if (type == TRACK_TYPE_VST2 || type == TRACK_TYPE_CLAP) {
+                    } else if (type == TRACK_TYPE_PLUGIN) {
                         if (t < static_cast<int>(m_plugins.size()) && m_plugins[t]) {
                             m_plugins[t]->noteOff(cell.note);
                         }
@@ -797,7 +813,7 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
                     } else if (type == TRACK_TYPE_DRUMS) {
                         int pad = (cell.note >= 36 && cell.note <= 43) ? (cell.note - 36) : (cell.note % NUM_DRUM_PADS);
                         m_drumSampler.triggerPad(pad, vel);
-                    } else if (type == TRACK_TYPE_VST2 || type == TRACK_TYPE_CLAP) {
+                    } else if (type == TRACK_TYPE_PLUGIN) {
                         if (t < static_cast<int>(m_plugins.size()) && m_plugins[t]) {
                             m_plugins[t]->noteOn(cell.note, vel);
                         }
@@ -817,12 +833,21 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
         float sL = 0.0f;
         float sR = 0.0f;
 
-        // 1. Process AuraSynth tracks with per-track volume & panning
+        // 1. Process AuraSynth tracks with Insert FX & per-track volume & panning
         for (int t = 0; t < numTracks && t < static_cast<int>(m_instruments.size()) && t < static_cast<int>(m_trackMixers.size()); ++t) {
             if (m_trackMixers[t].type == TRACK_TYPE_SYNTH) {
                 float instL = 0.0f, instR = 0.0f;
                 m_instruments[t].processBlock(&instL, &instR, 1);
                 
+                // Track Insert FX Chain
+                if (t < static_cast<int>(m_trackFx.size())) {
+                    for (int s = 0; s < MAX_TRACK_FX; ++s) {
+                        if (m_trackFx[t][s] && m_trackFx[t][s]->isLoaded()) {
+                            m_trackFx[t][s]->processEffectSample(instL, instR);
+                        }
+                    }
+                }
+
                 bool audible = anySolo ? m_trackMixers[t].solo : !m_trackMixers[t].mute;
                 float effVol = audible ? m_trackMixers[t].volume : 0.0f;
                 float pan = m_trackMixers[t].pan;
@@ -857,19 +882,31 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
             }
         }
 
-        // 3. Process BeatPad Drum Sampler
+        // 3. Process BeatPad Drum Sampler with Insert FX
         float drumBuf[2] = {0.0f, 0.0f};
         m_drumSampler.processBlock(drumBuf, 1);
         for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
             if (m_trackMixers[t].type == TRACK_TYPE_DRUMS) {
+                float dL = drumBuf[0];
+                float dR = drumBuf[1];
+
+                // Track Insert FX Chain
+                if (t < static_cast<int>(m_trackFx.size())) {
+                    for (int s = 0; s < MAX_TRACK_FX; ++s) {
+                        if (m_trackFx[t][s] && m_trackFx[t][s]->isLoaded()) {
+                            m_trackFx[t][s]->processEffectSample(dL, dR);
+                        }
+                    }
+                }
+
                 bool audible = anySolo ? m_trackMixers[t].solo : !m_trackMixers[t].mute;
                 float effVol = audible ? m_trackMixers[t].volume : 0.0f;
                 float pan = m_trackMixers[t].pan;
                 float panL = (pan <= 0.5f) ? 1.0f : (1.0f - pan) * 2.0f;
                 float panR = (pan >= 0.5f) ? 1.0f : pan * 2.0f;
 
-                float dL = drumBuf[0] * effVol * panL;
-                float dR = drumBuf[1] * effVol * panR;
+                dL *= effVol * panL;
+                dR *= effVol * panR;
                 sL += dL;
                 sR += dR;
 
@@ -880,11 +917,20 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
             }
         }
 
-        // 4. Process VST2 / CLAP plugins
+        // 4. Process Unified Plugin Instrument tracks (VST3, CLAP, VST2) with Insert FX
         for (int t = 0; t < numTracks && t < static_cast<int>(m_plugins.size()) && t < static_cast<int>(m_trackMixers.size()); ++t) {
-            if ((m_trackMixers[t].type == TRACK_TYPE_VST2 || m_trackMixers[t].type == TRACK_TYPE_CLAP) && m_plugins[t]->isLoaded()) {
+            if (m_trackMixers[t].type == TRACK_TYPE_PLUGIN && m_plugins[t]->isLoaded()) {
                 float plgL = 0.0f, plgR = 0.0f;
                 m_plugins[t]->processSample(plgL, plgR);
+
+                // Track Insert FX Chain
+                if (t < static_cast<int>(m_trackFx.size())) {
+                    for (int s = 0; s < MAX_TRACK_FX; ++s) {
+                        if (m_trackFx[t][s] && m_trackFx[t][s]->isLoaded()) {
+                            m_trackFx[t][s]->processEffectSample(plgL, plgR);
+                        }
+                    }
+                }
 
                 bool audible = anySolo ? m_trackMixers[t].solo : !m_trackMixers[t].mute;
                 float effVol = audible ? m_trackMixers[t].volume : 0.0f;
@@ -946,11 +992,9 @@ bool AudioEngine::loadTrackPlugin(int track, const std::string& path) {
     if (track < 0 || track >= static_cast<int>(m_plugins.size())) return false;
     bool ok = m_plugins[track]->load(path, m_sampleRate, 256);
     if (ok) {
-        if (m_plugins[track]->getFormat() == PLUGIN_FORMAT_VST2) {
-            setTrackType(track, TRACK_TYPE_VST2);
-        } else if (m_plugins[track]->getFormat() == PLUGIN_FORMAT_CLAP) {
-            setTrackType(track, TRACK_TYPE_CLAP);
-        }
+        setTrackType(track, TRACK_TYPE_PLUGIN);
+        std::cout << "[myms] Loaded plugin on track " << track << ": " 
+                  << m_plugins[track]->getName() << " (" << m_plugins[track]->getFormatName() << ")" << std::endl;
     }
     return ok;
 }
@@ -994,6 +1038,13 @@ int AudioEngine::getTrackPluginFormat(int track) const {
         return static_cast<int>(m_plugins[track]->getFormat());
     }
     return 0;
+}
+
+std::string AudioEngine::getTrackPluginFormatName(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        return m_plugins[track]->getFormatName();
+    }
+    return "NONE";
 }
 
 int AudioEngine::getTrackPluginNumParams(int track) const {
@@ -1057,6 +1108,107 @@ bool AudioEngine::openTrackPluginNativeEditor(int track, void* parentWindow) {
 void AudioEngine::closeTrackPluginNativeEditor(int track) {
     if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
         m_plugins[track]->closeNativeEditor();
+    }
+}
+
+// ==========================================
+// Track Insert FX Controls (VST3, CLAP, VST2)
+// ==========================================
+bool AudioEngine::loadTrackFx(int track, int slot, const std::string& path) {
+    if (track < 0 || track >= static_cast<int>(m_trackFx.size())) return false;
+    if (slot < 0 || slot >= MAX_TRACK_FX) return false;
+    if (!m_trackFx[track][slot]) {
+        m_trackFx[track][slot] = std::make_unique<PluginInstance>();
+    }
+    bool ok = m_trackFx[track][slot]->load(path, m_sampleRate, 256);
+    if (ok) {
+        std::cout << "[myms] Loaded FX on track " << track << " slot " << slot << ": "
+                  << m_trackFx[track][slot]->getName() << " (" << m_trackFx[track][slot]->getFormatName() << ")" << std::endl;
+    }
+    return ok;
+}
+
+void AudioEngine::unloadTrackFx(int track, int slot) {
+    if (track >= 0 && track < static_cast<int>(m_trackFx.size()) && slot >= 0 && slot < MAX_TRACK_FX) {
+        if (m_trackFx[track][slot]) m_trackFx[track][slot]->unload();
+    }
+}
+
+bool AudioEngine::isTrackFxLoaded(int track, int slot) const {
+    if (track >= 0 && track < static_cast<int>(m_trackFx.size()) && slot >= 0 && slot < MAX_TRACK_FX) {
+        return m_trackFx[track][slot] && m_trackFx[track][slot]->isLoaded();
+    }
+    return false;
+}
+
+std::string AudioEngine::getTrackFxName(int track, int slot) const {
+    if (isTrackFxLoaded(track, slot)) return m_trackFx[track][slot]->getName();
+    return "";
+}
+
+std::string AudioEngine::getTrackFxVendor(int track, int slot) const {
+    if (isTrackFxLoaded(track, slot)) return m_trackFx[track][slot]->getVendor();
+    return "";
+}
+
+std::string AudioEngine::getTrackFxPath(int track, int slot) const {
+    if (isTrackFxLoaded(track, slot)) return m_trackFx[track][slot]->getPath();
+    return "";
+}
+
+int AudioEngine::getTrackFxFormat(int track, int slot) const {
+    if (isTrackFxLoaded(track, slot)) return static_cast<int>(m_trackFx[track][slot]->getFormat());
+    return 0;
+}
+
+std::string AudioEngine::getTrackFxFormatName(int track, int slot) const {
+    if (isTrackFxLoaded(track, slot)) return m_trackFx[track][slot]->getFormatName();
+    return "NONE";
+}
+
+int AudioEngine::getTrackFxNumParams(int track, int slot) const {
+    if (isTrackFxLoaded(track, slot)) return m_trackFx[track][slot]->getNumParams();
+    return 0;
+}
+
+std::string AudioEngine::getTrackFxParamName(int track, int slot, int paramIdx) const {
+    if (isTrackFxLoaded(track, slot)) {
+        const PluginParamInfo* info = m_trackFx[track][slot]->getParamInfo(paramIdx);
+        if (info) return info->name;
+    }
+    return "";
+}
+
+float AudioEngine::getTrackFxParamValue(int track, int slot, int paramIdx) const {
+    if (isTrackFxLoaded(track, slot)) {
+        return m_trackFx[track][slot]->getParamValue(paramIdx);
+    }
+    return 0.0f;
+}
+
+void AudioEngine::setTrackFxParamValue(int track, int slot, int paramIdx, float val) {
+    if (isTrackFxLoaded(track, slot)) {
+        m_trackFx[track][slot]->setParamValue(paramIdx, val);
+    }
+}
+
+bool AudioEngine::hasTrackFxEditor(int track, int slot) const {
+    if (isTrackFxLoaded(track, slot)) {
+        return m_trackFx[track][slot]->hasNativeEditor();
+    }
+    return false;
+}
+
+bool AudioEngine::openTrackFxEditor(int track, int slot, void* parentWindow) {
+    if (isTrackFxLoaded(track, slot)) {
+        return m_trackFx[track][slot]->openNativeEditor(parentWindow);
+    }
+    return false;
+}
+
+void AudioEngine::closeTrackFxEditor(int track, int slot) {
+    if (isTrackFxLoaded(track, slot)) {
+        m_trackFx[track][slot]->closeNativeEditor();
     }
 }
 

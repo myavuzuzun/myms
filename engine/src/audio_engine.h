@@ -17,13 +17,13 @@ struct ma_device;
 namespace myms {
 
 constexpr int MAX_INSTRUMENTS = 32;
+constexpr int MAX_TRACK_FX = 2;
 
 enum TrackType {
     TRACK_TYPE_SYNTH = 0,
     TRACK_TYPE_SOUNDFONT = 1,
     TRACK_TYPE_DRUMS = 2,
-    TRACK_TYPE_VST2 = 3,
-    TRACK_TYPE_CLAP = 4
+    TRACK_TYPE_PLUGIN = 3
 };
 
 struct TrackMixerState {
@@ -158,7 +158,7 @@ public:
     std::string getDrumPadName(int pad) const;
     std::string getDrumPadFilePath(int pad) const;
 
-    // Plugin Host Controls (VST2 & CLAP)
+    // Plugin Host Controls (VST3, CLAP, VST2)
     bool loadTrackPlugin(int track, const std::string& path);
     void unloadTrackPlugin(int track);
     bool isTrackPluginLoaded(int track) const;
@@ -166,6 +166,7 @@ public:
     std::string getTrackPluginVendor(int track) const;
     std::string getTrackPluginPath(int track) const;
     int getTrackPluginFormat(int track) const;
+    std::string getTrackPluginFormatName(int track) const;
     int getTrackPluginNumParams(int track) const;
     std::string getTrackPluginParamName(int track, int paramIdx) const;
     std::string getTrackPluginParamDisplay(int track, int paramIdx) const;
@@ -175,6 +176,23 @@ public:
     bool hasTrackPluginNativeEditor(int track) const;
     bool openTrackPluginNativeEditor(int track, void* parentWindow);
     void closeTrackPluginNativeEditor(int track);
+
+    // Track Insert FX Controls (VST3, CLAP, VST2)
+    bool loadTrackFx(int track, int slot, const std::string& path);
+    void unloadTrackFx(int track, int slot);
+    bool isTrackFxLoaded(int track, int slot) const;
+    std::string getTrackFxName(int track, int slot) const;
+    std::string getTrackFxVendor(int track, int slot) const;
+    std::string getTrackFxPath(int track, int slot) const;
+    int getTrackFxFormat(int track, int slot) const;
+    std::string getTrackFxFormatName(int track, int slot) const;
+    int getTrackFxNumParams(int track, int slot) const;
+    std::string getTrackFxParamName(int track, int slot, int paramIdx) const;
+    float getTrackFxParamValue(int track, int slot, int paramIdx) const;
+    void setTrackFxParamValue(int track, int slot, int paramIdx, float val);
+    bool hasTrackFxEditor(int track, int slot) const;
+    bool openTrackFxEditor(int track, int slot, void* parentWindow);
+    void closeTrackFxEditor(int track, int slot);
 
     // Pattern & Song Management
     int getNumPatterns() const;
@@ -229,6 +247,7 @@ private:
     SoundFontPlayer m_soundfont;
     DrumSampler m_drumSampler;
     std::vector<std::unique_ptr<PluginInstance>> m_plugins;
+    std::vector<std::array<std::unique_ptr<PluginInstance>, MAX_TRACK_FX>> m_trackFx;
 
     MacroProcessor m_macros;
     TrackerSequencer m_sequencer;

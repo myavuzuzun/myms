@@ -308,3 +308,4 @@ const clap_plugin_entry_t clap_entry = {
 };
 
 } // extern "C"
+

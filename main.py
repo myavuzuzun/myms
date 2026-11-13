@@ -2,16 +2,68 @@
 import sys
 import os
 import signal
-from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog
+from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QWidget
 from PyQt6.QtGui import QAction, QKeySequence, QIcon
 from PyQt6.QtQuickWidgets import QQuickWidget
-from PyQt6.QtCore import QUrl
+from PyQt6.QtCore import QUrl, Qt
 from myms_bridge import MymsEngine
+
+class PluginNativeHostWindow(QMainWindow):
+    """
+    Dedicated floating X11 native host window for Linux VST3, CLAP, and VST2 plugins.
+    Embeds the plugin's native X11 window into an isolated WA_NativeWindow container.
+    """
+    def __init__(self, parent, engine, track, slot=None, is_fx=False, on_close_cb=None):
+        super().__init__(parent)
+        self.engine = engine
+        self.track = track
+        self.slot = slot
+        self.is_fx = is_fx
+        self.on_close_cb = on_close_cb
+
+        # Set title reflecting plugin name, format, and track context
+        if is_fx:
+            name = self.engine.getTrackFxName(track, slot)
+            fmt = self.engine.getTrackFxFormatName(track, slot)
+            self.setWindowTitle(f"myms — {name} [{fmt}] — Track #{track+1} FX {slot+1}")
+        else:
+            name = self.engine.getTrackPluginName(track)
+            fmt = self.engine.getTrackPluginFormatName(track)
+            self.setWindowTitle(f"myms — {name} [{fmt}] — Track #{track+1} Plugin GUI")
+
+        self.resize(520, 360)
+        self.setStyleSheet("background-color: #232629; color: #f0f2f5;")
+
+        # Container widget with dedicated native X11 Window ID
+        self.container = QWidget(self)
+        self.container.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
+        self.container.setAttribute(Qt.WidgetAttribute.WA_PaintOnScreen, True)
+        self.container.setStyleSheet("background-color: #232629;")
+        self.setCentralWidget(self.container)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Retrieve the underlying X11 Window handle
+        win_id = int(self.container.winId())
+        if self.is_fx:
+            self.engine.openTrackFxNativeEditor(self.track, self.slot, win_id)
+        else:
+            self.engine.openTrackPluginNativeEditor(self.track, win_id)
+
+    def closeEvent(self, event):
+        if self.is_fx:
+            self.engine.closeTrackFxNativeEditor(self.track, self.slot)
+        else:
+            self.engine.closeTrackPluginNativeEditor(self.track)
+        if self.on_close_cb:
+            self.on_close_cb()
+        event.accept()
 
 class AppWindow(QMainWindow):
     def __init__(self, engine):
         super().__init__()
         self.engine = engine
+        self._plugin_gui_windows = {}
         self._update_window_title()
         self.resize(1120, 780)
         self.setMinimumSize(920, 600)
@@ -22,6 +74,9 @@ class AppWindow(QMainWindow):
         self.engine.requestSaveProjectAs.connect(self._on_save_project_as)
         self.engine.requestNewProject.connect(self._on_new_project)
         self.engine.requestOpenPluginDialog.connect(self._on_open_plugin_dialog)
+        self.engine.requestOpenPluginGui.connect(self._on_open_plugin_gui)
+        self.engine.requestOpenTrackFxDialog.connect(self._on_open_track_fx_dialog)
+        self.engine.requestOpenTrackFxGui.connect(self._on_open_track_fx_gui)
 
         # Setup standard Qt native QMenuBar (100% KDE Global Menu compatible)
         self._setup_native_menu()
@@ -219,19 +274,81 @@ class AppWindow(QMainWindow):
     def _on_open_plugin_dialog(self, track):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            f"Load Plugin for Track #{track+1}",
+            f"Load Plugin Instrument for Track #{track+1}",
             os.path.abspath("plugins"),
-            "Linux Audio Plugins (*.so *.clap);;All Files (*)"
+            "Audio Plugins (*.vst3 *.clap *.so);;All Files (*)"
         )
         if file_path:
             self.engine.loadTrackPlugin(track, file_path)
 
+    def _on_open_plugin_gui(self, track):
+        if not self.engine.isTrackPluginLoaded(track):
+            return
+        key = (track, "inst")
+        win = self._plugin_gui_windows.get(key)
+        if win is not None:
+            try:
+                win.show()
+                win.raise_()
+                win.activateWindow()
+                return
+            except Exception:
+                pass
+
+        def _cleanup():
+            self._plugin_gui_windows.pop(key, None)
+
+        win = PluginNativeHostWindow(self, self.engine, track, is_fx=False, on_close_cb=_cleanup)
+        self._plugin_gui_windows[key] = win
+        win.show()
+
+    def _on_open_track_fx_dialog(self, track, slot):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            f"Select Insert Effect Plugin for Track #{track+1} (Slot {slot+1})",
+            os.path.abspath("plugins"),
+            "Audio Plugins (*.vst3 *.clap *.so);;All Files (*)"
+        )
+        if file_path:
+            self.engine.loadTrackFx(track, slot, file_path)
+
+    def _on_open_track_fx_gui(self, track, slot):
+        if not self.engine.isTrackFxLoaded(track, slot):
+            return
+        key = (track, f"fx_{slot}")
+        win = self._plugin_gui_windows.get(key)
+        if win is not None:
+            try:
+                win.show()
+                win.raise_()
+                win.activateWindow()
+                return
+            except Exception:
+                pass
+
+        def _cleanup():
+            self._plugin_gui_windows.pop(key, None)
+
+        win = PluginNativeHostWindow(self, self.engine, track, slot=slot, is_fx=True, on_close_cb=_cleanup)
+        self._plugin_gui_windows[key] = win
+        win.show()
+
     def closeEvent(self, event):
+        for win in list(self._plugin_gui_windows.values()):
+            try:
+                win.close()
+            except Exception:
+                pass
+        self._plugin_gui_windows.clear()
         self.engine.close()
         event.accept()
 
 def main():
     signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+    # Use xcb under X11/XWayland to allow X11 plugin GUI window embedding
+    if "QT_QPA_PLATFORM" not in os.environ and os.environ.get("DISPLAY"):
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
 
     # Force Qt to use native KDE platform theme for global menus and styling
     os.environ["QT_QPA_PLATFORMTHEME"] = "kde"
