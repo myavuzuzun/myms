@@ -27,26 +27,22 @@ public:
     }
 
     void noteOn(int note, float velocity) {
-        // Find existing voice with same note to retrigger, or an idle voice
+        // Tracker monophony per track: shut off any previous playing voice on this track
+        for (int i = 0; i < MAX_VOICES; ++i) {
+            if (m_voices[i].isActive()) {
+                m_voices[i].reset();
+            }
+        }
+
+        // Find free voice or steal oldest
         int targetVoice = -1;
         for (int i = 0; i < MAX_VOICES; ++i) {
-            if (m_voices[i].isActive() && m_voices[i].getNote() == note) {
+            if (!m_voices[i].isActive()) {
                 targetVoice = i;
                 break;
             }
         }
 
-        if (targetVoice == -1) {
-            // Find free voice
-            for (int i = 0; i < MAX_VOICES; ++i) {
-                if (!m_voices[i].isActive()) {
-                    targetVoice = i;
-                    break;
-                }
-            }
-        }
-
-        // Voice steal oldest if all busy
         if (targetVoice == -1) {
             targetVoice = m_voiceStealIndex;
             m_voiceStealIndex = (m_voiceStealIndex + 1) % MAX_VOICES;
@@ -55,10 +51,12 @@ public:
         m_voices[targetVoice].noteOn(note, velocity, m_params);
     }
 
-    void noteOff(int note) {
+    void noteOff(int note = -1) {
         for (int i = 0; i < MAX_VOICES; ++i) {
-            if (m_voices[i].isActive() && m_voices[i].getNote() == note) {
-                m_voices[i].noteOff();
+            if (m_voices[i].isActive()) {
+                if (note < 0 || note == 254 || m_voices[i].getNote() == note) {
+                    m_voices[i].noteOff();
+                }
             }
         }
     }
@@ -66,6 +64,14 @@ public:
     void allNotesOff() {
         for (int i = 0; i < MAX_VOICES; ++i) {
             m_voices[i].reset();
+        }
+    }
+
+    void noteOffAll() {
+        for (int i = 0; i < MAX_VOICES; ++i) {
+            if (m_voices[i].isActive()) {
+                m_voices[i].noteOff();
+            }
         }
     }
 

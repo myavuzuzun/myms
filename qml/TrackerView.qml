@@ -353,13 +353,15 @@ Rectangle {
                                 color: (root.selectedTrack === index) ? "#ffffff" : theme.textMain
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
+                                Layout.alignment: Qt.AlignVCenter
                             }
 
                             // Track Engine Badge (SYNTH / SF2 / DRUMS)
                             Rectangle {
                                 width: 34
-                                height: 14
+                                height: 16
                                 radius: 2
+                                Layout.alignment: Qt.AlignVCenter
                                 property int trkType: engine ? engine.getTrackType(index) : 0
                                 color: (root.selectedTrack === index) ? "rgba(0,0,0,0.3)" : theme.bgWell
                                 border.color: (root.selectedTrack === index) ? "#ffffff" : theme.border
@@ -403,6 +405,7 @@ Rectangle {
                                 width: 14
                                 height: 14
                                 radius: 2
+                                Layout.alignment: Qt.AlignVCenter
                                 color: delMouse.containsMouse ? theme.stopAccent : "transparent"
                                 visible: (engine && engine.numTracks > 1)
                                 Text {

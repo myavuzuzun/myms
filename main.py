@@ -177,7 +177,10 @@ class AppWindow(QMainWindow):
 
     def _update_window_title(self, path=None):
         name = self.engine.projectName
-        self.setWindowTitle(f"myms — [{name}]")
+        if name:
+            self.setWindowTitle(f"myms — [{name}]")
+        else:
+            self.setWindowTitle("myms")
 
     def _on_new_project(self):
         self.engine.newProject()
@@ -199,7 +202,7 @@ class AppWindow(QMainWindow):
             self._on_save_project_as()
 
     def _on_save_project_as(self):
-        default_name = f"{self.engine.projectName}.myms"
+        default_name = f"{self.engine.projectName if self.engine.projectName else 'Untitled'}.myms"
         default_path = os.path.join(os.path.expanduser("~"), default_name)
         file_path, _ = QFileDialog.getSaveFileName(
             self,

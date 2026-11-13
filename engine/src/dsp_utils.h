@@ -160,8 +160,8 @@ public:
                 m_currentValue = m_sustainLevel;
                 break;
             case RELEASE:
-                m_currentValue -= m_releaseRate * m_currentValue;
-                if (m_currentValue <= 0.0001f) {
+                m_currentValue -= m_releaseRate;
+                if (m_currentValue <= 0.0f) {
                     m_currentValue = 0.0f;
                     m_state = IDLE;
                 }

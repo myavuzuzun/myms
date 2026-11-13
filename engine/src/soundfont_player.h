@@ -212,14 +212,20 @@ public:
         if (!f) return;
         int ch = std::clamp(channel, 0, MAX_SF2_CHANNELS - 1);
         tsf_channel_set_presetindex(f, ch, m_channelPresets[ch]);
+        // Tracker monophony: shut off any previous note on this channel before new note
+        tsf_channel_sounds_off_all(f, ch);
         tsf_channel_note_on(f, ch, note, velocity);
     }
 
-    inline void noteOff(int channel, int note) {
+    inline void noteOff(int channel, int note = -1) {
         tsf* f = m_tsf.load(std::memory_order_acquire);
         if (!f) return;
         int ch = std::clamp(channel, 0, MAX_SF2_CHANNELS - 1);
-        tsf_channel_note_off(f, ch, note);
+        if (note < 0 || note == 254) {
+            tsf_channel_sounds_off_all(f, ch);
+        } else {
+            tsf_channel_note_off(f, ch, note);
+        }
     }
 
     inline void allNotesOff(int channel = -1) {
@@ -228,7 +234,9 @@ public:
         if (channel >= 0 && channel < MAX_SF2_CHANNELS) {
             tsf_channel_sounds_off_all(f, channel);
         } else {
-            tsf_note_off_all(f);
+            for (int c = 0; c < MAX_SF2_CHANNELS; ++c) {
+                tsf_channel_sounds_off_all(f, c);
+            }
         }
     }
 

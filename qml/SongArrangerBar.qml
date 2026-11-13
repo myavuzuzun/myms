@@ -7,7 +7,7 @@ Rectangle {
     StudioTheme { id: theme }
 
     color: theme.bgHeader
-    height: 44
+    height: 38
     border.color: theme.border
     border.width: 1
 
@@ -22,12 +22,14 @@ Rectangle {
         // 1. Arranger Mode & Title
         RowLayout {
             spacing: 8
+            Layout.alignment: Qt.AlignVCenter
 
             Text {
                 text: "SONG ARRANGER"
                 font.bold: true
                 font.pixelSize: 11
                 color: theme.textHeading
+                Layout.alignment: Qt.AlignVCenter
             }
 
             // Mode Selector Pill (PAT vs SONG)
@@ -35,6 +37,7 @@ Rectangle {
                 id: modeToggleBtn
                 implicitHeight: 24
                 implicitWidth: (engine && engine.isSongMode) ? 105 : 95
+                Layout.alignment: Qt.AlignVCenter
                 checkable: true
                 checked: engine ? engine.isSongMode : false
                 onClicked: {
@@ -72,12 +75,13 @@ Rectangle {
             }
         }
 
-        Rectangle { width: 1; height: 22; color: theme.border }
+        Rectangle { width: 1; height: 18; color: theme.border; Layout.alignment: Qt.AlignVCenter }
 
         // 2. Horizontal Sequence Timeline
         ScrollView {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.alignment: Qt.AlignVCenter
             clip: true
             ScrollBar.horizontal.policy: ScrollBar.AsNeeded
             ScrollBar.vertical.policy: ScrollBar.AlwaysOff
@@ -85,7 +89,7 @@ Rectangle {
             Row {
                 id: sequenceRow
                 spacing: 8
-                anchors.verticalCenter: parent.verticalCenter
+                height: parent.height
 
                 Repeater {
                     id: stepRepeater
@@ -95,8 +99,9 @@ Rectangle {
                     Rectangle {
                         id: stepCard
                         width: 104
-                        height: 32
-                        radius: 4
+                        height: 26
+                        radius: 3
+                        anchors.verticalCenter: parent.verticalCenter
 
                         property int stepIdx: index
                         property int patNum: engine ? engine.getSongOrderStep(stepIdx) : 0
@@ -109,14 +114,16 @@ Rectangle {
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.margins: 4
-                            spacing: 4
+                            anchors.leftMargin: 4
+                            anchors.rightMargin: 4
+                            spacing: 3
 
                             // Step Order Label
                             Rectangle {
                                 width: 22
                                 height: parent.height
                                 color: "transparent"
+                                Layout.alignment: Qt.AlignVCenter
                                 Text {
                                     anchors.centerIn: parent
                                     text: "#" + (stepCard.stepIdx < 9 ? "0" + (stepCard.stepIdx + 1) : "" + (stepCard.stepIdx + 1))
@@ -129,19 +136,21 @@ Rectangle {
                             // Pattern Dropdown Button
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 24
+                                height: 20
                                 radius: 2
+                                Layout.alignment: Qt.AlignVCenter
                                 color: stepCard.isPlayingStep ? theme.playAccent : (stepCard.isSelectedStep ? theme.accent : (patMouse.containsMouse ? theme.btnHover : theme.btnBg))
                                 border.color: theme.border
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 6
+                                    anchors.leftMargin: 4
                                     anchors.rightMargin: 4
                                     spacing: 2
 
                                     Text {
                                         Layout.fillWidth: true
+                                        Layout.alignment: Qt.AlignVCenter
                                         text: "PAT " + (stepCard.patNum < 10 ? "0" + stepCard.patNum : "" + stepCard.patNum)
                                         font.bold: true
                                         font.pixelSize: 10
@@ -153,6 +162,7 @@ Rectangle {
                                     Text {
                                         text: "▾"
                                         font.pixelSize: 8
+                                        Layout.alignment: Qt.AlignVCenter
                                         color: (stepCard.isPlayingStep || stepCard.isSelectedStep) ? "#ffffff" : theme.textMuted
                                     }
                                 }
@@ -194,6 +204,7 @@ Rectangle {
                                 width: 14
                                 height: 14
                                 radius: 2
+                                Layout.alignment: Qt.AlignVCenter
                                 visible: (engine && engine.songOrderLength > 1)
                                 color: delMouse.containsMouse ? theme.stopAccent : "transparent"
 
@@ -233,8 +244,9 @@ Rectangle {
 
                 // Add Duplicate Step Button
                 Button {
-                    implicitWidth: 72
-                    implicitHeight: 28
+                    implicitWidth: 68
+                    implicitHeight: 26
+                    anchors.verticalCenter: parent.verticalCenter
                     text: "+ STEP"
                     font.bold: true
                     font.pixelSize: 10
@@ -263,8 +275,9 @@ Rectangle {
 
                 // Add Fresh Blank Pattern Button
                 Button {
-                    implicitWidth: 86
-                    implicitHeight: 28
+                    implicitWidth: 82
+                    implicitHeight: 26
+                    anchors.verticalCenter: parent.verticalCenter
                     text: "+ NEW PAT"
                     font.bold: true
                     font.pixelSize: 10
@@ -294,7 +307,7 @@ Rectangle {
             }
         }
 
-        Rectangle { width: 1; height: 22; color: theme.border }
+        Rectangle { width: 1; height: 18; color: theme.border; Layout.alignment: Qt.AlignVCenter }
 
         // Total song steps readout
         Text {
@@ -302,6 +315,7 @@ Rectangle {
             font.pixelSize: 10
             font.bold: true
             color: theme.textMuted
+            Layout.alignment: Qt.AlignVCenter
         }
     }
 }

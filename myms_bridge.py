@@ -322,7 +322,7 @@ class MymsEngine(QObject):
     def projectName(self):
         if self._current_project_path:
             return os.path.splitext(os.path.basename(self._current_project_path))[0]
-        return "Untitled"
+        return ""
 
     @pyqtProperty(float, notify=macrosChanged)
     def macroPunch(self):

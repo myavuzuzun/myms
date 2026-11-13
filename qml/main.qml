@@ -50,6 +50,7 @@ Item {
                         id: playBtn
                         implicitWidth: 72
                         implicitHeight: 26
+                        Layout.alignment: Qt.AlignVCenter
                         checkable: true
                         checked: mymsEngine ? mymsEngine.isPlaying : false
                         onClicked: if (mymsEngine) mymsEngine.togglePlay()
@@ -95,6 +96,7 @@ Item {
                         id: stopBtn
                         implicitWidth: 58
                         implicitHeight: 26
+                        Layout.alignment: Qt.AlignVCenter
                         onClicked: if (mymsEngine) mymsEngine.stop()
 
                         background: Rectangle {
@@ -117,6 +119,7 @@ Item {
                         id: loopBtn
                         implicitWidth: 58
                         implicitHeight: 26
+                        Layout.alignment: Qt.AlignVCenter
                         checkable: true
                         checked: mymsEngine ? mymsEngine.isLooping : false
                         onClicked: if (mymsEngine) mymsEngine.setLooping(!mymsEngine.isLooping)
@@ -146,6 +149,7 @@ Item {
                         id: modeBtn
                         implicitWidth: 64
                         implicitHeight: 26
+                        Layout.alignment: Qt.AlignVCenter
                         onClicked: if (mymsEngine) mymsEngine.setEditMode(!mymsEngine.isEditMode)
 
                         background: Rectangle {
@@ -173,80 +177,30 @@ Item {
                         }
                     }
 
-                    Rectangle { width: 1; height: 18; color: theme.border }
+                    Rectangle { width: 1; height: 18; color: theme.border; Layout.alignment: Qt.AlignVCenter }
 
-                    // Project Management Actions
-                    Button {
-                        id: newBtn
-                        implicitWidth: 52
-                        implicitHeight: 26
-                        onClicked: if (mymsEngine) mymsEngine.promptNewProject()
-                        background: Rectangle {
-                            color: newBtn.hovered ? theme.btnHover : theme.btnBg
-                            radius: 2
-                            border.color: theme.border
-                            border.width: 1
-                        }
-                        contentItem: Row {
-                            spacing: 3
-                            anchors.centerIn: parent
-                            Text { text: "📄"; font.pixelSize: 9 }
-                            Text { text: "NEW"; font.bold: true; font.pixelSize: 9; color: theme.textMain }
-                        }
-                        ToolTip.visible: newBtn.hovered
-                        ToolTip.text: "New Project (Ctrl+N)"
-                        ToolTip.delay: 500
+                    // Current Project Name (Blank if untitled)
+                    Text {
+                        text: mymsEngine ? mymsEngine.projectName : ""
+                        font.pixelSize: 11
+                        font.bold: true
+                        color: theme.textHeading
+                        Layout.alignment: Qt.AlignVCenter
+                        visible: text.length > 0
                     }
 
-                    Button {
-                        id: openBtn
-                        implicitWidth: 58
-                        implicitHeight: 26
-                        onClicked: if (mymsEngine) mymsEngine.promptOpenProject()
-                        background: Rectangle {
-                            color: openBtn.hovered ? theme.btnHover : theme.btnBg
-                            radius: 2
-                            border.color: theme.border
-                            border.width: 1
-                        }
-                        contentItem: Row {
-                            spacing: 3
-                            anchors.centerIn: parent
-                            Text { text: "📂"; font.pixelSize: 9 }
-                            Text { text: "OPEN"; font.bold: true; font.pixelSize: 9; color: theme.textMain }
-                        }
-                        ToolTip.visible: openBtn.hovered
-                        ToolTip.text: "Open Project (Ctrl+O)"
-                        ToolTip.delay: 500
+                    Rectangle {
+                        width: 1
+                        height: 18
+                        color: theme.border
+                        Layout.alignment: Qt.AlignVCenter
+                        visible: mymsEngine && mymsEngine.projectName.length > 0
                     }
-
-                    Button {
-                        id: saveBtn
-                        implicitWidth: 56
-                        implicitHeight: 26
-                        onClicked: if (mymsEngine) mymsEngine.promptSaveProject()
-                        background: Rectangle {
-                            color: saveBtn.hovered ? theme.btnHover : theme.btnBg
-                            radius: 2
-                            border.color: theme.border
-                            border.width: 1
-                        }
-                        contentItem: Row {
-                            spacing: 3
-                            anchors.centerIn: parent
-                            Text { text: "💾"; font.pixelSize: 9 }
-                            Text { text: "SAVE"; font.bold: true; font.pixelSize: 9; color: theme.textMain }
-                        }
-                        ToolTip.visible: saveBtn.hovered
-                        ToolTip.text: "Save Project (Ctrl+S)"
-                        ToolTip.delay: 500
-                    }
-
-                    Rectangle { width: 1; height: 18; color: theme.border }
 
                     // Base Octave Control (LMMS style)
                     RowLayout {
                         spacing: 2
+                        Layout.alignment: Qt.AlignVCenter
                         Text { text: "OCT"; font.pixelSize: 9; font.bold: true; color: theme.textMuted }
                         Rectangle {
                             width: 60
@@ -297,6 +251,7 @@ Item {
                     // BPM Control (Direct Editable Input)
                     RowLayout {
                         spacing: 2
+                        Layout.alignment: Qt.AlignVCenter
                         Text { text: "BPM"; font.pixelSize: 9; font.bold: true; color: theme.textMuted }
                         Rectangle {
                             width: 80
@@ -389,6 +344,7 @@ Item {
                     // Pattern Length (Rows)
                     RowLayout {
                         spacing: 2
+                        Layout.alignment: Qt.AlignVCenter
                         Text { text: "ROWS"; font.pixelSize: 9; font.bold: true; color: theme.textMuted }
                         Row {
                             spacing: 1
@@ -416,11 +372,12 @@ Item {
                         }
                     }
 
-                    Rectangle { width: 1; height: 18; color: theme.border }
+                    Rectangle { width: 1; height: 18; color: theme.border; Layout.alignment: Qt.AlignVCenter }
 
                     // Pattern Selector & Multi-Pattern Controls
                     RowLayout {
                         spacing: 2
+                        Layout.alignment: Qt.AlignVCenter
                         Text { text: "PAT"; font.pixelSize: 9; font.bold: true; color: theme.textMuted }
                         Rectangle {
                             width: 76
@@ -482,6 +439,7 @@ Item {
                         id: songModeBtn
                         implicitWidth: 46
                         implicitHeight: 24
+                        Layout.alignment: Qt.AlignVCenter
                         checkable: true
                         checked: mymsEngine ? mymsEngine.isSongMode : false
                         onClicked: if (mymsEngine) mymsEngine.toggleSongMode()
@@ -501,12 +459,13 @@ Item {
                         }
                     }
 
-                    Rectangle { width: 1; height: 18; color: theme.border }
+                    Rectangle { width: 1; height: 18; color: theme.border; Layout.alignment: Qt.AlignVCenter }
 
                     // Row & Track Badges
                     Rectangle {
                         height: 24
                         width: 84
+                        Layout.alignment: Qt.AlignVCenter
                         color: rowBadgeMouse.containsMouse ? theme.btnHover : theme.bgCard
                         radius: 2
                         border.color: (mymsEngine && mymsEngine.isPaused) ? theme.pauseAccent : theme.border
@@ -553,6 +512,7 @@ Item {
                     Rectangle {
                         width: 54
                         height: 24
+                        Layout.alignment: Qt.AlignVCenter
                         radius: 2
                         color: layoutMouse.containsMouse ? theme.btnHover : theme.bgCard
                         border.color: theme.border
@@ -594,7 +554,7 @@ Item {
                         }
                     }
 
-                    Rectangle { width: 1; height: 18; color: theme.border }
+                    Rectangle { width: 1; height: 18; color: theme.border; Layout.alignment: Qt.AlignVCenter }
 
                     Row {
                         spacing: 4
