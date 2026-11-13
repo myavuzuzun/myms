@@ -13,6 +13,16 @@ if [ ! -f "libmyms_audio.so" ] || [ "engine/src/audio_engine.cpp" -nt "libmyms_a
     echo "[myms] Compilation complete: libmyms_audio.so"
 fi
 
+# Compile demo plugins if not built
+if [ ! -f "plugins/vst2/demo_synth_vst2.so" ]; then
+    mkdir -p plugins/vst2
+    g++ -O3 -shared -fPIC -Iengine/include plugins/vst2/demo_synth_vst2.cpp -o plugins/vst2/demo_synth_vst2.so -lm
+fi
+if [ ! -f "plugins/clap/demo_synth_clap.clap" ]; then
+    mkdir -p plugins/clap
+    g++ -O3 -shared -fPIC -Iengine/include plugins/clap/demo_synth_clap.cpp -o plugins/clap/demo_synth_clap.clap -lm
+fi
+
 # Run myms with system Python 3 (PyQt6 + KDE Plasma integration)
 exec /usr/bin/python3 main.py "$@"
 

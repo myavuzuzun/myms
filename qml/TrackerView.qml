@@ -372,6 +372,8 @@ Rectangle {
                                         let t = parent.trkType
                                         if (t === 1) return "SF2"
                                         if (t === 2) return "DRUM"
+                                        if (t === 3) return "VST"
+                                        if (t === 4) return "CLAP"
                                         return "SYN"
                                     }
                                     font.bold: true
@@ -380,6 +382,8 @@ Rectangle {
                                         let t = parent.trkType
                                         if (t === 1) return "#92ebb5"
                                         if (t === 2) return "#f7b731"
+                                        if (t === 3) return "#ff7675"
+                                        if (t === 4) return "#a29bfe"
                                         return "#5cd6e8"
                                     }
                                 }
@@ -389,13 +393,13 @@ Rectangle {
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: {
                                         if (engine) {
-                                            let nextType = (parent.trkType + 1) % 3
+                                            let nextType = (parent.trkType + 1) % 5
                                             engine.setTrackType(index, nextType)
                                             root.gridModified()
                                         }
                                     }
                                     ToolTip.visible: containsMouse
-                                    ToolTip.text: "Track Engine: Click to cycle (SYNTH / SF2 / DRUMS)"
+                                    ToolTip.text: "Track Engine: Click to cycle (SYNTH / SF2 / DRUMS / VST2 / CLAP)"
                                     ToolTip.delay: 400
                                 }
                             }

@@ -4,6 +4,7 @@
 #include "synth_engine.h"
 #include "soundfont_player.h"
 #include "drum_sampler.h"
+#include "plugin_host.h"
 #include "macro_processor.h"
 #include "tracker_sequencer.h"
 #include <atomic>
@@ -20,7 +21,9 @@ constexpr int MAX_INSTRUMENTS = 32;
 enum TrackType {
     TRACK_TYPE_SYNTH = 0,
     TRACK_TYPE_SOUNDFONT = 1,
-    TRACK_TYPE_DRUMS = 2
+    TRACK_TYPE_DRUMS = 2,
+    TRACK_TYPE_VST2 = 3,
+    TRACK_TYPE_CLAP = 4
 };
 
 struct TrackMixerState {
@@ -155,6 +158,24 @@ public:
     std::string getDrumPadName(int pad) const;
     std::string getDrumPadFilePath(int pad) const;
 
+    // Plugin Host Controls (VST2 & CLAP)
+    bool loadTrackPlugin(int track, const std::string& path);
+    void unloadTrackPlugin(int track);
+    bool isTrackPluginLoaded(int track) const;
+    std::string getTrackPluginName(int track) const;
+    std::string getTrackPluginVendor(int track) const;
+    std::string getTrackPluginPath(int track) const;
+    int getTrackPluginFormat(int track) const;
+    int getTrackPluginNumParams(int track) const;
+    std::string getTrackPluginParamName(int track, int paramIdx) const;
+    std::string getTrackPluginParamDisplay(int track, int paramIdx) const;
+    std::string getTrackPluginParamLabel(int track, int paramIdx) const;
+    float getTrackPluginParamValue(int track, int paramIdx) const;
+    void setTrackPluginParamValue(int track, int paramIdx, float val);
+    bool hasTrackPluginNativeEditor(int track) const;
+    bool openTrackPluginNativeEditor(int track, void* parentWindow);
+    void closeTrackPluginNativeEditor(int track);
+
     // Pattern & Song Management
     int getNumPatterns() const;
     int getCurrentPattern() const;
@@ -207,6 +228,7 @@ private:
 
     SoundFontPlayer m_soundfont;
     DrumSampler m_drumSampler;
+    std::vector<std::unique_ptr<PluginInstance>> m_plugins;
 
     MacroProcessor m_macros;
     TrackerSequencer m_sequencer;

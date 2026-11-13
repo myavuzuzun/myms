@@ -151,6 +151,8 @@ bool AudioEngine::init(int sampleRate, int bufferSize) {
     m_trackTypes.push_back(TRACK_TYPE_SYNTH);
     m_trackMixers.clear();
     m_trackMixers.emplace_back();
+    m_plugins.clear();
+    m_plugins.emplace_back(std::make_unique<PluginInstance>());
 
     setupInitialInstruments();
 
@@ -258,6 +260,7 @@ void AudioEngine::addTrack() {
     m_instruments.back().init(m_sampleRate);
     m_trackTypes.push_back(TRACK_TYPE_SYNTH);
     m_trackMixers.emplace_back();
+    m_plugins.emplace_back(std::make_unique<PluginInstance>());
 
     // Initialize with default synth patch
     SynthParams p = m_instruments[0].getParams();
@@ -275,6 +278,9 @@ void AudioEngine::removeTrack(int trackIdx) {
     if (trackIdx < static_cast<int>(m_trackMixers.size())) {
         m_trackMixers.erase(m_trackMixers.begin() + trackIdx);
     }
+    if (trackIdx < static_cast<int>(m_plugins.size())) {
+        m_plugins.erase(m_plugins.begin() + trackIdx);
+    }
     m_sequencer.removeTrack(trackIdx);
 }
 
@@ -284,10 +290,10 @@ int AudioEngine::getNumInstruments() const {
 
 void AudioEngine::setTrackType(int track, int type) {
     if (track >= 0 && track < static_cast<int>(m_trackMixers.size())) {
-        m_trackMixers[track].type = std::clamp(type, 0, 2);
+        m_trackMixers[track].type = std::clamp(type, 0, 4);
     }
     if (track >= 0 && track < static_cast<int>(m_trackTypes.size())) {
-        m_trackTypes[track] = std::clamp(type, 0, 2);
+        m_trackTypes[track] = std::clamp(type, 0, 4);
     }
 }
 
@@ -421,6 +427,10 @@ void AudioEngine::noteOn(int inst, int note, float velocity) {
     } else if (type == TRACK_TYPE_DRUMS) {
         int pad = (note >= 36 && note <= 43) ? (note - 36) : (note % NUM_DRUM_PADS);
         m_drumSampler.triggerPad(pad, velocity);
+    } else if (type == TRACK_TYPE_VST2 || type == TRACK_TYPE_CLAP) {
+        if (inst >= 0 && inst < static_cast<int>(m_plugins.size()) && m_plugins[inst]) {
+            m_plugins[inst]->noteOn(note, velocity);
+        }
     } else {
         if (inst >= 0 && inst < static_cast<int>(m_instruments.size())) {
             m_instruments[inst].noteOn(note, velocity);
@@ -434,6 +444,10 @@ void AudioEngine::noteOff(int inst, int note) {
         m_soundfont.noteOff(inst, note);
     } else if (type == TRACK_TYPE_DRUMS) {
         // One-shot drum hits decay naturally
+    } else if (type == TRACK_TYPE_VST2 || type == TRACK_TYPE_CLAP) {
+        if (inst >= 0 && inst < static_cast<int>(m_plugins.size()) && m_plugins[inst]) {
+            m_plugins[inst]->noteOff(note);
+        }
     } else {
         if (inst >= 0 && inst < static_cast<int>(m_instruments.size())) {
             m_instruments[inst].noteOff(note);
@@ -447,6 +461,9 @@ void AudioEngine::allNotesOff() {
     }
     m_soundfont.allNotesOff();
     m_drumSampler.allNotesOff();
+    for (size_t i = 0; i < m_plugins.size(); ++i) {
+        if (m_plugins[i]) m_plugins[i]->allNotesOff();
+    }
 }
 
 void AudioEngine::setInstrumentOsc1(int inst, int wave) {
@@ -763,6 +780,10 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
                 if (cell.note == NOTE_OFF) {
                     if (type == TRACK_TYPE_SOUNDFONT) {
                         m_soundfont.noteOff(t, cell.note);
+                    } else if (type == TRACK_TYPE_VST2 || type == TRACK_TYPE_CLAP) {
+                        if (t < static_cast<int>(m_plugins.size()) && m_plugins[t]) {
+                            m_plugins[t]->noteOff(cell.note);
+                        }
                     } else if (type == TRACK_TYPE_SYNTH && t < static_cast<int>(m_instruments.size())) {
                         m_instruments[t].noteOff(cell.note);
                     }
@@ -776,6 +797,10 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
                     } else if (type == TRACK_TYPE_DRUMS) {
                         int pad = (cell.note >= 36 && cell.note <= 43) ? (cell.note - 36) : (cell.note % NUM_DRUM_PADS);
                         m_drumSampler.triggerPad(pad, vel);
+                    } else if (type == TRACK_TYPE_VST2 || type == TRACK_TYPE_CLAP) {
+                        if (t < static_cast<int>(m_plugins.size()) && m_plugins[t]) {
+                            m_plugins[t]->noteOn(cell.note, vel);
+                        }
                     } else {
                         if (cell.effectType == 0x10 && t < static_cast<int>(m_instruments.size())) {
                             float cutoff = 150.0f + (cell.effectParam / 255.0f) * 10000.0f;
@@ -855,7 +880,31 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
             }
         }
 
-        // 4. Smart Macros & Master Soft Limiter
+        // 4. Process VST2 / CLAP plugins
+        for (int t = 0; t < numTracks && t < static_cast<int>(m_plugins.size()) && t < static_cast<int>(m_trackMixers.size()); ++t) {
+            if ((m_trackMixers[t].type == TRACK_TYPE_VST2 || m_trackMixers[t].type == TRACK_TYPE_CLAP) && m_plugins[t]->isLoaded()) {
+                float plgL = 0.0f, plgR = 0.0f;
+                m_plugins[t]->processSample(plgL, plgR);
+
+                bool audible = anySolo ? m_trackMixers[t].solo : !m_trackMixers[t].mute;
+                float effVol = audible ? m_trackMixers[t].volume : 0.0f;
+                float pan = m_trackMixers[t].pan;
+                float panL = (pan <= 0.5f) ? 1.0f : (1.0f - pan) * 2.0f;
+                float panR = (pan >= 0.5f) ? 1.0f : pan * 2.0f;
+
+                plgL *= effVol * panL;
+                plgR *= effVol * panR;
+                sL += plgL;
+                sR += plgR;
+
+                float absL = std::abs(plgL);
+                float absR = std::abs(plgR);
+                if (absL > trkPeakL[t]) trkPeakL[t] = absL;
+                if (absR > trkPeakR[t]) trkPeakR[t] = absR;
+            }
+        }
+
+        // 5. Smart Macros & Master Soft Limiter
         m_macros.processSample(sL, sR);
         MacroProcessor::masterBusProcess(sL, sR);
 
@@ -888,6 +937,127 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
 
     float rms = std::sqrt(sumSq / std::max(1, frameCount));
     m_rms.store(rms, std::memory_order_relaxed);
+}
+
+// ==========================================
+// Plugin Host Control Implementations
+// ==========================================
+bool AudioEngine::loadTrackPlugin(int track, const std::string& path) {
+    if (track < 0 || track >= static_cast<int>(m_plugins.size())) return false;
+    bool ok = m_plugins[track]->load(path, m_sampleRate, 256);
+    if (ok) {
+        if (m_plugins[track]->getFormat() == PLUGIN_FORMAT_VST2) {
+            setTrackType(track, TRACK_TYPE_VST2);
+        } else if (m_plugins[track]->getFormat() == PLUGIN_FORMAT_CLAP) {
+            setTrackType(track, TRACK_TYPE_CLAP);
+        }
+    }
+    return ok;
+}
+
+void AudioEngine::unloadTrackPlugin(int track) {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        m_plugins[track]->unload();
+    }
+}
+
+bool AudioEngine::isTrackPluginLoaded(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        return m_plugins[track]->isLoaded();
+    }
+    return false;
+}
+
+std::string AudioEngine::getTrackPluginName(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        return m_plugins[track]->getName();
+    }
+    return "";
+}
+
+std::string AudioEngine::getTrackPluginVendor(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        return m_plugins[track]->getVendor();
+    }
+    return "";
+}
+
+std::string AudioEngine::getTrackPluginPath(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        return m_plugins[track]->getPath();
+    }
+    return "";
+}
+
+int AudioEngine::getTrackPluginFormat(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        return static_cast<int>(m_plugins[track]->getFormat());
+    }
+    return 0;
+}
+
+int AudioEngine::getTrackPluginNumParams(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        return m_plugins[track]->getNumParams();
+    }
+    return 0;
+}
+
+std::string AudioEngine::getTrackPluginParamName(int track, int paramIdx) const {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        const PluginParamInfo* info = m_plugins[track]->getParamInfo(paramIdx);
+        if (info) return info->name;
+    }
+    return "";
+}
+
+std::string AudioEngine::getTrackPluginParamDisplay(int track, int paramIdx) const {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        const PluginParamInfo* info = m_plugins[track]->getParamInfo(paramIdx);
+        if (info) return info->display;
+    }
+    return "";
+}
+
+std::string AudioEngine::getTrackPluginParamLabel(int track, int paramIdx) const {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        const PluginParamInfo* info = m_plugins[track]->getParamInfo(paramIdx);
+        if (info) return info->label;
+    }
+    return "";
+}
+
+float AudioEngine::getTrackPluginParamValue(int track, int paramIdx) const {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        return m_plugins[track]->getParamValue(paramIdx);
+    }
+    return 0.0f;
+}
+
+void AudioEngine::setTrackPluginParamValue(int track, int paramIdx, float val) {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        m_plugins[track]->setParamValue(paramIdx, val);
+    }
+}
+
+bool AudioEngine::hasTrackPluginNativeEditor(int track) const {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        return m_plugins[track]->hasNativeEditor();
+    }
+    return false;
+}
+
+bool AudioEngine::openTrackPluginNativeEditor(int track, void* parentWindow) {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        return m_plugins[track]->openNativeEditor(parentWindow);
+    }
+    return false;
+}
+
+void AudioEngine::closeTrackPluginNativeEditor(int track) {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        m_plugins[track]->closeNativeEditor();
+    }
 }
 
 } // namespace myms

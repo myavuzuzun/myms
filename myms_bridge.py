@@ -38,6 +38,11 @@ class MymsEngine(QObject):
     songOrderChanged = pyqtSignal()
     songOrderIndexChanged = pyqtSignal(int)
 
+    # Phase 3 Signals (VST2 & CLAP Plugin Host)
+    trackPluginChanged = pyqtSignal(int)
+    trackPluginParamsChanged = pyqtSignal(int)
+    requestOpenPluginDialog = pyqtSignal(int)
+
     def _detect_system_keyboard_layout(self):
         try:
             if os.path.exists("/etc/default/keyboard"):
@@ -203,6 +208,31 @@ class MymsEngine(QObject):
         self.lib.myms_drum_get_reverse.restype = ctypes.c_bool
         self.lib.myms_drum_get_name.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
         self.lib.myms_drum_get_filepath.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+
+        # Plugin Host (VST2 & CLAP)
+        self.lib.myms_plugin_load.argtypes = [ctypes.c_int, ctypes.c_char_p]
+        self.lib.myms_plugin_load.restype = ctypes.c_bool
+        self.lib.myms_plugin_unload.argtypes = [ctypes.c_int]
+        self.lib.myms_plugin_is_loaded.argtypes = [ctypes.c_int]
+        self.lib.myms_plugin_is_loaded.restype = ctypes.c_bool
+        self.lib.myms_plugin_get_name.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.lib.myms_plugin_get_vendor.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.lib.myms_plugin_get_path.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.lib.myms_plugin_get_format.argtypes = [ctypes.c_int]
+        self.lib.myms_plugin_get_format.restype = ctypes.c_int
+        self.lib.myms_plugin_get_num_params.argtypes = [ctypes.c_int]
+        self.lib.myms_plugin_get_num_params.restype = ctypes.c_int
+        self.lib.myms_plugin_get_param_name.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.lib.myms_plugin_get_param_display.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.lib.myms_plugin_get_param_label.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.lib.myms_plugin_get_param_value.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_plugin_get_param_value.restype = ctypes.c_float
+        self.lib.myms_plugin_set_param_value.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_float]
+        self.lib.myms_plugin_has_native_editor.argtypes = [ctypes.c_int]
+        self.lib.myms_plugin_has_native_editor.restype = ctypes.c_bool
+        self.lib.myms_plugin_open_native_editor.argtypes = [ctypes.c_int, ctypes.c_void_p]
+        self.lib.myms_plugin_open_native_editor.restype = ctypes.c_bool
+        self.lib.myms_plugin_close_native_editor.argtypes = [ctypes.c_int]
 
         # Pattern & Song Sequencer
         self.lib.myms_get_num_patterns.restype = ctypes.c_int
@@ -678,6 +708,103 @@ class MymsEngine(QObject):
         self.currentPatternChanged.emit(cur_pat)
         self.gridCellChanged.emit(0, 0)
 
+    # ==========================================
+    # Phase 3: Linux VST2 & CLAP Plugin Host API
+    # ==========================================
+    @pyqtSlot(int, str, result=bool)
+    def loadTrackPlugin(self, track, filepath):
+        if not filepath or not os.path.exists(filepath):
+            return False
+        ok = self.lib.myms_plugin_load(track, filepath.encode('utf-8'))
+        if ok:
+            new_type = self.lib.myms_get_track_type(track)
+            self.trackTypeChanged.emit(track, new_type)
+            self.trackPluginChanged.emit(track)
+            self.trackPluginParamsChanged.emit(track)
+            print(f"[myms] Loaded plugin on track {track}: {self.getTrackPluginName(track)} ({self.getTrackPluginFormatName(track)})")
+        return ok
+
+    @pyqtSlot(int)
+    def unloadTrackPlugin(self, track):
+        self.lib.myms_plugin_unload(track)
+        self.trackPluginChanged.emit(track)
+        self.trackPluginParamsChanged.emit(track)
+
+    @pyqtSlot(int, result=bool)
+    def isTrackPluginLoaded(self, track):
+        return bool(self.lib.myms_plugin_is_loaded(track))
+
+    @pyqtSlot(int, result=str)
+    def getTrackPluginName(self, track):
+        buf = ctypes.create_string_buffer(64)
+        self.lib.myms_plugin_get_name(track, buf, 64)
+        return buf.value.decode('utf-8', errors='ignore')
+
+    @pyqtSlot(int, result=str)
+    def getTrackPluginVendor(self, track):
+        buf = ctypes.create_string_buffer(64)
+        self.lib.myms_plugin_get_vendor(track, buf, 64)
+        return buf.value.decode('utf-8', errors='ignore')
+
+    @pyqtSlot(int, result=str)
+    def getTrackPluginPath(self, track):
+        buf = ctypes.create_string_buffer(512)
+        self.lib.myms_plugin_get_path(track, buf, 512)
+        return buf.value.decode('utf-8', errors='ignore')
+
+    @pyqtSlot(int, result=int)
+    def getTrackPluginFormat(self, track):
+        return self.lib.myms_plugin_get_format(track)
+
+    @pyqtSlot(int, result=str)
+    def getTrackPluginFormatName(self, track):
+        fmt = self.lib.myms_plugin_get_format(track)
+        if fmt == 1:
+            return "VST2"
+        elif fmt == 2:
+            return "CLAP"
+        return "None"
+
+    @pyqtSlot(int, result=int)
+    def getTrackPluginNumParams(self, track):
+        return self.lib.myms_plugin_get_num_params(track)
+
+    @pyqtSlot(int, result='QVariantList')
+    def getTrackPluginParams(self, track):
+        n = self.lib.myms_plugin_get_num_params(track)
+        res = []
+        name_buf = ctypes.create_string_buffer(32)
+        disp_buf = ctypes.create_string_buffer(32)
+        lbl_buf = ctypes.create_string_buffer(32)
+        for i in range(n):
+            self.lib.myms_plugin_get_param_name(track, i, name_buf, 32)
+            self.lib.myms_plugin_get_param_display(track, i, disp_buf, 32)
+            self.lib.myms_plugin_get_param_label(track, i, lbl_buf, 32)
+            val = self.lib.myms_plugin_get_param_value(track, i)
+            p_name = name_buf.value.decode('utf-8', errors='ignore')
+            p_disp = disp_buf.value.decode('utf-8', errors='ignore')
+            p_lbl = lbl_buf.value.decode('utf-8', errors='ignore')
+            res.append({
+                "id": i,
+                "name": p_name if p_name else f"Param {i+1}",
+                "display": p_disp,
+                "label": p_lbl,
+                "value": float(val)
+            })
+        return res
+
+    @pyqtSlot(int, int, float)
+    def setTrackPluginParamValue(self, track, param_idx, val):
+        self.lib.myms_plugin_set_param_value(track, param_idx, ctypes.c_float(val))
+
+    @pyqtSlot(int, result=bool)
+    def hasTrackPluginNativeEditor(self, track):
+        return bool(self.lib.myms_plugin_has_native_editor(track))
+
+    @pyqtSlot(int)
+    def promptOpenPlugin(self, track):
+        self.requestOpenPluginDialog.emit(track)
+
     @pyqtSlot(int)
     def setSongOrderIndex(self, step):
         self.lib.myms_set_song_order_index(step)
@@ -958,7 +1085,7 @@ class MymsEngine(QObject):
         try:
             import json
             data = {
-                "format_version": 2,
+                "format_version": 3,
                 "app": "myms",
                 "bpm": self.bpm,
                 "num_rows": self.numRows,
@@ -1008,6 +1135,8 @@ class MymsEngine(QObject):
                     "mute": self.getTrackMute(t),
                     "solo": self.getTrackSolo(t),
                     "sf2_preset": self.getTrackSf2Preset(t),
+                    "plugin_path": self.getTrackPluginPath(t) if self.isTrackPluginLoaded(t) else "",
+                    "plugin_params": [param["value"] for param in self.getTrackPluginParams(t)] if self.isTrackPluginLoaded(t) else [],
                     "synth": {
                         "osc1_wave": p.get("osc1", 0),
                         "osc2_wave": p.get("osc2", 1),
@@ -1145,6 +1274,11 @@ class MymsEngine(QObject):
                     self.setTrackSolo(t, bool(trk["solo"]))
                 if "sf2_preset" in trk:
                     self.setTrackSf2Preset(t, int(trk["sf2_preset"]))
+                if "plugin_path" in trk and trk["plugin_path"] and os.path.exists(trk["plugin_path"]):
+                    self.loadTrackPlugin(t, trk["plugin_path"])
+                    p_vals = trk.get("plugin_params", [])
+                    for p_idx, val in enumerate(p_vals):
+                        self.setTrackPluginParamValue(t, p_idx, float(val))
 
                 synth = trk.get("synth", {})
                 if "osc1_wave" in synth: self.setInstOsc1(t, synth["osc1_wave"])
@@ -1217,6 +1351,8 @@ class MymsEngine(QObject):
     def newProject(self):
         self.stop()
         self.clearAllTracks()
+        for t in range(self.numTracks):
+            self.unloadTrackPlugin(t)
         while self.numTracks > 1:
             self.removeTrack(self.numTracks - 1)
         while self.numPatterns > 1:

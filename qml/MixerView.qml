@@ -106,6 +106,11 @@ Rectangle {
                         function onTrackTypeChanged(t, type) {
                             if (t === strip.trackIdx) strip.trackType = type
                         }
+                        function onTrackPluginChanged(t) {
+                            if (t === strip.trackIdx || t === -1) {
+                                strip.trackType = engine.getTrackType(strip.trackIdx)
+                            }
+                        }
                         function onProjectLoaded() {
                             strip.trackType = engine ? engine.getTrackType(strip.trackIdx) : 0
                             strip.trackVol = engine ? engine.getTrackVolume(strip.trackIdx) : 1.0
@@ -186,6 +191,8 @@ Rectangle {
                                     text: {
                                         if (strip.trackType === 1) return "🎻 SOUNDFONT"
                                         if (strip.trackType === 2) return "🥁 BEATPAD"
+                                        if (strip.trackType === 3) return "🎛️ VST2 PLUGIN"
+                                        if (strip.trackType === 4) return "🔌 CLAP PLUGIN"
                                         return "🎹 AURASYNTH"
                                     }
                                     font.bold: true
@@ -193,6 +200,8 @@ Rectangle {
                                     color: {
                                         if (strip.trackType === 1) return "#92ebb5"
                                         if (strip.trackType === 2) return "#f7b731"
+                                        if (strip.trackType === 3) return "#ff7675"
+                                        if (strip.trackType === 4) return "#a29bfe"
                                         return theme.accent
                                     }
                                 }
@@ -233,6 +242,28 @@ Rectangle {
                                     text: "🥁 BeatPad (8-Slot Sampler)"
                                     onTriggered: if (engine) engine.setTrackType(strip.trackIdx, 2)
                                 }
+                                MenuItem {
+                                    text: "🎛️ Linux VST2 (.so Plugin)"
+                                    onTriggered: {
+                                        if (engine) {
+                                            engine.setTrackType(strip.trackIdx, 3)
+                                            if (!engine.isTrackPluginLoaded(strip.trackIdx)) {
+                                                engine.promptOpenPlugin(strip.trackIdx)
+                                            }
+                                        }
+                                    }
+                                }
+                                MenuItem {
+                                    text: "🔌 CLAP (.clap Plugin)"
+                                    onTriggered: {
+                                        if (engine) {
+                                            engine.setTrackType(strip.trackIdx, 4)
+                                            if (!engine.isTrackPluginLoaded(strip.trackIdx)) {
+                                                engine.promptOpenPlugin(strip.trackIdx)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -272,6 +303,54 @@ Rectangle {
                                 }
                                 ToolTip.visible: containsMouse
                                 ToolTip.text: "Click to choose SoundFont Preset"
+                                ToolTip.delay: 400
+                            }
+                        }
+
+                        // 3b. Plugin Quick Display (Visible when VST2 or CLAP is active)
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 20
+                            color: plgMouse.containsMouse ? theme.btnHover : theme.bgCard
+                            radius: 2
+                            border.color: (engine && engine.isTrackPluginLoaded(strip.trackIdx)) ? theme.accent : theme.border
+                            visible: (strip.trackType === 3 || strip.trackType === 4)
+
+                            Text {
+                                anchors.fill: parent
+                                anchors.leftMargin: 4
+                                anchors.rightMargin: 4
+                                text: {
+                                    if (!engine || !engine.isTrackPluginLoaded(strip.trackIdx)) return "+ LOAD PLUGIN..."
+                                    let name = engine.getTrackPluginName(strip.trackIdx)
+                                    let fmt = engine.getTrackPluginFormatName(strip.trackIdx)
+                                    return fmt + ": " + (name ? name : "Plugin")
+                                }
+                                font.pixelSize: 9
+                                font.bold: true
+                                color: (engine && engine.isTrackPluginLoaded(strip.trackIdx)) ? theme.textHeading : theme.accent
+                                elide: Text.ElideRight
+                                verticalAlignment: Text.AlignVCenter
+                                horizontalAlignment: Text.AlignHCenter
+                            }
+
+                            MouseArea {
+                                id: plgMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    if (engine) {
+                                        engine.setSelectedInstrument(strip.trackIdx)
+                                        if (!engine.isTrackPluginLoaded(strip.trackIdx)) {
+                                            engine.promptOpenPlugin(strip.trackIdx)
+                                        } else {
+                                            root.requestEditInstrument(strip.trackIdx, strip.trackType)
+                                        }
+                                    }
+                                }
+                                ToolTip.visible: containsMouse
+                                ToolTip.text: "Click to configure plugin"
                                 ToolTip.delay: 400
                             }
                         }

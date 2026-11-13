@@ -433,3 +433,87 @@ void myms_transpose_track(int track, int semitones) {
 void myms_load_demo() {
     myms::AudioEngine::instance().loadDemoGroove();
 }
+
+// Plugin Host (VST2 & CLAP)
+bool myms_plugin_load(int track, const char* filepath) {
+    if (!filepath) return false;
+    return myms::AudioEngine::instance().loadTrackPlugin(track, filepath);
+}
+
+void myms_plugin_unload(int track) {
+    myms::AudioEngine::instance().unloadTrackPlugin(track);
+}
+
+bool myms_plugin_is_loaded(int track) {
+    return myms::AudioEngine::instance().isTrackPluginLoaded(track);
+}
+
+void myms_plugin_get_name(int track, char* out_name, int max_len) {
+    if (!out_name || max_len <= 0) return;
+    std::string name = myms::AudioEngine::instance().getTrackPluginName(track);
+    std::strncpy(out_name, name.c_str(), max_len - 1);
+    out_name[max_len - 1] = '\0';
+}
+
+void myms_plugin_get_vendor(int track, char* out_vendor, int max_len) {
+    if (!out_vendor || max_len <= 0) return;
+    std::string vendor = myms::AudioEngine::instance().getTrackPluginVendor(track);
+    std::strncpy(out_vendor, vendor.c_str(), max_len - 1);
+    out_vendor[max_len - 1] = '\0';
+}
+
+void myms_plugin_get_path(int track, char* out_path, int max_len) {
+    if (!out_path || max_len <= 0) return;
+    std::string path = myms::AudioEngine::instance().getTrackPluginPath(track);
+    std::strncpy(out_path, path.c_str(), max_len - 1);
+    out_path[max_len - 1] = '\0';
+}
+
+int myms_plugin_get_format(int track) {
+    return myms::AudioEngine::instance().getTrackPluginFormat(track);
+}
+
+int myms_plugin_get_num_params(int track) {
+    return myms::AudioEngine::instance().getTrackPluginNumParams(track);
+}
+
+void myms_plugin_get_param_name(int track, int param_idx, char* out_name, int max_len) {
+    if (!out_name || max_len <= 0) return;
+    std::string name = myms::AudioEngine::instance().getTrackPluginParamName(track, param_idx);
+    std::strncpy(out_name, name.c_str(), max_len - 1);
+    out_name[max_len - 1] = '\0';
+}
+
+void myms_plugin_get_param_display(int track, int param_idx, char* out_display, int max_len) {
+    if (!out_display || max_len <= 0) return;
+    std::string display = myms::AudioEngine::instance().getTrackPluginParamDisplay(track, param_idx);
+    std::strncpy(out_display, display.c_str(), max_len - 1);
+    out_display[max_len - 1] = '\0';
+}
+
+void myms_plugin_get_param_label(int track, int param_idx, char* out_label, int max_len) {
+    if (!out_label || max_len <= 0) return;
+    std::string label = myms::AudioEngine::instance().getTrackPluginParamLabel(track, param_idx);
+    std::strncpy(out_label, label.c_str(), max_len - 1);
+    out_label[max_len - 1] = '\0';
+}
+
+float myms_plugin_get_param_value(int track, int param_idx) {
+    return myms::AudioEngine::instance().getTrackPluginParamValue(track, param_idx);
+}
+
+void myms_plugin_set_param_value(int track, int param_idx, float val) {
+    myms::AudioEngine::instance().setTrackPluginParamValue(track, param_idx, val);
+}
+
+bool myms_plugin_has_native_editor(int track) {
+    return myms::AudioEngine::instance().hasTrackPluginNativeEditor(track);
+}
+
+bool myms_plugin_open_native_editor(int track, void* parent_window) {
+    return myms::AudioEngine::instance().openTrackPluginNativeEditor(track, parent_window);
+}
+
+void myms_plugin_close_native_editor(int track) {
+    myms::AudioEngine::instance().closeTrackPluginNativeEditor(track);
+}

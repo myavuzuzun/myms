@@ -21,6 +21,7 @@ class AppWindow(QMainWindow):
         self.engine.requestSaveProject.connect(self._on_save_project)
         self.engine.requestSaveProjectAs.connect(self._on_save_project_as)
         self.engine.requestNewProject.connect(self._on_new_project)
+        self.engine.requestOpenPluginDialog.connect(self._on_open_plugin_dialog)
 
         # Setup standard Qt native QMenuBar (100% KDE Global Menu compatible)
         self._setup_native_menu()
@@ -214,6 +215,16 @@ class AppWindow(QMainWindow):
             if not file_path.endswith(".myms"):
                 file_path += ".myms"
             self.engine.saveProject(file_path)
+
+    def _on_open_plugin_dialog(self, track):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            f"Load Plugin for Track #{track+1}",
+            os.path.abspath("plugins"),
+            "Linux Audio Plugins (*.so *.clap);;All Files (*)"
+        )
+        if file_path:
+            self.engine.loadTrackPlugin(track, file_path)
 
     def closeEvent(self, event):
         self.engine.close()
