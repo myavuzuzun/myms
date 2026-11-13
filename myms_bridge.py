@@ -162,6 +162,8 @@ class MymsEngine(QObject):
 
         self.lib.myms_note_on_inst.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_float]
         self.lib.myms_note_off_inst.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_all_notes_off.argtypes = []
+        self.lib.myms_all_notes_off.restype = None
 
         self.lib.myms_set_inst_osc1.argtypes = [ctypes.c_int, ctypes.c_int]
         self.lib.myms_set_inst_osc2.argtypes = [ctypes.c_int, ctypes.c_int]
@@ -824,6 +826,12 @@ class MymsEngine(QObject):
             })
         return res
 
+    @pyqtSlot(int, int, result=str)
+    def getTrackPluginParamDisplay(self, track, param_idx):
+        buf = ctypes.create_string_buffer(32)
+        self.lib.myms_plugin_get_param_display(track, param_idx, buf, 32)
+        return buf.value.decode('utf-8', errors='ignore')
+
     @pyqtSlot(int, int, float)
     def setTrackPluginParamValue(self, track, param_idx, val):
         self.lib.myms_plugin_set_param_value(track, param_idx, ctypes.c_float(val))
@@ -1019,8 +1027,17 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, str)
     def setInstrumentName(self, inst, name):
-        if not name:
-            name = f"Synth {inst + 1}"
+        if not name or not name.strip():
+            trk_type = self.getTrackType(inst)
+            if trk_type == 1:
+                name = f"SoundFont {inst + 1}"
+            elif trk_type == 2:
+                name = f"BeatPad {inst + 1}"
+            elif trk_type == 3:
+                name = f"Plugin {inst + 1}"
+            else:
+                name = f"Synth {inst + 1}"
+        name = name.strip()
         self.lib.myms_set_inst_name(inst, name.encode('utf-8'))
         self.instrumentNameChanged.emit(inst, name)
 
@@ -1029,11 +1046,15 @@ class MymsEngine(QObject):
         self._is_paused = False
         self.pausedChanged.emit(False)
         self.lib.myms_play()
+        self._is_playing = bool(self.lib.myms_is_playing())
+        self.playingChanged.emit(self._is_playing)
 
     @pyqtSlot()
     def pause(self):
         self.lib.myms_pause()
         self._is_paused = True
+        self._is_playing = False
+        self.playingChanged.emit(False)
         self._current_row = self.lib.myms_get_current_row()
         self.pausedChanged.emit(True)
         self.currentRowChanged.emit(self._current_row)
@@ -1049,6 +1070,8 @@ class MymsEngine(QObject):
     def stop(self):
         self.lib.myms_stop()
         self._is_paused = False
+        self._is_playing = False
+        self.playingChanged.emit(False)
         self._current_row = 0
         self.pausedChanged.emit(False)
         self.currentRowChanged.emit(0)
@@ -1119,6 +1142,10 @@ class MymsEngine(QObject):
     @pyqtSlot(int, int)
     def noteOffInst(self, inst, note):
         self.lib.myms_note_off_inst(inst, note)
+
+    @pyqtSlot()
+    def allNotesOff(self):
+        self.lib.myms_all_notes_off()
 
     @pyqtSlot(int, int)
     def setInstOsc1(self, inst, wave):

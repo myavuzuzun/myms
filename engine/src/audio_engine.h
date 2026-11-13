@@ -258,6 +258,9 @@ private:
     std::atomic<int> m_uiCurrentRow{0};
     std::atomic<int> m_uiCurrentPattern{0};
     std::atomic<int> m_uiSongOrderIndex{0};
+
+    bool m_wasPlaying = false;
+    std::array<int, MAX_INSTRUMENTS> m_previewCountdowns{};
 };
 
 } // namespace myms

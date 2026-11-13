@@ -50,7 +50,7 @@ def test_plugins():
     ok_clap = engine.loadTrackPlugin(1, clap_path)
     assert ok_clap, "Should load CLAP plugin on Track 1"
     assert engine.isTrackPluginLoaded(1)
-    assert engine.getTrackType(1) == 4 # TRACK_TYPE_CLAP
+    assert engine.getTrackType(1) == 3 # TRACK_TYPE_PLUGIN
     assert engine.getTrackPluginFormatName(1) == "CLAP"
     assert engine.getTrackPluginName(1) == "DemoSynth CLAP"
     assert engine.getTrackPluginNumParams(1) == 4
@@ -99,7 +99,7 @@ def test_plugins():
         assert abs(p0[0]["value"] - 0.85) < 0.02, f"Expected 0.85, got {p0[0]['value']}"
 
         assert engine.isTrackPluginLoaded(1)
-        assert engine.getTrackType(1) == 4
+        assert engine.getTrackType(1) == 3 # TRACK_TYPE_PLUGIN
         assert engine.getTrackPluginName(1) == "DemoSynth CLAP"
         p1 = engine.getTrackPluginParams(1)
         assert abs(p1[1]["value"] - 0.70) < 0.02, f"Expected 0.70, got {p1[1]['value']}"

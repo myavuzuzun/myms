@@ -240,6 +240,17 @@ public:
         }
     }
 
+    // Render a single SoundFont channel into buffer (sample-by-sample for per-track FX and mixer)
+    inline void processChannelSample(int channel, float& outL, float& outR) {
+        tsf* f = m_tsf.load(std::memory_order_acquire);
+        if (!f) return;
+        float buf[2] = {0.0f, 0.0f};
+        tsf_render_channel_float(f, channel, buf, 1, 0);
+        float master = m_masterVolume.load(std::memory_order_relaxed);
+        outL += buf[0] * master;
+        outR += buf[1] * master;
+    }
+
     // Render all active SoundFont channels into interleaved stereo buffer
     inline void processSample(float& outL, float& outR) {
         tsf* f = m_tsf.load(std::memory_order_acquire);

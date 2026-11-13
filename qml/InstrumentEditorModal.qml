@@ -19,8 +19,20 @@ Item {
         targetTrack = track
         trackType = type
         if (engine) engine.setSelectedInstrument(track)
+        if (modalTrackNameInput && engine) {
+            modalTrackNameInput.text = engine.getInstrumentName(track)
+        }
         isOpen = true
         root.forceActiveFocus()
+    }
+
+    Connections {
+        target: engine
+        function onInstrumentNameChanged(inst, name) {
+            if (inst === root.targetTrack && modalTrackNameInput) {
+                modalTrackNameInput.text = name
+            }
+        }
     }
 
     function close() {
@@ -86,17 +98,48 @@ Item {
                     }
 
                     Text {
-                        text: {
-                            let trackName = engine ? engine.getInstrumentName(root.targetTrack) : "Track"
-                            let engineName = "Polyphonic Subtractive Synth (AuraSynth)"
-                            if (root.trackType === 1) engineName = "SoundFont Player (FontBox)"
-                            else if (root.trackType === 2) engineName = "8-Slot Drum Sampler (BeatPad)"
-                            else if (root.trackType === 3) engineName = "Plugin Instrument (VST3 / CLAP / VST2)"
-                            return "EDITING TRACK #" + (root.targetTrack + 1) + ": " + trackName + " — " + engineName
-                        }
+                        text: "TRACK #" + (root.targetTrack + 1) + ":"
                         font.bold: true
                         font.pixelSize: 12
                         color: theme.textHeading
+                    }
+
+                    Rectangle {
+                        width: 140
+                        height: 24
+                        radius: 3
+                        color: theme.bgWell
+                        border.color: modalTrackNameInput.activeFocus ? theme.accent : theme.border
+
+                        TextInput {
+                            id: modalTrackNameInput
+                            anchors.fill: parent
+                            anchors.leftMargin: 6
+                            anchors.rightMargin: 6
+                            verticalAlignment: TextInput.AlignVCenter
+                            text: engine ? engine.getInstrumentName(root.targetTrack) : "Track"
+                            font.bold: true
+                            font.pixelSize: 11
+                            color: theme.textHeading
+                            selectByMouse: true
+                            clip: true
+                            onEditingFinished: {
+                                if (engine && text.trim().length > 0) {
+                                    engine.setInstrumentName(root.targetTrack, text.trim())
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: {
+                            if (root.trackType === 1) return "— SoundFont Player (FontBox)"
+                            if (root.trackType === 2) return "— 8-Slot Drum Sampler (BeatPad)"
+                            if (root.trackType === 3) return "— Plugin Instrument (VST3 / CLAP / VST2)"
+                            return "— Polyphonic Subtractive Synth (AuraSynth)"
+                        }
+                        font.pixelSize: 11
+                        color: theme.textMuted
                     }
 
                     Item { Layout.fillWidth: true }

@@ -15,6 +15,20 @@ Rectangle {
     property var engine
     property int selectedPad: 0
 
+    Connections {
+        target: engine
+        function onInstrumentNameChanged(inst, name) {
+            if (engine && inst === engine.selectedInstrument) {
+                bpTrackNameInput.text = name
+            }
+        }
+        function onInstrumentChanged(inst) {
+            if (engine) {
+                bpTrackNameInput.text = engine.getInstrumentName(inst)
+            }
+        }
+    }
+
     FileDialog {
         id: wavFileDialog
         title: "Load Sample into Pad " + (root.selectedPad + 1)
@@ -41,7 +55,7 @@ Rectangle {
             spacing: 6
 
             RowLayout {
-                spacing: 4
+                spacing: 8
                 Text {
                     text: "BEATPAD"
                     font.bold: true
@@ -53,6 +67,40 @@ Rectangle {
                     text: "8-Slot Drum Sampler"
                     font.pixelSize: 9
                     color: theme.textMuted
+                }
+                Item { Layout.fillWidth: true }
+                RowLayout {
+                    spacing: 4
+                    Text {
+                        text: "TRACK #" + (engine ? (engine.selectedInstrument + 1) : 1) + ":"
+                        font.pixelSize: 9
+                        font.bold: true
+                        color: theme.accent
+                    }
+                    Rectangle {
+                        width: 110
+                        height: 20
+                        radius: 2
+                        color: theme.bgWell
+                        border.color: theme.border
+                        TextInput {
+                            id: bpTrackNameInput
+                            anchors.fill: parent
+                            anchors.leftMargin: 4
+                            anchors.rightMargin: 4
+                            verticalAlignment: TextInput.AlignVCenter
+                            text: engine ? engine.getInstrumentName(engine.selectedInstrument) : "Track"
+                            font.pixelSize: 9
+                            font.bold: true
+                            color: theme.textMain
+                            selectByMouse: true
+                            onEditingFinished: {
+                                if (engine && text.trim().length > 0) {
+                                    engine.setInstrumentName(engine.selectedInstrument, text.trim())
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

@@ -145,6 +145,10 @@ void myms_note_off_inst(int inst, int note) {
     myms::AudioEngine::instance().noteOff(inst, note);
 }
 
+void myms_all_notes_off() {
+    myms::AudioEngine::instance().allNotesOff();
+}
+
 void myms_set_inst_osc1(int inst, int wave) {
     myms::AudioEngine::instance().setInstrumentOsc1(inst, wave);
 }

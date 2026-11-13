@@ -197,5 +197,78 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.engine.unloadTrackFx(0, 2)
         self.assertEqual(self.engine.getTrackFxCount(0), 0)
 
+    def test_07_vst_daw_parameter_controls_and_display(self):
+        vst2_path = os.path.join(PROJECT_ROOT, "plugins", "vst2", "demo_synth_vst2.so")
+        self.assertTrue(os.path.exists(vst2_path))
+        self.engine.loadTrackPlugin(0, vst2_path)
+
+        # Modulate parameter 0 (Cutoff) via DAW controls
+        self.engine.setTrackPluginParamValue(0, 0, 0.75)
+        val = self.engine.lib.myms_plugin_get_param_value(0, 0)
+        self.assertAlmostEqual(val, 0.75, places=2)
+
+        # Parameter display formatting
+        disp = self.engine.getTrackPluginParamDisplay(0, 0)
+        self.assertTrue(len(disp) > 0, "Parameter display string should not be empty")
+
+        # Modulate VST3 parameter
+        vst3_path = os.path.join(PROJECT_ROOT, "plugins", "vst3", "demo_synth_vst3.so")
+        self.engine.loadTrackPlugin(0, vst3_path)
+        self.engine.setTrackPluginParamValue(0, 1, 0.82)
+        val_vst3 = self.engine.lib.myms_plugin_get_param_value(0, 1)
+        self.assertAlmostEqual(val_vst3, 0.82, places=2)
+
+    def test_08_soundfont_player_insert_fx_routing(self):
+        # Configure Track 0 as SoundFont
+        self.engine.setTrackType(0, 1) # TRACK_TYPE_SOUNDFONT
+        self.assertEqual(self.engine.getTrackType(0), 1)
+
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        self.assertTrue(os.path.exists(filter_fx_path))
+
+        # Load FX on SoundFont track slot 0
+        ok = self.engine.loadTrackFx(0, 0, filter_fx_path)
+        self.assertTrue(ok)
+        self.assertTrue(self.engine.isTrackFxLoaded(0, 0))
+        self.assertEqual(self.engine.getTrackFxName(0, 0), "Demo Filter FX")
+
+        # Modulate FX parameters
+        self.engine.setTrackFxParamValue(0, 0, 0, 0.35)
+        fx_val = self.engine.lib.myms_track_fx_get_param_value(0, 0, 0)
+        self.assertAlmostEqual(fx_val, 0.35, places=2)
+
+    def test_09_stop_notes_and_playback_silencing(self):
+        # Trigger note while playback is stopped
+        self.assertFalse(self.engine.isPlaying)
+        self.engine.noteOnInst(0, 60, 0.9)
+
+        # Silencing notes when playback is stopped / allNotesOff
+        self.engine.allNotesOff()
+
+        # Starting and stopping playback cleanly silences notes
+        self.engine.play()
+        self.assertTrue(self.engine.isPlaying)
+        self.engine.stop()
+        self.assertFalse(self.engine.isPlaying)
+
+    def test_10_universal_track_renaming(self):
+        # Test custom track naming on Track 0
+        signal_received = []
+        self.engine.instrumentNameChanged.connect(lambda inst, name: signal_received.append((inst, name)))
+
+        self.engine.setInstrumentName(0, "Sub Heavy 808")
+        self.assertEqual(self.engine.getInstrumentName(0), "Sub Heavy 808")
+        self.assertIn((0, "Sub Heavy 808"), signal_received)
+
+        # Test track renaming with SoundFont track type fallback
+        self.engine.setTrackType(0, 1)
+        self.engine.setInstrumentName(0, "") # empty name triggers smart default
+        self.assertEqual(self.engine.getInstrumentName(0), "SoundFont 1")
+
+        # Test track renaming with Drum track type fallback
+        self.engine.setTrackType(0, 2)
+        self.engine.setInstrumentName(0, "   ")
+        self.assertEqual(self.engine.getInstrumentName(0), "BeatPad 1")
+
 if __name__ == "__main__":
     unittest.main()

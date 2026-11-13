@@ -27,6 +27,14 @@ Rectangle {
         function onInstrumentChanged(t) {
             root.currentTrack = t
             root.currentTrackPreset = engine ? engine.getTrackSf2Preset(root.currentTrack) : 0
+            if (sfTrackNameText && engine) {
+                sfTrackNameText.text = engine.getInstrumentName(t)
+            }
+        }
+        function onInstrumentNameChanged(inst, name) {
+            if (inst === root.currentTrack && sfTrackNameText) {
+                sfTrackNameText.text = name
+            }
         }
         function onProjectLoaded() {
             root.currentTrackPreset = engine ? engine.getTrackSf2Preset(root.currentTrack) : 0
@@ -127,11 +135,21 @@ Rectangle {
                     anchors.margins: 4
                     spacing: 2
 
-                    Text {
-                        text: "TARGET TRACK #" + (root.currentTrack + 1) + " (" + (engine ? engine.getInstrumentName(root.currentTrack) : "Track") + ")"
-                        font.pixelSize: 8
-                        font.bold: true
-                        color: theme.accent
+                    RowLayout {
+                        spacing: 4
+                        Text {
+                            text: "TARGET TRACK #" + (root.currentTrack + 1) + ":"
+                            font.pixelSize: 8
+                            font.bold: true
+                            color: theme.accent
+                        }
+                        Text {
+                            id: sfTrackNameText
+                            text: engine ? engine.getInstrumentName(root.currentTrack) : "Track"
+                            font.pixelSize: 8
+                            font.bold: true
+                            color: theme.textMain
+                        }
                     }
                     Text {
                         width: parent.width

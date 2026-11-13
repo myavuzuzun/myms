@@ -82,6 +82,7 @@ Rectangle {
                     border.width: (engine && engine.selectedInstrument === index) ? 2 : 1
 
                     property int trackIdx: index
+                    property string trackName: engine ? engine.getInstrumentName(trackIdx) : "Track"
                     property int trackType: engine ? engine.getTrackType(trackIdx) : 0
                     property real trackVol: engine ? engine.getTrackVolume(trackIdx) : 1.0
                     property real trackPan: engine ? engine.getTrackPan(trackIdx) : 0.5
@@ -102,6 +103,7 @@ Rectangle {
                                 strip.trackMute = engine.getTrackMute(strip.trackIdx)
                                 strip.trackSolo = engine.getTrackSolo(strip.trackIdx)
                                 strip.trackSf2 = engine.getTrackSf2Preset(strip.trackIdx)
+                                strip.trackName = engine.getInstrumentName(strip.trackIdx)
                             }
                         }
                         function onTrackTypeChanged(t, type) {
@@ -112,6 +114,11 @@ Rectangle {
                                 strip.trackType = engine.getTrackType(strip.trackIdx)
                             }
                         }
+                        function onInstrumentNameChanged(inst, name) {
+                            if (inst === strip.trackIdx) {
+                                strip.trackName = name
+                            }
+                        }
                         function onProjectLoaded() {
                             strip.trackType = engine ? engine.getTrackType(strip.trackIdx) : 0
                             strip.trackVol = engine ? engine.getTrackVolume(strip.trackIdx) : 1.0
@@ -119,6 +126,7 @@ Rectangle {
                             strip.trackMute = engine ? engine.getTrackMute(strip.trackIdx) : false
                             strip.trackSolo = engine ? engine.getTrackSolo(strip.trackIdx) : false
                             strip.trackSf2 = engine ? engine.getTrackSf2Preset(strip.trackIdx) : 0
+                            strip.trackName = engine ? engine.getInstrumentName(strip.trackIdx) : "Track"
                         }
                     }
 
@@ -147,26 +155,24 @@ Rectangle {
                                     color: (engine && engine.selectedInstrument === strip.trackIdx) ? "#ffffff" : theme.accent
                                 }
 
-                                Text {
+                                TextInput {
+                                    id: stripNameInput
                                     Layout.fillWidth: true
-                                    text: (engine ? engine.getInstrumentName(strip.trackIdx) : "Track")
+                                    text: strip.trackName
                                     font.bold: true
                                     font.pixelSize: 11
                                     color: (engine && engine.selectedInstrument === strip.trackIdx) ? "#ffffff" : theme.textMain
-                                    elide: Text.ElideRight
-                                }
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (engine) engine.setSelectedInstrument(strip.trackIdx)
-                                }
-                                onDoubleClicked: {
-                                    if (engine) {
-                                        engine.setSelectedInstrument(strip.trackIdx)
-                                        root.requestEditInstrument(strip.trackIdx, strip.trackType)
+                                    selectByMouse: true
+                                    clip: true
+                                    onActiveFocusChanged: {
+                                        if (activeFocus && engine) {
+                                            engine.setSelectedInstrument(strip.trackIdx)
+                                        }
+                                    }
+                                    onEditingFinished: {
+                                        if (engine && text.trim().length > 0) {
+                                            engine.setInstrumentName(strip.trackIdx, text.trim())
+                                        }
                                     }
                                 }
                             }

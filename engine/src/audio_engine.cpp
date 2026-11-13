@@ -435,6 +435,11 @@ void AudioEngine::setSongOrderIndex(int step) {
 }
 
 void AudioEngine::noteOn(int inst, int note, float velocity) {
+    if (!m_sequencer.isPlaying() && inst >= 0 && inst < MAX_INSTRUMENTS) {
+        // Auto-release preview/audition notes after ~350ms so notes never drone while stopped
+        m_previewCountdowns[inst] = static_cast<int>(0.35f * m_sampleRate);
+    }
+
     int type = getTrackType(inst);
     if (type == TRACK_TYPE_SOUNDFONT) {
         int preset = getTrackSf2Preset(inst);
@@ -455,6 +460,10 @@ void AudioEngine::noteOn(int inst, int note, float velocity) {
 }
 
 void AudioEngine::noteOff(int inst, int note) {
+    if (inst >= 0 && inst < MAX_INSTRUMENTS) {
+        m_previewCountdowns[inst] = 0;
+    }
+
     int type = getTrackType(inst);
     if (type == TRACK_TYPE_SOUNDFONT) {
         m_soundfont.noteOff(inst, note);
@@ -472,6 +481,9 @@ void AudioEngine::noteOff(int inst, int note) {
 }
 
 void AudioEngine::allNotesOff() {
+    for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        m_previewCountdowns[i] = 0;
+    }
     for (size_t i = 0; i < m_instruments.size(); ++i) {
         m_instruments[i].allNotesOff();
     }
@@ -770,6 +782,25 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
         }
     }
 
+    // Playback state transition & preview note auto-cutoff when playback is stopped
+    bool isPlayingNow = m_sequencer.isPlaying();
+    if (m_wasPlaying && !isPlayingNow) {
+        allNotesOff();
+    }
+    m_wasPlaying = isPlayingNow;
+
+    if (!isPlayingNow) {
+        for (int t = 0; t < numTracks && t < MAX_INSTRUMENTS; ++t) {
+            if (m_previewCountdowns[t] > 0) {
+                m_previewCountdowns[t] -= frameCount;
+                if (m_previewCountdowns[t] <= 0) {
+                    m_previewCountdowns[t] = 0;
+                    noteOff(t, -1);
+                }
+            }
+        }
+    }
+
     // Configure SoundFont channel volumes and pans
     for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
         if (m_trackMixers[t].type == TRACK_TYPE_SOUNDFONT) {
@@ -866,15 +897,32 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
             }
         }
 
-        // 2. Process SoundFont player (renders all active channels)
-        float sfL = 0.0f, sfR = 0.0f;
-        m_soundfont.processSample(sfL, sfR);
-        sL += sfL;
-        sR += sfR;
-
-        // Track peaks for SoundFont channels
+        // 2. Process SoundFont tracks with Insert FX & per-track volume & panning
         for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
             if (m_trackMixers[t].type == TRACK_TYPE_SOUNDFONT) {
+                float sfL = 0.0f, sfR = 0.0f;
+                m_soundfont.processChannelSample(t, sfL, sfR);
+
+                // Track Insert FX Chain
+                if (t < static_cast<int>(m_trackFx.size())) {
+                    for (int s = 0; s < MAX_TRACK_FX; ++s) {
+                        if (m_trackFx[t][s] && m_trackFx[t][s]->isLoaded()) {
+                            m_trackFx[t][s]->processEffectSample(sfL, sfR);
+                        }
+                    }
+                }
+
+                bool audible = anySolo ? m_trackMixers[t].solo : !m_trackMixers[t].mute;
+                float effVol = audible ? m_trackMixers[t].volume : 0.0f;
+                float pan = m_trackMixers[t].pan;
+                float panL = (pan <= 0.5f) ? 1.0f : (1.0f - pan) * 2.0f;
+                float panR = (pan >= 0.5f) ? 1.0f : pan * 2.0f;
+
+                sfL *= effVol * panL;
+                sfR *= effVol * panR;
+                sL += sfL;
+                sR += sfR;
+
                 float absL = std::abs(sfL);
                 float absR = std::abs(sfR);
                 if (absL > trkPeakL[t]) trkPeakL[t] = absL;

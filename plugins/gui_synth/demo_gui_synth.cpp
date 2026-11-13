@@ -76,6 +76,9 @@ public:
         auto* self = static_cast<DemoGuiSynth*>(effect->user);
         if (self && index >= 0 && index < 4) {
             self->m_params[index] = std::clamp(value, 0.0f, 1.0f);
+            if (self->m_window && self->m_display) {
+                self->redrawGui();
+            }
         }
     }
 

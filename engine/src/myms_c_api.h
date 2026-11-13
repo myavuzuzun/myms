@@ -53,6 +53,7 @@ void myms_get_inst_name(int inst, char* out_name, int max_len);
 // Live Preview per Instrument
 void myms_note_on_inst(int inst, int note, float velocity);
 void myms_note_off_inst(int inst, int note);
+void myms_all_notes_off();
 
 // Multi-Instrument Parameters (inst: 0..31)
 void myms_set_inst_osc1(int inst, int wave);

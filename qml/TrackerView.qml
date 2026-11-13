@@ -13,7 +13,10 @@ Rectangle {
     property int selectedTrack: 0
     property int currentPlayingRow: engine ? engine.currentRow : 0
 
+    property int nameRefreshCounter: 0
+
     function getTrackTitle(idx) {
+        nameRefreshCounter;
         if (!engine) return "T" + (idx + 1)
         let name = engine.getInstrumentName(idx)
         return "T" + (idx + 1) + ": " + (name && name.length > 0 ? name : "Synth")
@@ -25,6 +28,9 @@ Rectangle {
         target: engine
         function onInstrumentChanged(inst) {
             root.selectedTrack = inst
+        }
+        function onInstrumentNameChanged(inst, name) {
+            root.nameRefreshCounter++
         }
         function onProjectLoaded() {
             root.selectedTrack = 0
@@ -346,14 +352,28 @@ Rectangle {
                             anchors.rightMargin: 4
                             spacing: 4
 
-                            Text {
+                            TextInput {
+                                id: trkHeaderInput
                                 text: root.getTrackTitle(index)
                                 font.pixelSize: 10
                                 font.bold: true
                                 color: (root.selectedTrack === index) ? "#ffffff" : theme.textMain
-                                elide: Text.ElideRight
+                                clip: true
+                                selectByMouse: true
                                 Layout.fillWidth: true
                                 Layout.alignment: Qt.AlignVCenter
+                                onActiveFocusChanged: {
+                                    if (activeFocus) root.selectedTrack = index
+                                }
+                                onEditingFinished: {
+                                    if (engine && text.trim().length > 0) {
+                                        let cleanName = text.trim()
+                                        if (cleanName.startsWith("T" + (index + 1) + ": ")) {
+                                            cleanName = cleanName.substring(("T" + (index + 1) + ": ").length)
+                                        }
+                                        engine.setInstrumentName(index, cleanName)
+                                    }
+                                }
                             }
 
                             // Track Engine Badge (SYNTH / SF2 / DRUMS)

@@ -110,6 +110,92 @@ struct HostVst3EventList {
     }
 };
 
+// Host VST3 Parameter Changes Helper
+struct HostVst3ParamQueue {
+    Steinberg_Vst_IParamValueQueue iface;
+    Steinberg_Vst_IParamValueQueueVtbl vtbl;
+    Steinberg_Vst_ParamID paramId = 0;
+    Steinberg_Vst_ParamValue value = 0.0;
+    int pointCount = 0;
+
+    HostVst3ParamQueue() {
+        vtbl.queryInterface = [](void*, const Steinberg_TUID, void**) -> Steinberg_tresult { return Steinberg_kNoInterface; };
+        vtbl.addRef = [](void*) -> Steinberg_uint32 { return 1; };
+        vtbl.release = [](void*) -> Steinberg_uint32 { return 1; };
+        vtbl.getParameterId = [](void* self) -> Steinberg_Vst_ParamID {
+            auto* q = reinterpret_cast<HostVst3ParamQueue*>(self);
+            return q->paramId;
+        };
+        vtbl.getPointCount = [](void* self) -> Steinberg_int32 {
+            auto* q = reinterpret_cast<HostVst3ParamQueue*>(self);
+            return q->pointCount;
+        };
+        vtbl.getPoint = [](void* self, Steinberg_int32 idx, Steinberg_int32* sampleOffset, Steinberg_Vst_ParamValue* val) -> Steinberg_tresult {
+            auto* q = reinterpret_cast<HostVst3ParamQueue*>(self);
+            if (idx == 0 && q->pointCount > 0) {
+                if (sampleOffset) *sampleOffset = 0;
+                if (val) *val = q->value;
+                return Steinberg_kResultOk;
+            }
+            return Steinberg_kInvalidArgument;
+        };
+        vtbl.addPoint = [](void* self, Steinberg_int32 sampleOffset, Steinberg_Vst_ParamValue val, Steinberg_int32* idx) -> Steinberg_tresult {
+            auto* q = reinterpret_cast<HostVst3ParamQueue*>(self);
+            q->value = val;
+            q->pointCount = 1;
+            if (idx) *idx = 0;
+            return Steinberg_kResultOk;
+        };
+        iface.lpVtbl = &vtbl;
+    }
+};
+
+struct HostVst3ParameterChanges {
+    Steinberg_Vst_IParameterChanges iface;
+    Steinberg_Vst_IParameterChangesVtbl vtbl;
+    std::array<HostVst3ParamQueue, MAX_QUEUED_EVENTS> queues;
+    int count = 0;
+
+    HostVst3ParameterChanges() {
+        vtbl.queryInterface = [](void*, const Steinberg_TUID, void**) -> Steinberg_tresult { return Steinberg_kNoInterface; };
+        vtbl.addRef = [](void*) -> Steinberg_uint32 { return 1; };
+        vtbl.release = [](void*) -> Steinberg_uint32 { return 1; };
+        vtbl.getParameterCount = [](void* self) -> Steinberg_int32 {
+            auto* p = reinterpret_cast<HostVst3ParameterChanges*>(self);
+            return p->count;
+        };
+        vtbl.getParameterData = [](void* self, Steinberg_int32 idx) -> Steinberg_Vst_IParamValueQueue* {
+            auto* p = reinterpret_cast<HostVst3ParameterChanges*>(self);
+            if (idx >= 0 && idx < p->count) {
+                return &p->queues[idx].iface;
+            }
+            return nullptr;
+        };
+        vtbl.addParameterData = [](void* self, const Steinberg_Vst_ParamID* id, Steinberg_int32* idx) -> Steinberg_Vst_IParamValueQueue* {
+            auto* p = reinterpret_cast<HostVst3ParameterChanges*>(self);
+            if (p->count < MAX_QUEUED_EVENTS && id) {
+                int i = p->count++;
+                p->queues[i].paramId = *id;
+                p->queues[i].pointCount = 0;
+                if (idx) *idx = i;
+                return &p->queues[i].iface;
+            }
+            return nullptr;
+        };
+        iface.lpVtbl = &vtbl;
+    }
+
+    void clear() { count = 0; }
+    void addChange(Steinberg_Vst_ParamID id, double value) {
+        if (count < MAX_QUEUED_EVENTS) {
+            queues[count].paramId = id;
+            queues[count].value = value;
+            queues[count].pointCount = 1;
+            count++;
+        }
+    }
+};
+
 class PluginInstance {
 public:
     PluginInstance() {
@@ -298,13 +384,27 @@ public:
         if (index < 0 || index >= static_cast<int>(m_params.size())) return;
         val = std::clamp(val, 0.0f, 1.0f);
         m_params[index].value = val;
+        int paramId = m_params[index].id;
 
-        if (m_format == PLUGIN_FORMAT_VST2 && m_vstEffect && m_vstEffect->setParameter) {
-            m_vstEffect->setParameter(m_vstEffect, index, val);
-        } else if (m_format == PLUGIN_FORMAT_CLAP) {
+        if (m_format == PLUGIN_FORMAT_VST2 && m_vstEffect) {
+            if (m_vstEffect->setParameter) {
+                m_vstEffect->setParameter(m_vstEffect, index, val);
+            }
             queueEvent(QueuedMidiEvent{QueuedMidiEvent::PARAM_CHANGE, 0, 0.0f, index, val});
-        } else if (m_format == PLUGIN_FORMAT_VST3 && m_vst3Controller) {
-            m_vst3Controller->lpVtbl->setParamNormalized(m_vst3Controller, m_params[index].id, val);
+            char buf[32] = {0};
+            if (m_vstEffect->dispatcher) {
+                m_vstEffect->dispatcher(m_vstEffect, effGetParamDisplay, index, 0, buf, 0.0f);
+                if (buf[0] != '\0') {
+                    m_params[index].display = buf;
+                }
+            }
+        } else if (m_format == PLUGIN_FORMAT_CLAP) {
+            queueEvent(QueuedMidiEvent{QueuedMidiEvent::PARAM_CHANGE, 0, 0.0f, paramId, val});
+        } else if (m_format == PLUGIN_FORMAT_VST3) {
+            if (m_vst3Controller) {
+                m_vst3Controller->lpVtbl->setParamNormalized(m_vst3Controller, paramId, val);
+            }
+            queueEvent(QueuedMidiEvent{QueuedMidiEvent::PARAM_CHANGE, 0, 0.0f, paramId, val});
         }
     }
 
@@ -387,6 +487,21 @@ public:
             process.audio_outputs_count = 1;
             m_clapPlugin->process(m_clapPlugin, &process);
         } else if (m_format == PLUGIN_FORMAT_VST3 && m_vst3Processor) {
+            HostVst3ParameterChanges paramChanges;
+            int head = m_eventQueueHead.load(std::memory_order_relaxed);
+            int tail = m_eventQueueTail.load(std::memory_order_acquire);
+            while (head != tail) {
+                const QueuedMidiEvent& q = m_eventQueue[head];
+                head = (head + 1) % MAX_QUEUED_EVENTS;
+                if (q.type == QueuedMidiEvent::PARAM_CHANGE) {
+                    paramChanges.addChange(q.paramId, q.paramValue);
+                    if (m_vst3Controller) {
+                        m_vst3Controller->lpVtbl->setParamNormalized(m_vst3Controller, q.paramId, q.paramValue);
+                    }
+                }
+            }
+            m_eventQueueHead.store(head, std::memory_order_release);
+
             float* inChs[2] = { inL, inR };
             float* outChs[2] = { outL, outR };
             Steinberg_Vst_AudioBusBuffers inBus;
@@ -404,6 +519,7 @@ public:
             pData.numOutputs = 1;
             pData.inputs = &inBus;
             pData.outputs = &outBus;
+            pData.inputParameterChanges = reinterpret_cast<Steinberg_Vst_IParameterChanges*>(&paramChanges);
             m_vst3Processor->lpVtbl->process(m_vst3Processor, &pData);
         }
     }
@@ -591,6 +707,7 @@ private:
         if (!m_vst3Processor) return;
 
         HostVst3EventList evList;
+        HostVst3ParameterChanges paramChanges;
         int head = m_eventQueueHead.load(std::memory_order_relaxed);
         int tail = m_eventQueueTail.load(std::memory_order_acquire);
         while (head != tail) {
@@ -601,6 +718,7 @@ private:
             } else if (q.type == QueuedMidiEvent::NOTE_OFF) {
                 evList.addNoteOff(q.note);
             } else if (q.type == QueuedMidiEvent::PARAM_CHANGE) {
+                paramChanges.addChange(q.paramId, q.paramValue);
                 if (m_vst3Controller) {
                     m_vst3Controller->lpVtbl->setParamNormalized(m_vst3Controller, q.paramId, q.paramValue);
                 }
@@ -631,6 +749,7 @@ private:
         pData.inputs = &inBus;
         pData.outputs = &outBus;
         pData.inputEvents = reinterpret_cast<Steinberg_Vst_IEventList*>(&evList);
+        pData.inputParameterChanges = reinterpret_cast<Steinberg_Vst_IParameterChanges*>(&paramChanges);
 
         m_vst3Processor->lpVtbl->process(m_vst3Processor, &pData);
         m_bufferAvailable = numFrames;

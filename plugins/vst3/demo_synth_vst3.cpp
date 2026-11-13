@@ -261,6 +261,27 @@ public:
                 }
             }
 
+            // Process Input Parameter Changes
+            if (data->inputParameterChanges && data->inputParameterChanges->lpVtbl) {
+                int pCount = data->inputParameterChanges->lpVtbl->getParameterCount(data->inputParameterChanges);
+                for (int i = 0; i < pCount; ++i) {
+                    Steinberg_Vst_IParamValueQueue* queue = data->inputParameterChanges->lpVtbl->getParameterData(data->inputParameterChanges, i);
+                    if (queue && queue->lpVtbl) {
+                        Steinberg_Vst_ParamID pid = queue->lpVtbl->getParameterId(queue);
+                        int ptCount = queue->lpVtbl->getPointCount(queue);
+                        if (ptCount > 0) {
+                            Steinberg_int32 offset = 0;
+                            Steinberg_Vst_ParamValue val = 0.0;
+                            if (queue->lpVtbl->getPoint(queue, ptCount - 1, &offset, &val) == Steinberg_kResultOk) {
+                                if (pid >= 0 && pid < 3) {
+                                    synth->params[pid] = static_cast<float>(val);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Render audio
             if (data->numOutputs > 0 && data->numSamples > 0) {
                 float* outL = data->outputs[0].Steinberg_Vst_AudioBusBuffers_channelBuffers32[0];

@@ -18,6 +18,9 @@ Item {
     function open(track) {
         targetTrack = track
         if (engine) engine.setSelectedInstrument(track)
+        if (fxTrackNameInput && engine) {
+            fxTrackNameInput.text = engine.getInstrumentName(track)
+        }
         refreshSlots()
         isOpen = true
         root.forceActiveFocus()
@@ -37,6 +40,11 @@ Item {
         function onTrackFxChanged(t, s) {
             if (t === root.targetTrack || t === -1) {
                 root.refreshSlots()
+            }
+        }
+        function onInstrumentNameChanged(inst, name) {
+            if (inst === root.targetTrack && fxTrackNameInput) {
+                fxTrackNameInput.text = name
             }
         }
         function onProjectLoaded() {
@@ -99,13 +107,44 @@ Item {
                     }
 
                     Text {
-                        text: {
-                            let trackName = engine ? engine.getInstrumentName(root.targetTrack) : "Track"
-                            return "TRACK #" + (root.targetTrack + 1) + ": " + trackName + " — INSERT FX CHAIN"
-                        }
+                        text: "TRACK #" + (root.targetTrack + 1) + ":"
                         font.bold: true
                         font.pixelSize: 12
                         color: theme.textHeading
+                    }
+
+                    Rectangle {
+                        width: 140
+                        height: 22
+                        radius: 3
+                        color: theme.bgWell
+                        border.color: fxTrackNameInput.activeFocus ? theme.accent : theme.border
+
+                        TextInput {
+                            id: fxTrackNameInput
+                            anchors.fill: parent
+                            anchors.leftMargin: 6
+                            anchors.rightMargin: 6
+                            verticalAlignment: TextInput.AlignVCenter
+                            text: engine ? engine.getInstrumentName(root.targetTrack) : "Track"
+                            font.bold: true
+                            font.pixelSize: 11
+                            color: theme.textHeading
+                            selectByMouse: true
+                            clip: true
+                            onEditingFinished: {
+                                if (engine && text.trim().length > 0) {
+                                    engine.setInstrumentName(root.targetTrack, text.trim())
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: "— INSERT FX CHAIN"
+                        font.bold: true
+                        font.pixelSize: 11
+                        color: theme.textMuted
                     }
 
                     Rectangle {
@@ -259,221 +298,329 @@ Item {
                         Rectangle {
                             id: slotCard
                             Layout.fillWidth: true
-                            height: 84
-                            radius: 4
                             property var slotData: (root.fxSlots && index < root.fxSlots.length) ? root.fxSlots[index] : null
                             property bool isLoaded: slotData ? slotData.loaded : false
+                            property bool showParams: false
+                            property var paramList: []
+                            height: (isLoaded && showParams && paramList.length > 0) ? (84 + 10 + Math.min(220, Math.ceil(paramList.length / 2) * 54)) : 84
+                            radius: 4
                             color: isLoaded ? theme.bgCard : theme.bgWell
                             border.color: isLoaded ? theme.accent : theme.border
                             border.width: isLoaded ? 1 : 1
+                            clip: true
 
-                            RowLayout {
+                            ColumnLayout {
                                 anchors.fill: parent
                                 anchors.margins: 10
-                                spacing: 12
+                                spacing: 8
 
-                                // Slot Index Number Badge
-                                Rectangle {
-                                    width: 32
-                                    height: 32
-                                    radius: 3
-                                    color: slotCard.isLoaded ? theme.accent : theme.bgHeader
-                                    border.color: theme.border
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "0" + (index + 1)
-                                        font.bold: true
-                                        font.pixelSize: 12
-                                        color: slotCard.isLoaded ? "#ffffff" : theme.textMuted
-                                    }
-                                }
-
-                                // Loaded View
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 4
-                                    visible: slotCard.isLoaded
-
-                                    RowLayout {
-                                        spacing: 8
-                                        // Format Badge
-                                        Rectangle {
-                                            width: 44
-                                            height: 18
-                                            radius: 2
-                                            color: {
-                                                let fmt = slotCard.slotData ? slotCard.slotData.format : ""
-                                                if (fmt === "VST3") return "#00b894"
-                                                if (fmt === "CLAP") return "#6c5ce7"
-                                                return "#3daee9"
-                                            }
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: slotCard.slotData ? slotCard.slotData.format : "FX"
-                                                font.bold: true
-                                                font.pixelSize: 9
-                                                color: "#ffffff"
-                                            }
-                                        }
-
-                                        Text {
-                                            text: slotCard.slotData ? slotCard.slotData.name : "Effect Plugin"
-                                            font.bold: true
-                                            font.pixelSize: 13
-                                            color: theme.textHeading
-                                        }
-                                    }
-
-                                    Text {
-                                        text: {
-                                            if (!slotCard.slotData) return ""
-                                            let v = slotCard.slotData.vendor
-                                            let p = slotCard.slotData.path
-                                            return (v ? v + " · " : "") + p
-                                        }
-                                        font.pixelSize: 9
-                                        color: theme.textMuted
-                                        elide: Text.ElideMiddle
-                                        Layout.fillWidth: true
-                                    }
-                                }
-
-                                // Loaded Action Buttons
-                                RowLayout {
-                                    spacing: 6
-                                    visible: slotCard.isLoaded
-                                    Layout.alignment: Qt.AlignVCenter
-
-                                    Button {
-                                        implicitHeight: 28
-                                        text: "🗔 OPEN GUI"
-                                        font.bold: true
-                                        font.pixelSize: 9
-                                        visible: slotCard.slotData ? slotCard.slotData.has_gui : false
-                                        background: Rectangle {
-                                            color: parent.hovered ? theme.btnHover : theme.accent
-                                            radius: 3
-                                        }
-                                        contentItem: Text {
-                                            text: parent.text
-                                            font: parent.font
-                                            color: "#ffffff"
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-                                        onClicked: {
-                                            if (engine) engine.promptOpenTrackFxGui(root.targetTrack, index)
-                                        }
-                                    }
-
-                                    Button {
-                                        implicitHeight: 28
-                                        text: "📁 CHANGE..."
-                                        font.bold: true
-                                        font.pixelSize: 9
-                                        background: Rectangle {
-                                            color: parent.hovered ? theme.btnHover : theme.btnBg
-                                            border.color: theme.border
-                                            radius: 3
-                                        }
-                                        contentItem: Text {
-                                            text: parent.text
-                                            font: parent.font
-                                            color: theme.textMain
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-                                        onClicked: {
-                                            if (engine) engine.promptOpenTrackFxDialog(root.targetTrack, index)
-                                        }
-                                    }
-
-                                    Button {
-                                        implicitHeight: 28
-                                        text: "✕ REMOVE"
-                                        font.bold: true
-                                        font.pixelSize: 9
-                                        background: Rectangle {
-                                            color: parent.hovered ? "#c0392b" : theme.btnBg
-                                            border.color: theme.border
-                                            radius: 3
-                                        }
-                                        contentItem: Text {
-                                            text: parent.text
-                                            font: parent.font
-                                            color: parent.parent.hovered ? "#ffffff" : theme.stopAccent
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-                                        onClicked: {
-                                            if (engine) engine.unloadTrackFx(root.targetTrack, index)
-                                        }
-                                    }
-                                }
-
-                                // Empty View
                                 RowLayout {
                                     Layout.fillWidth: true
                                     spacing: 12
-                                    visible: !slotCard.isLoaded
 
+                                    // Slot Index Number Badge
+                                    Rectangle {
+                                        width: 32
+                                        height: 32
+                                        radius: 3
+                                        color: slotCard.isLoaded ? theme.accent : theme.bgHeader
+                                        border.color: theme.border
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "0" + (index + 1)
+                                            font.bold: true
+                                            font.pixelSize: 12
+                                            color: slotCard.isLoaded ? "#ffffff" : theme.textMuted
+                                        }
+                                    }
+
+                                    // Loaded View
                                     ColumnLayout {
                                         Layout.fillWidth: true
-                                        spacing: 2
-                                        Text {
-                                            text: "Empty Insert Effect Slot #" + (index + 1)
-                                            font.bold: true
-                                            font.pixelSize: 11
-                                            color: theme.textMuted
+                                        spacing: 4
+                                        visible: slotCard.isLoaded
+
+                                        RowLayout {
+                                            spacing: 8
+                                            // Format Badge
+                                            Rectangle {
+                                                width: 44
+                                                height: 18
+                                                radius: 2
+                                                color: {
+                                                    let fmt = slotCard.slotData ? slotCard.slotData.format : ""
+                                                    if (fmt === "VST3") return "#00b894"
+                                                    if (fmt === "CLAP") return "#6c5ce7"
+                                                    return "#3daee9"
+                                                }
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: slotCard.slotData ? slotCard.slotData.format : "FX"
+                                                    font.bold: true
+                                                    font.pixelSize: 9
+                                                    color: "#ffffff"
+                                                }
+                                            }
+
+                                            Text {
+                                                text: slotCard.slotData ? slotCard.slotData.name : "Effect Plugin"
+                                                font.bold: true
+                                                font.pixelSize: 13
+                                                color: theme.textHeading
+                                            }
                                         }
+
                                         Text {
-                                            text: "Insert any 64-bit Linux VST3 (.vst3), CLAP (.clap), or VST2 (.so) audio effect plugin."
+                                            text: {
+                                                if (!slotCard.slotData) return ""
+                                                let v = slotCard.slotData.vendor
+                                                let p = slotCard.slotData.path
+                                                return (v ? v + " · " : "") + p
+                                            }
                                             font.pixelSize: 9
-                                            color: theme.textDim
+                                            color: theme.textMuted
+                                            elide: Text.ElideMiddle
+                                            Layout.fillWidth: true
                                         }
                                     }
 
-                                    Button {
-                                        implicitHeight: 28
-                                        text: "Load Demo Filter FX"
-                                        font.bold: true
-                                        font.pixelSize: 9
-                                        background: Rectangle {
-                                            color: parent.hovered ? theme.btnHover : theme.btnBg
-                                            border.color: theme.accent
-                                            radius: 3
+                                    // Loaded Action Buttons
+                                    RowLayout {
+                                        spacing: 6
+                                        visible: slotCard.isLoaded
+                                        Layout.alignment: Qt.AlignVCenter
+
+                                        Button {
+                                            implicitHeight: 28
+                                            text: slotCard.showParams ? "▲ PARAMS" : "🎛 PARAMS"
+                                            font.bold: true
+                                            font.pixelSize: 9
+                                            background: Rectangle {
+                                                color: slotCard.showParams ? theme.accent : (parent.hovered ? theme.btnHover : theme.btnBg)
+                                                border.color: theme.border
+                                                radius: 3
+                                            }
+                                            contentItem: Text {
+                                                text: parent.text
+                                                font: parent.font
+                                                color: slotCard.showParams ? "#ffffff" : theme.textMain
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            onClicked: {
+                                                slotCard.showParams = !slotCard.showParams
+                                                if (slotCard.showParams && engine) {
+                                                    slotCard.paramList = engine.getTrackFxParams(root.targetTrack, index)
+                                                }
+                                            }
                                         }
-                                        contentItem: Text {
-                                            text: parent.text
-                                            font: parent.font
-                                            color: theme.accent
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
+
+                                        Button {
+                                            implicitHeight: 28
+                                            text: "🗔 OPEN GUI"
+                                            font.bold: true
+                                            font.pixelSize: 9
+                                            visible: slotCard.slotData ? slotCard.slotData.has_gui : false
+                                            background: Rectangle {
+                                                color: parent.hovered ? theme.btnHover : theme.accent
+                                                radius: 3
+                                            }
+                                            contentItem: Text {
+                                                text: parent.text
+                                                font: parent.font
+                                                color: "#ffffff"
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            onClicked: {
+                                                if (engine) engine.promptOpenTrackFxGui(root.targetTrack, index)
+                                            }
                                         }
-                                        onClicked: {
-                                            if (engine) engine.loadTrackFx(root.targetTrack, index, "plugins/effects/demo_filter_fx.so")
+
+                                        Button {
+                                            implicitHeight: 28
+                                            text: "📁 CHANGE..."
+                                            font.bold: true
+                                            font.pixelSize: 9
+                                            background: Rectangle {
+                                                color: parent.hovered ? theme.btnHover : theme.btnBg
+                                                border.color: theme.border
+                                                radius: 3
+                                            }
+                                            contentItem: Text {
+                                                text: parent.text
+                                                font: parent.font
+                                                color: theme.textMain
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            onClicked: {
+                                                if (engine) engine.promptOpenTrackFxDialog(root.targetTrack, index)
+                                            }
+                                        }
+
+                                        Button {
+                                            implicitHeight: 28
+                                            text: "✕ REMOVE"
+                                            font.bold: true
+                                            font.pixelSize: 9
+                                            background: Rectangle {
+                                                color: parent.hovered ? "#c0392b" : theme.btnBg
+                                                border.color: theme.border
+                                                radius: 3
+                                            }
+                                            contentItem: Text {
+                                                text: parent.text
+                                                font: parent.font
+                                                color: parent.parent.hovered ? "#ffffff" : theme.stopAccent
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            onClicked: {
+                                                if (engine) engine.unloadTrackFx(root.targetTrack, index)
+                                            }
                                         }
                                     }
 
-                                    Button {
-                                        implicitHeight: 28
-                                        text: "📁 BROWSE PLUGIN..."
-                                        font.bold: true
-                                        font.pixelSize: 9
-                                        background: Rectangle {
-                                            color: parent.hovered ? theme.btnHover : theme.btnBg
-                                            border.color: theme.border
-                                            radius: 3
+                                    // Empty View
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 12
+                                        visible: !slotCard.isLoaded
+
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 2
+                                            Text {
+                                                text: "Empty Insert Effect Slot #" + (index + 1)
+                                                font.bold: true
+                                                font.pixelSize: 11
+                                                color: theme.textMuted
+                                            }
+                                            Text {
+                                                text: "Insert any 64-bit Linux VST3 (.vst3), CLAP (.clap), or VST2 (.so) audio effect plugin."
+                                                font.pixelSize: 9
+                                                color: theme.textDim
+                                            }
                                         }
-                                        contentItem: Text {
-                                            text: parent.text
-                                            font: parent.font
-                                            color: theme.textMain
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
+
+                                        Button {
+                                            implicitHeight: 28
+                                            text: "Load Demo Filter FX"
+                                            font.bold: true
+                                            font.pixelSize: 9
+                                            background: Rectangle {
+                                                color: parent.hovered ? theme.btnHover : theme.btnBg
+                                                border.color: theme.accent
+                                                radius: 3
+                                            }
+                                            contentItem: Text {
+                                                text: parent.text
+                                                font: parent.font
+                                                color: theme.accent
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            onClicked: {
+                                                if (engine) engine.loadTrackFx(root.targetTrack, index, "plugins/effects/demo_filter_fx.so")
+                                            }
                                         }
-                                        onClicked: {
-                                            if (engine) engine.promptOpenTrackFxDialog(root.targetTrack, index)
+
+                                        Button {
+                                            implicitHeight: 28
+                                            text: "📁 BROWSE PLUGIN..."
+                                            font.bold: true
+                                            font.pixelSize: 9
+                                            background: Rectangle {
+                                                color: parent.hovered ? theme.btnHover : theme.btnBg
+                                                border.color: theme.border
+                                                radius: 3
+                                            }
+                                            contentItem: Text {
+                                                text: parent.text
+                                                font: parent.font
+                                                color: theme.textMain
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            onClicked: {
+                                                if (engine) engine.promptOpenTrackFxDialog(root.targetTrack, index)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Expandable DAW Parameter Controls Section
+                                ScrollView {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    visible: slotCard.isLoaded && slotCard.showParams && slotCard.paramList.length > 0
+                                    clip: true
+                                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+
+                                    Flow {
+                                        width: parent.width - 8
+                                        spacing: 8
+
+                                        Repeater {
+                                            model: slotCard.paramList
+
+                                            Rectangle {
+                                                id: fxParamCard
+                                                width: Math.floor((parent.width - 8) / 2)
+                                                height: 48
+                                                color: theme.bgWell
+                                                radius: 3
+                                                border.color: theme.border
+
+                                                property int pId: modelData.id
+                                                property real pVal: modelData.value
+                                                property string pName: modelData.name
+
+                                                ColumnLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 4
+                                                    spacing: 1
+
+                                                    RowLayout {
+                                                        Layout.fillWidth: true
+                                                        Text {
+                                                            Layout.fillWidth: true
+                                                            text: fxParamCard.pName
+                                                            font.bold: true
+                                                            font.pixelSize: 9
+                                                            color: theme.textHeading
+                                                            elide: Text.ElideRight
+                                                        }
+                                                        Text {
+                                                            text: Math.round(fxParamCard.pVal * 100) + "%"
+                                                            font.pixelSize: 9
+                                                            color: theme.accent
+                                                            font.bold: true
+                                                        }
+                                                    }
+
+                                                    Slider {
+                                                        id: fxSlider
+                                                        Layout.fillWidth: true
+                                                        from: 0.0
+                                                        to: 1.0
+                                                        value: fxParamCard.pVal
+                                                        onMoved: {
+                                                            if (engine) {
+                                                                engine.setTrackFxParamValue(root.targetTrack, index, fxParamCard.pId, value)
+                                                                fxParamCard.pVal = value
+                                                            }
+                                                        }
+                                                        onValueChanged: {
+                                                            if (pressed && engine) {
+                                                                engine.setTrackFxParamValue(root.targetTrack, index, fxParamCard.pId, value)
+                                                                fxParamCard.pVal = value
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -487,3 +634,4 @@ Item {
 
     Keys.onEscapePressed: root.close()
 }
+

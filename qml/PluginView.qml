@@ -321,6 +321,7 @@ Rectangle {
                         model: root.paramList
 
                         Rectangle {
+                            id: paramCard
                             width: 250
                             height: 64
                             color: theme.bgCard
@@ -342,7 +343,7 @@ Rectangle {
                                     Layout.fillWidth: true
                                     Text {
                                         Layout.fillWidth: true
-                                        text: parent.parent.parent.paramName
+                                        text: paramCard.paramName
                                         font.bold: true
                                         font.pixelSize: 10
                                         color: theme.textHeading
@@ -350,10 +351,10 @@ Rectangle {
                                     }
                                     Text {
                                         text: {
-                                            let d = parent.parent.parent.paramDisp
-                                            let l = parent.parent.parent.paramLbl
-                                            if (d && d.length > 0) return d + (l ? " " + l : "")
-                                            return Math.round(parent.parent.parent.paramVal * 100) + "%"
+                                            if (paramCard.paramDisp && paramCard.paramDisp.length > 0) {
+                                                return paramCard.paramDisp + (paramCard.paramLbl ? " " + paramCard.paramLbl : "")
+                                            }
+                                            return Math.round(paramCard.paramVal * 100) + "%"
                                         }
                                         font.pixelSize: 10
                                         color: theme.accent
@@ -366,12 +367,24 @@ Rectangle {
                                     Layout.fillWidth: true
                                     from: 0.0
                                     to: 1.0
-                                    value: parent.parent.paramVal
-                                    onMoved: {
+                                    value: paramCard.paramVal
+
+                                    function applyValue(newVal) {
                                         if (root.engine) {
-                                            root.engine.setTrackPluginParamValue(root.currentTrack, parent.parent.paramId, value)
-                                            parent.parent.paramVal = value
+                                            root.engine.setTrackPluginParamValue(root.currentTrack, paramCard.paramId, newVal)
+                                            paramCard.paramVal = newVal
+                                            let disp = root.engine.getTrackPluginParamDisplay(root.currentTrack, paramCard.paramId)
+                                            if (disp && disp.length > 0) {
+                                                paramCard.paramDisp = disp
+                                            } else {
+                                                paramCard.paramDisp = Math.round(newVal * 100) + "%"
+                                            }
                                         }
+                                    }
+
+                                    onMoved: applyValue(value)
+                                    onValueChanged: {
+                                        if (pressed) applyValue(value)
                                     }
 
                                     background: Rectangle {
