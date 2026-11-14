@@ -311,8 +311,9 @@ Item {
     }
 
     // Keyboard Shortcuts inside Modal: Escape closes
-    Keys.onEscapePressed: {
+    Keys.onEscapePressed: (event) => {
         root.close()
+        event.accepted = true
     }
 }
 

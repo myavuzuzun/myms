@@ -5,6 +5,7 @@ import QtQuick.Layouts
 Item {
     id: rootItem
     anchors.fill: parent
+    focus: true
 
     StudioTheme { id: theme }
 
@@ -12,6 +13,16 @@ Item {
     property real meterPeakR: 0.0
     property bool bottomDeckCollapsed: false
     property real bottomDeckHeight: 330
+
+    Keys.onEscapePressed: (event) => {
+        if (fxModal.isOpen) {
+            fxModal.close()
+            event.accepted = true
+        } else if (editorModal.isOpen) {
+            editorModal.close()
+            event.accepted = true
+        }
+    }
 
     Connections {
         target: mymsEngine
@@ -556,15 +567,90 @@ Item {
 
                     Rectangle { width: 1; height: 18; color: theme.border; Layout.alignment: Qt.AlignVCenter }
 
-                    Row {
-                        spacing: 4
+                    // LMMS-Style Real-Time CPU Meter
+                    Item {
+                        id: cpuMeterGroup
+                        Layout.preferredWidth: cpuRow.implicitWidth
+                        Layout.preferredHeight: 20
                         Layout.alignment: Qt.AlignVCenter
-                        Rectangle { width: 6; height: 6; radius: 3; color: theme.playAccent }
-                        Text {
-                            text: "48kHz | <1%"
-                            font.pixelSize: 9
-                            font.family: "Monospace"
-                            color: theme.textMuted
+
+                        property real cpuVal: mymsEngine ? mymsEngine.cpuUsage : 0.0
+
+                        RowLayout {
+                            id: cpuRow
+                            anchors.fill: parent
+                            spacing: 6
+
+                            Text {
+                                text: "CPU"
+                                font.pixelSize: 9
+                                font.bold: true
+                                color: theme.textMuted
+                                Layout.alignment: Qt.AlignVCenter
+                            }
+
+                            // Mini Horizontal Load Bar (LMMS-style)
+                            Rectangle {
+                                Layout.preferredWidth: 32
+                                Layout.preferredHeight: 10
+                                radius: 2
+                                color: theme.bgWell
+                                border.color: theme.border
+                                Layout.alignment: Qt.AlignVCenter
+                                clip: true
+
+                                Rectangle {
+                                    width: Math.max(1, Math.min(parent.width, (cpuMeterGroup.cpuVal / 100.0) * parent.width))
+                                    height: parent.height
+                                    radius: 1
+                                    color: {
+                                        if (cpuMeterGroup.cpuVal > 85.0) return theme.stopAccent
+                                        if (cpuMeterGroup.cpuVal > 60.0) return theme.pauseAccent
+                                        return theme.playAccent
+                                    }
+                                }
+                            }
+
+                            // Percentage Readout
+                            Text {
+                                text: {
+                                    if (cpuMeterGroup.cpuVal < 1.0) return "<1%"
+                                    return cpuMeterGroup.cpuVal.toFixed(1) + "%"
+                                }
+                                font.pixelSize: 9
+                                font.bold: true
+                                font.family: "Monospace"
+                                color: {
+                                    if (cpuMeterGroup.cpuVal > 85.0) return theme.stopAccent
+                                    if (cpuMeterGroup.cpuVal > 60.0) return theme.pauseAccent
+                                    return theme.textHeading
+                                }
+                                Layout.alignment: Qt.AlignVCenter
+                            }
+
+                            Rectangle {
+                                Layout.preferredWidth: 1
+                                Layout.preferredHeight: 12
+                                color: theme.border
+                                Layout.alignment: Qt.AlignVCenter
+                            }
+
+                            Text {
+                                text: "48kHz"
+                                font.pixelSize: 9
+                                font.family: "Monospace"
+                                color: theme.textMuted
+                                Layout.alignment: Qt.AlignVCenter
+                            }
+                        }
+
+                        MouseArea {
+                            id: cpuMouseArea
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            ToolTip.visible: containsMouse
+                            ToolTip.text: "Audio DSP Load: " + cpuMeterGroup.cpuVal.toFixed(1) + "%\nReal-time audio buffer processing time"
+                            ToolTip.delay: 200
                         }
                     }
                 }

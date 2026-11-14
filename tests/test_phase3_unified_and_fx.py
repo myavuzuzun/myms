@@ -418,5 +418,58 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
+    def test_14_soundfont_track_persistence(self):
+        # Configure Track 0 as SoundFont, and Track 1 as Plugin
+        self.engine.setTrackType(0, 1) # SoundFont
+        self.engine.setTrackSf2Preset(0, 24) # e.g. Acoustic Guitar
+        self.engine.setInstrumentName(0, "Acoustic Guitar")
+
+        self.engine.addTrack()
+        vst2_synth = os.path.join(PROJECT_ROOT, "plugins", "gui_synth", "demo_gui_synth.so")
+        self.engine.loadTrackPlugin(1, vst2_synth)
+        self.assertEqual(self.engine.getTrackType(1), 3) # Plugin
+
+        with tempfile.NamedTemporaryFile(suffix=".myms", delete=False) as f:
+            tmp_path = f.name
+
+        try:
+            saved = self.engine.saveProject(tmp_path)
+            self.assertTrue(saved)
+
+            # Reset project
+            self.engine.newProject()
+            self.assertEqual(self.engine.getTrackType(0), 0)
+
+            # Reopen project
+            opened = self.engine.openProject(tmp_path)
+            self.assertTrue(opened)
+
+            # Assert Track 0 remains SoundFont, NOT converted to plugin!
+            self.assertEqual(self.engine.getTrackType(0), 1)
+            self.assertEqual(self.engine.getTrackSf2Preset(0), 24)
+            self.assertEqual(self.engine.getInstrumentName(0), "Acoustic Guitar")
+            self.assertFalse(self.engine.isTrackPluginLoaded(0))
+
+            # Assert Track 1 remains Plugin
+            self.assertEqual(self.engine.getTrackType(1), 3)
+            self.assertTrue(self.engine.isTrackPluginLoaded(1))
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
+    def test_15_cpu_usage_monitoring(self):
+        # CPU usage should return a non-negative float
+        cpu = self.engine.cpuUsage
+        self.assertIsInstance(cpu, float)
+        self.assertGreaterEqual(cpu, 0.0)
+        self.assertLessEqual(cpu, 100.0)
+
+        # Trigger playback and check that CPU reading functions
+        self.engine.play()
+        self.assertTrue(self.engine.isPlaying)
+        cpu_playing = self.engine.cpuUsage
+        self.assertGreaterEqual(cpu_playing, 0.0)
+        self.engine.stop()
+
 if __name__ == "__main__":
     unittest.main()

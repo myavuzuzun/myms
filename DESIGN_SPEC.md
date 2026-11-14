@@ -64,9 +64,13 @@
   - **Warmth**: Tube and tape soft-saturation curve.
   - **Tone**: Linear tilt EQ (sub bass warmth through high-frequency air).
   - **Space**: Ducked algorithmic stereo diffusion and ambient decay.
-- **Master Bus Soft Limiter**:
+- **Master Bus Soft Limiter & Real-Time Metering**:
   - Zero-latency lookahead true-peak soft limiter preventing digital clipping cleanly.
-  - Master stereo output VU meter with peak monitoring.
+  - Master stereo output VU meter with peak monitoring and RMS level calculation.
+  - **LMMS-Style Real-Time Audio DSP CPU Load Meter**:
+    - Continuously measures exact audio callback rendering time relative to buffer duration: `load = (elapsedTimeUs / bufferDurationUs) * 100.0`.
+    - Exponential moving average with fast attack and smooth release.
+    - Rendered in top toolbar with mini horizontal load bar (green/yellow/red), percentage readout (`<1%`, `2.4%`), sample rate badge (`48kHz`), and real-time DSP load tooltip.
 
 ---
 
@@ -102,9 +106,10 @@
   - The Master Bus features its own dedicated insert effects chain for mastering limiters, compressors, EQs, and visualizers.
   - Addressed seamlessly across C++ engine, C API, and Python bridge using `track == -1`.
   - Accessible via a prominent `[ FX ]` / `[ FX (N) ]` button on the Master channel strip in the Mixer deck.
-- **Floating Centered Modal Close Button (`✕`)**:
+- **Floating Centered Modal Close Button (`✕`) & Modal Escape Key Handling**:
   - Internal `✓ DONE` buttons removed from both `InstrumentEditorModal` and `TrackFxModal`.
   - Replaced with a sleek circular `✕` close button floating directly *above* the modal window, centered horizontally (`anchors.bottom: modalDialog.top; anchors.bottomMargin: 10; anchors.horizontalCenter: modalDialog.horizontalCenter;`).
+  - **Modal Escape Key Prioritization**: When any popup modal window is open, pressing `Esc` closes the top-most modal immediately and consumes the event without affecting audio playback. Pressing `Esc` when all modals are closed stops playback as normal.
 - **In-App Master-Detail Track & Master FX Modal (`TrackFxModal`)**:
   - Spacious Two-Pane Master-Detail layout (960x600) compliant with KDE Plasma 6 Breeze design.
   - **Left Pane (Device Signal Chain List, 320px wide)**:
@@ -153,7 +158,7 @@
   - Stores tempo (`bpm`), pattern length (`numRows`), looping, base octave, keyboard layout.
   - Full Smart Macro values (`punch`, `warmth`, `tone`, `space`, `master_volume`).
   - Dynamic track roster with custom instrument names, mixer parameters (vol, pan, mute, solo, sf2_preset).
-  - Plugin instrument paths, format types, and saved parameter arrays.
+  - **Strict Engine Type & SoundFont Persistence**: Only serializes plugin instrument paths and parameters if the track is actively set to Plugin (`TRACK_TYPE_PLUGIN = 3`). Unloads inactive plugins and strictly preserves SoundFont (`TRACK_TYPE_SOUNDFONT = 1`), BeatPad (`TRACK_TYPE_DRUMS = 2`), AuraSynth (`TRACK_TYPE_SYNTH = 0`), and Plugin (`TRACK_TYPE_PLUGIN = 3`) engines when opening projects.
   - Per-track Pre-Instrument FX chains (`pre_fx`) and Post-Instrument FX chains (`fx_chain`).
   - Master Bus Insert FX chain (`master_fx`).
   - Multi-pattern data and song arrangement step sequence.

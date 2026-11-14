@@ -51,6 +51,7 @@ class MymsEngine(QObject):
     trackPreFxParamsChanged = pyqtSignal(int, int)
     requestOpenTrackPreFxDialog = pyqtSignal(int, int)
     requestOpenTrackPreFxGui = pyqtSignal(int, int)
+    cpuUsageChanged = pyqtSignal(float)
 
     def _detect_system_keyboard_layout(self):
         try:
@@ -343,6 +344,8 @@ class MymsEngine(QObject):
         self.lib.myms_set_master_volume.argtypes = [ctypes.c_float]
 
         self.lib.myms_get_meters.argtypes = [ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float)]
+        self.lib.myms_get_cpu_usage.restype = ctypes.c_float
+        self._cpu_usage = 0.0
 
         self.lib.myms_set_cell.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint8, ctypes.c_uint8, ctypes.c_uint8, ctypes.c_uint8, ctypes.c_uint8]
         self.lib.myms_get_cell.argtypes = [
@@ -389,6 +392,12 @@ class MymsEngine(QObject):
         self.lib.myms_get_meters(ctypes.byref(pL), ctypes.byref(pR), ctypes.byref(rms))
         self.metersUpdated.emit(pL.value, pR.value, rms.value)
 
+        # Real-time Audio DSP CPU Usage
+        cpu = float(self.lib.myms_get_cpu_usage())
+        if abs(cpu - self._cpu_usage) > 0.05 or (cpu == 0.0 and self._cpu_usage != 0.0):
+            self._cpu_usage = cpu
+            self.cpuUsageChanged.emit(self._cpu_usage)
+
         # Check for dirty plugin and FX parameters (bi-directional GUI sync)
         for t in range(self._num_tracks):
             if self.lib.myms_plugin_is_params_dirty(t):
@@ -407,6 +416,10 @@ class MymsEngine(QObject):
             if self.lib.myms_track_fx_is_params_dirty(-1, s):
                 self.trackFxParamsChanged.emit(-1, s)
                 self.trackFxChanged.emit(-1, s)
+
+    @pyqtProperty(float, notify=cpuUsageChanged)
+    def cpuUsage(self):
+        return self._cpu_usage
 
     @pyqtProperty(bool, notify=playingChanged)
     def isPlaying(self):
@@ -1654,9 +1667,9 @@ class MymsEngine(QObject):
                     "mute": self.getTrackMute(t),
                     "solo": self.getTrackSolo(t),
                     "sf2_preset": self.getTrackSf2Preset(t),
-                    "plugin_path": self.getTrackPluginPath(t) if self.isTrackPluginLoaded(t) else "",
-                    "plugin_format": self.getTrackPluginFormatName(t) if self.isTrackPluginLoaded(t) else "",
-                    "plugin_params": [param["value"] for param in self.getTrackPluginParams(t)] if self.isTrackPluginLoaded(t) else [],
+                    "plugin_path": self.getTrackPluginPath(t) if (trk_type == 3 and self.isTrackPluginLoaded(t)) else "",
+                    "plugin_format": self.getTrackPluginFormatName(t) if (trk_type == 3 and self.isTrackPluginLoaded(t)) else "",
+                    "plugin_params": [param["value"] for param in self.getTrackPluginParams(t)] if (trk_type == 3 and self.isTrackPluginLoaded(t)) else [],
                     "pre_fx": self.getTrackPreFxChainData(t),
                     "fx_chain": self.getTrackFxChainData(t),
                     "synth": {
@@ -1797,8 +1810,7 @@ class MymsEngine(QObject):
                     break
                 if "name" in trk:
                     self.setInstrumentName(t, trk["name"])
-                if "type" in trk:
-                    self.setTrackType(t, int(trk["type"]))
+                trk_type = int(trk.get("type", 0))
                 if "volume" in trk:
                     self.setTrackVolume(t, float(trk["volume"]))
                 if "pan" in trk:
@@ -1809,11 +1821,21 @@ class MymsEngine(QObject):
                     self.setTrackSolo(t, bool(trk["solo"]))
                 if "sf2_preset" in trk:
                     self.setTrackSf2Preset(t, int(trk["sf2_preset"]))
-                if "plugin_path" in trk and trk["plugin_path"] and os.path.exists(trk["plugin_path"]):
-                    self.loadTrackPlugin(t, trk["plugin_path"])
-                    p_vals = trk.get("plugin_params", [])
-                    for p_idx, val in enumerate(p_vals):
-                        self.setTrackPluginParamValue(t, p_idx, float(val))
+
+                # Explicitly handle sound generator by track type
+                if trk_type == 3: # Plugin Instrument
+                    p_path = trk.get("plugin_path", "")
+                    if p_path and os.path.exists(p_path):
+                        self.loadTrackPlugin(t, p_path)
+                        p_vals = trk.get("plugin_params", [])
+                        for p_idx, val in enumerate(p_vals):
+                            self.setTrackPluginParamValue(t, p_idx, float(val))
+                    else:
+                        self.unloadTrackPlugin(t)
+                        self.setTrackType(t, 3)
+                else:
+                    self.unloadTrackPlugin(t)
+                    self.setTrackType(t, trk_type)
 
                 for s in range(self.getMaxTrackFx()):
                     self.unloadTrackFx(t, s)

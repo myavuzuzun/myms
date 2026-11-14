@@ -13,7 +13,7 @@ import signal
 from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QWidget
 from PyQt6.QtGui import QAction, QKeySequence, QIcon
 from PyQt6.QtQuickWidgets import QQuickWidget
-from PyQt6.QtCore import QUrl, Qt
+from PyQt6.QtCore import QUrl, Qt, QObject
 from myms_bridge import MymsEngine
 
 class PluginNativeHostWindow(QMainWindow):
@@ -198,7 +198,7 @@ class AppWindow(QMainWindow):
 
         act_stop = QAction("&Stop", self)
         act_stop.setShortcut(QKeySequence("Esc"))
-        act_stop.triggered.connect(self.engine.stop)
+        act_stop.triggered.connect(self._on_escape_or_stop)
         play_menu.addAction(act_stop)
 
         act_song_mode = QAction("Toggle &Song / Pattern Mode", self)
@@ -260,6 +260,20 @@ class AppWindow(QMainWindow):
             self.setWindowTitle(f"myms — [{name}]")
         else:
             self.setWindowTitle("myms")
+
+    def _on_escape_or_stop(self):
+        root = self.quick_widget.rootObject() if hasattr(self, 'quick_widget') else None
+        if root:
+            # Check modals in reverse order of z-index (topmost first)
+            fx_modal = root.findChild(QObject, "fxModal")
+            if fx_modal and fx_modal.property("isOpen"):
+                fx_modal.setProperty("isOpen", False)
+                return
+            editor_modal = root.findChild(QObject, "editorModal")
+            if editor_modal and editor_modal.property("isOpen"):
+                editor_modal.setProperty("isOpen", False)
+                return
+        self.engine.stop()
 
     def _on_new_project(self):
         self.engine.newProject()

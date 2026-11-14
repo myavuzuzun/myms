@@ -187,8 +187,9 @@ void myms_set_macro_tone(float tone);
 void myms_set_macro_space(float space);
 void myms_set_master_volume(float volume);
 
-// Real-Time Metering
+// Real-Time Metering & DSP Load
 void myms_get_meters(float* out_peak_l, float* out_peak_r, float* out_rms);
+float myms_get_cpu_usage(void);
 
 // Tracker Pattern Editing (Current Pattern)
 void myms_set_cell(int track, int row, uint8_t note, uint8_t instrument, uint8_t volume, uint8_t effect_type, uint8_t effect_param);

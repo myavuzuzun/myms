@@ -408,6 +408,10 @@ void myms_get_meters(float* out_peak_l, float* out_peak_r, float* out_rms) {
     if (out_rms) *out_rms = myms::AudioEngine::instance().getMasterRms();
 }
 
+float myms_get_cpu_usage(void) {
+    return myms::AudioEngine::instance().getCpuUsage();
+}
+
 // Tracker Pattern Editing (Current Pattern)
 void myms_set_cell(int track, int row, uint8_t note, uint8_t instrument, uint8_t volume, uint8_t effect_type, uint8_t effect_param) {
     myms::AudioEngine::instance().setTrackerCell(track, row, note, instrument, volume, effect_type, effect_param);

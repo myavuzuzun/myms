@@ -788,6 +788,10 @@ float AudioEngine::getMasterRms() const {
     return m_rms.load(std::memory_order_relaxed);
 }
 
+float AudioEngine::getCpuUsage() const {
+    return m_cpuUsage.load(std::memory_order_relaxed);
+}
+
 void AudioEngine::setTrackerCell(int track, int row, uint8_t note, uint8_t instrument, uint8_t volume, uint8_t effectType, uint8_t effectParam) {
     m_sequencer.setCell(track, row, note, instrument, volume, effectType, effectParam);
 }
@@ -822,6 +826,7 @@ void AudioEngine::transposeTrack(int track, int semitones) {
 }
 
 void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
+    auto startCpuTime = std::chrono::steady_clock::now();
     std::memset(output, 0, frameCount * channels * sizeof(float));
 
     float peakL = 0.0f;
@@ -875,6 +880,8 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
                 m_trackMixers[t].peakL.store(0.0f, std::memory_order_relaxed);
                 m_trackMixers[t].peakR.store(0.0f, std::memory_order_relaxed);
             }
+            float prevCpu = m_cpuUsage.load(std::memory_order_relaxed);
+            m_cpuUsage.store(prevCpu * 0.90f, std::memory_order_relaxed);
             return;
         }
     }
@@ -1186,6 +1193,16 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
 
     float rms = std::sqrt(sumSq / std::max(1, frameCount));
     m_rms.store(rms, std::memory_order_relaxed);
+
+    auto endCpuTime = std::chrono::steady_clock::now();
+    double elapsedUs = std::chrono::duration<double, std::micro>(endCpuTime - startCpuTime).count();
+    double bufferUs = (static_cast<double>(frameCount) / std::max(1.0, static_cast<double>(m_sampleRate))) * 1000000.0;
+    float currentLoad = static_cast<float>((elapsedUs / std::max(1.0, bufferUs)) * 100.0);
+    currentLoad = std::clamp(currentLoad, 0.0f, 100.0f);
+
+    float prevCpu = m_cpuUsage.load(std::memory_order_relaxed);
+    float smoothedCpu = (currentLoad > prevCpu) ? (prevCpu * 0.70f + currentLoad * 0.30f) : (prevCpu * 0.92f + currentLoad * 0.08f);
+    m_cpuUsage.store(smoothedCpu, std::memory_order_relaxed);
 }
 
 // ==========================================

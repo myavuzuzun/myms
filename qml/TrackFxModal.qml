@@ -1472,7 +1472,8 @@ Item {
         }
     }
 
-    Keys.onEscapePressed: {
+    Keys.onEscapePressed: (event) => {
         root.close()
+        event.accepted = true
     }
 }

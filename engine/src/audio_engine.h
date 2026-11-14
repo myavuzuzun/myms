@@ -241,6 +241,7 @@ public:
     float getMasterPeakL() const;
     float getMasterPeakR() const;
     float getMasterRms() const;
+    float getCpuUsage() const;
 
     // Tracker Grid Data Access
     void setTrackerCell(int track, int row, uint8_t note, uint8_t instrument, uint8_t volume, uint8_t effectType, uint8_t effectParam);
@@ -283,6 +284,7 @@ private:
     std::atomic<float> m_peakL{0.0f};
     std::atomic<float> m_peakR{0.0f};
     std::atomic<float> m_rms{0.0f};
+    std::atomic<float> m_cpuUsage{0.0f};
     std::atomic<int> m_uiCurrentRow{0};
     std::atomic<int> m_uiCurrentPattern{0};
     std::atomic<int> m_uiSongOrderIndex{0};
