@@ -308,6 +308,20 @@ class MymsEngine(QObject):
         self.lib.myms_track_pre_fx_open_native_editor.restype = ctypes.c_bool
         self.lib.myms_track_pre_fx_close_native_editor.argtypes = [ctypes.c_int, ctypes.c_int]
 
+        # Track & FX Rearranging and Bypass
+        self.lib.myms_is_track_fx_enabled.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_is_track_fx_enabled.restype = ctypes.c_bool
+        self.lib.myms_set_track_fx_enabled.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_bool]
+        self.lib.myms_is_track_pre_fx_enabled.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_is_track_pre_fx_enabled.restype = ctypes.c_bool
+        self.lib.myms_set_track_pre_fx_enabled.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_bool]
+        self.lib.myms_swap_track_fx.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int]
+        self.lib.myms_swap_track_fx.restype = ctypes.c_bool
+        self.lib.myms_swap_track_pre_fx.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int]
+        self.lib.myms_swap_track_pre_fx.restype = ctypes.c_bool
+        self.lib.myms_move_track.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_move_track.restype = ctypes.c_bool
+
         # Pattern & Song Sequencer
         self.lib.myms_get_num_patterns.restype = ctypes.c_int
         self.lib.myms_get_current_pattern.restype = ctypes.c_int
@@ -781,6 +795,10 @@ class MymsEngine(QObject):
     def toggleSongMode(self):
         self.setSongMode(not self.isSongMode)
 
+    @pyqtProperty(int, notify=songOrderChanged)
+    def numSongSteps(self):
+        return self.lib.myms_get_song_order_length()
+
     # Song Order Sequencer Slots
     @pyqtSlot(result=list)
     def getSongOrderList(self):
@@ -1075,7 +1093,8 @@ class MymsEngine(QObject):
                     "vendor": self.getTrackPreFxVendor(track, s),
                     "format": self.getTrackPreFxFormatName(track, s),
                     "path": self.getTrackPreFxPath(track, s),
-                    "numParams": self.getTrackPreFxNumParams(track, s)
+                    "numParams": self.getTrackPreFxNumParams(track, s),
+                    "enabled": self.isTrackPreFxEnabled(track, s)
                 })
         return res
 
@@ -1177,7 +1196,8 @@ class MymsEngine(QObject):
                     "path": self.getTrackPreFxPath(track, s),
                     "name": self.getTrackPreFxName(track, s),
                     "format": self.getTrackPreFxFormatName(track, s),
-                    "params": [p["value"] for p in self.getTrackPreFxParams(track, s)]
+                    "params": [p["value"] for p in self.getTrackPreFxParams(track, s)],
+                    "enabled": self.isTrackPreFxEnabled(track, s)
                 })
         return res
 
@@ -1193,7 +1213,8 @@ class MymsEngine(QObject):
                     "vendor": self.getTrackFxVendor(track, s),
                     "format": self.getTrackFxFormatName(track, s),
                     "path": self.getTrackFxPath(track, s),
-                    "numParams": self.getTrackFxNumParams(track, s)
+                    "numParams": self.getTrackFxNumParams(track, s),
+                    "enabled": self.isTrackFxEnabled(track, s)
                 })
         return res
 
@@ -1313,9 +1334,68 @@ class MymsEngine(QObject):
                     "path": self.getTrackFxPath(track, s),
                     "name": self.getTrackFxName(track, s),
                     "format": self.getTrackFxFormatName(track, s),
-                    "params": [p["value"] for p in self.getTrackFxParams(track, s)]
+                    "params": [p["value"] for p in self.getTrackFxParams(track, s)],
+                    "enabled": self.isTrackFxEnabled(track, s)
                 })
         return res
+
+    @pyqtSlot(int, int, result=bool)
+    def isTrackFxEnabled(self, track, slot):
+        return bool(self.lib.myms_is_track_fx_enabled(track, slot))
+
+    @pyqtSlot(int, int, bool)
+    def setTrackFxEnabled(self, track, slot, enabled):
+        self.lib.myms_set_track_fx_enabled(track, slot, enabled)
+        self.trackFxChanged.emit(track, slot)
+
+    @pyqtSlot(int, int, result=bool)
+    def isTrackPreFxEnabled(self, track, slot):
+        return bool(self.lib.myms_is_track_pre_fx_enabled(track, slot))
+
+    @pyqtSlot(int, int, bool)
+    def setTrackPreFxEnabled(self, track, slot, enabled):
+        self.lib.myms_set_track_pre_fx_enabled(track, slot, enabled)
+        self.trackPreFxChanged.emit(track, slot)
+
+    @pyqtSlot(int, int, int, result=bool)
+    def swapTrackFx(self, track, slotA, slotB):
+        ok = bool(self.lib.myms_swap_track_fx(track, slotA, slotB))
+        if ok:
+            self.trackFxChanged.emit(track, slotA)
+            self.trackFxChanged.emit(track, slotB)
+        return ok
+
+    @pyqtSlot(int, int, int, result=bool)
+    def swapTrackPreFx(self, track, slotA, slotB):
+        ok = bool(self.lib.myms_swap_track_pre_fx(track, slotA, slotB))
+        if ok:
+            self.trackPreFxChanged.emit(track, slotA)
+            self.trackPreFxChanged.emit(track, slotB)
+        return ok
+
+    @pyqtSlot(int, int, result=bool)
+    def moveTrack(self, fromIdx, toIdx):
+        n = self.numTracks
+        if fromIdx < 0 or fromIdx >= n or toIdx < 0 or toIdx >= n or fromIdx == toIdx:
+            return False
+        ok = bool(self.lib.myms_move_track(fromIdx, toIdx))
+        if ok:
+            if self._selected_instrument == fromIdx:
+                self._selected_instrument = toIdx
+            elif fromIdx < self._selected_instrument <= toIdx:
+                self._selected_instrument -= 1
+            elif toIdx <= self._selected_instrument < fromIdx:
+                self._selected_instrument += 1
+            self.instrumentChanged.emit(self._selected_instrument)
+            self.numTracksChanged.emit(self.numTracks)
+            for t in range(self.numTracks):
+                self.instrumentNameChanged.emit(t, self.getInstrumentName(t))
+                self.trackMixerChanged.emit(t)
+                self.trackTypeChanged.emit(t, self.getTrackType(t))
+                self.trackFxChanged.emit(t, -1)
+                self.trackPreFxChanged.emit(t, -1)
+            self.gridCellChanged.emit(0, 0)
+        return ok
 
     @pyqtSlot(int)
     def setSongOrderIndex(self, step):
@@ -1773,6 +1853,8 @@ class MymsEngine(QObject):
                 p_path = fx.get("path", "")
                 if p_path and os.path.exists(p_path):
                     self.loadTrackFx(-1, slot, p_path)
+                    if "enabled" in fx:
+                        self.setTrackFxEnabled(-1, slot, bool(fx["enabled"]))
                     fx_vals = fx.get("params", [])
                     for p_idx, val in enumerate(fx_vals):
                         self.setTrackFxParamValue(-1, slot, p_idx, float(val))
@@ -1847,6 +1929,8 @@ class MymsEngine(QObject):
                     p_path = fx.get("path", "")
                     if p_path and os.path.exists(p_path):
                         self.loadTrackPreFx(t, slot, p_path)
+                        if "enabled" in fx:
+                            self.setTrackPreFxEnabled(t, slot, bool(fx["enabled"]))
                         fx_vals = fx.get("params", [])
                         for p_idx, val in enumerate(fx_vals):
                             self.setTrackPreFxParamValue(t, slot, p_idx, float(val))
@@ -1857,6 +1941,8 @@ class MymsEngine(QObject):
                     p_path = fx.get("path", "")
                     if p_path and os.path.exists(p_path):
                         self.loadTrackFx(t, slot, p_path)
+                        if "enabled" in fx:
+                            self.setTrackFxEnabled(t, slot, bool(fx["enabled"]))
                         fx_vals = fx.get("params", [])
                         for p_idx, val in enumerate(fx_vals):
                             self.setTrackFxParamValue(t, slot, p_idx, float(val))

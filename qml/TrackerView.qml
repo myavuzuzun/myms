@@ -11,6 +11,8 @@ Rectangle {
     property var engine
     property int selectedRow: 0
     property int selectedTrack: 0
+    property int selectedColumn: 0 // 0: Note, 1: Inst, 2: Vol, 3: FX
+    property var cellEditorModal: null
     property int currentPlayingRow: engine ? engine.currentRow : 0
 
     property int nameRefreshCounter: 0
@@ -83,6 +85,7 @@ Rectangle {
 
     signal gridModified()
     signal requestEditInstrument(int track, int trackType)
+    signal requestEditCell(int track, int row)
 
     // 2-octave piano keyboard mapping with native Turkish Q & US support
     function getMidiFromKey(event) {
@@ -237,6 +240,15 @@ Rectangle {
             return
         }
 
+        if (cellEditorModal && cellEditorModal.isOpen) {
+            if (event.key === Qt.Key_Escape) {
+                cellEditorModal.close()
+                event.accepted = true
+                return
+            }
+            return
+        }
+
         if (event.key === Qt.Key_Up) {
             root.selectedRow = (root.selectedRow - 1 + nRows) % nRows
             if (engine && !engine.isPlaying) {
@@ -254,23 +266,126 @@ Rectangle {
             return
         }
         if (event.key === Qt.Key_Left) {
-            root.selectedTrack = (root.selectedTrack - 1 + nTracks) % nTracks
-            if (engine) engine.setSelectedInstrument(root.selectedTrack)
+            if (root.selectedColumn > 0) {
+                root.selectedColumn--
+            } else {
+                root.selectedColumn = 3
+                root.selectedTrack = (root.selectedTrack - 1 + nTracks) % nTracks
+                if (engine) engine.setSelectedInstrument(root.selectedTrack)
+            }
             event.accepted = true
             return
         }
         if (event.key === Qt.Key_Right || event.key === Qt.Key_Tab) {
-            root.selectedTrack = (root.selectedTrack + 1) % nTracks
-            if (engine) engine.setSelectedInstrument(root.selectedTrack)
+            if (root.selectedColumn < 3) {
+                root.selectedColumn++
+            } else {
+                root.selectedColumn = 0
+                root.selectedTrack = (root.selectedTrack + 1) % nTracks
+                if (engine) engine.setSelectedInstrument(root.selectedTrack)
+            }
             event.accepted = true
             return
         }
 
         if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
-            engine.setCell(root.selectedTrack, root.selectedRow, 255, 0, 255, 0, 0)
-            root.gridModified()
+            if (engine) {
+                let cell = engine.getCell(root.selectedTrack, root.selectedRow)
+                if (cell) {
+                    if (event.modifiers & Qt.ShiftModifier) {
+                        engine.setCell(root.selectedTrack, root.selectedRow, 255, 0, 255, 0, 0)
+                    } else if (root.selectedColumn === 0) {
+                        engine.setCell(root.selectedTrack, root.selectedRow, 255, cell.instrument, cell.volume, cell.effectType, cell.effectParam)
+                    } else if (root.selectedColumn === 1) {
+                        engine.setCell(root.selectedTrack, root.selectedRow, cell.note, root.selectedTrack + 1, cell.volume, cell.effectType, cell.effectParam)
+                    } else if (root.selectedColumn === 2) {
+                        engine.setCell(root.selectedTrack, root.selectedRow, cell.note, cell.instrument, 255, cell.effectType, cell.effectParam)
+                    } else if (root.selectedColumn === 3) {
+                        engine.setCell(root.selectedTrack, root.selectedRow, cell.note, cell.instrument, cell.volume, 0, 0)
+                    }
+                    root.gridModified()
+                }
+            }
             event.accepted = true
             return
+        }
+
+        // Instrument Column Typing (01..NN)
+        if (root.selectedColumn === 1 && engine) {
+            let digit = parseInt(event.text)
+            if (!isNaN(digit)) {
+                let cell = engine.getCell(root.selectedTrack, root.selectedRow)
+                let newInst = Math.max(1, Math.min(nTracks, digit === 0 ? 10 : digit))
+                engine.setCell(root.selectedTrack, root.selectedRow, cell.note, newInst, cell.volume, cell.effectType, cell.effectParam)
+                root.gridModified()
+                if (engine.isEditMode) root.selectedRow = (root.selectedRow + 1) % nRows
+                event.accepted = true
+                return
+            }
+            if (event.key === Qt.Key_Plus || event.text === "+") {
+                let cell = engine.getCell(root.selectedTrack, root.selectedRow)
+                let newInst = Math.min(nTracks, cell.instrument + 1)
+                engine.setCell(root.selectedTrack, root.selectedRow, cell.note, newInst, cell.volume, cell.effectType, cell.effectParam)
+                root.gridModified()
+                event.accepted = true
+                return
+            }
+            if (event.key === Qt.Key_Minus || event.text === "-") {
+                let cell = engine.getCell(root.selectedTrack, root.selectedRow)
+                let newInst = Math.max(1, cell.instrument - 1)
+                engine.setCell(root.selectedTrack, root.selectedRow, cell.note, newInst, cell.volume, cell.effectType, cell.effectParam)
+                root.gridModified()
+                event.accepted = true
+                return
+            }
+        }
+
+        // Volume Column Typing (00..FF hex)
+        if (root.selectedColumn === 2 && engine) {
+            let ch = event.text.toUpperCase()
+            if ((ch >= "0" && ch <= "9") || (ch >= "A" && ch <= "F")) {
+                let cell = engine.getCell(root.selectedTrack, root.selectedRow)
+                let v = parseInt(ch, 16)
+                let newVol = v * 17
+                engine.setCell(root.selectedTrack, root.selectedRow, cell.note, cell.instrument, newVol, cell.effectType, cell.effectParam)
+                root.gridModified()
+                if (engine.isEditMode) root.selectedRow = (root.selectedRow + 1) % nRows
+                event.accepted = true
+                return
+            }
+            if (event.key === Qt.Key_Plus || event.text === "+") {
+                let cell = engine.getCell(root.selectedTrack, root.selectedRow)
+                let cur = cell.volume === 255 ? 255 : cell.volume
+                let newVol = Math.min(255, cur + 16)
+                engine.setCell(root.selectedTrack, root.selectedRow, cell.note, cell.instrument, newVol, cell.effectType, cell.effectParam)
+                root.gridModified()
+                event.accepted = true
+                return
+            }
+            if (event.key === Qt.Key_Minus || event.text === "-") {
+                let cell = engine.getCell(root.selectedTrack, root.selectedRow)
+                let cur = cell.volume === 255 ? 255 : cell.volume
+                let newVol = Math.max(0, cur - 16)
+                engine.setCell(root.selectedTrack, root.selectedRow, cell.note, cell.instrument, newVol, cell.effectType, cell.effectParam)
+                root.gridModified()
+                event.accepted = true
+                return
+            }
+        }
+
+        // FX Column Typing (Effect Command / Param)
+        if (root.selectedColumn === 3 && engine) {
+            let ch = event.text.toUpperCase()
+            if ((ch >= "0" && ch <= "9") || (ch >= "A" && ch <= "F")) {
+                let cell = engine.getCell(root.selectedTrack, root.selectedRow)
+                let v = parseInt(ch, 16)
+                let newParam = (v * 16) + (cell.effectParam % 16)
+                engine.setCell(root.selectedTrack, root.selectedRow, cell.note, cell.instrument, cell.volume, cell.effectType === 0 ? 16 : cell.effectType, newParam)
+                root.gridModified()
+                if (engine.isEditMode) root.selectedRow = (root.selectedRow + 1) % nRows
+                event.accepted = true
+                return
+            }
         }
 
         // Note off: 1 or backslash
@@ -284,19 +399,25 @@ Rectangle {
             return
         }
 
-        let note = getMidiFromKey(event)
-        if (note >= 0) {
-            let instId = root.selectedTrack + 1
-            engine.noteOnInst(root.selectedTrack, note, 1.0)
-            
-            // If in Edit Mode, stamp into cell and advance row; if Jam mode, just preview!
-            if (engine && engine.isEditMode) {
-                engine.setCell(root.selectedTrack, root.selectedRow, note, instId, 255, 0, 0)
-                root.gridModified()
-                root.selectedRow = (root.selectedRow + 1) % nRows
+        if (root.selectedColumn === 0) {
+            let note = getMidiFromKey(event)
+            if (note >= 0) {
+                let instId = root.selectedTrack + 1
+                engine.noteOnInst(root.selectedTrack, note, 1.0)
+                
+                // If in Edit Mode, stamp into cell and advance row; if Jam mode, just preview!
+                if (engine && engine.isEditMode) {
+                    let curCell = engine.getCell(root.selectedTrack, root.selectedRow)
+                    let vol = curCell ? curCell.volume : 255
+                    let fxT = curCell ? curCell.effectType : 0
+                    let fxP = curCell ? curCell.effectParam : 0
+                    engine.setCell(root.selectedTrack, root.selectedRow, note, instId, vol, fxT, fxP)
+                    root.gridModified()
+                    root.selectedRow = (root.selectedRow + 1) % nRows
+                }
+                event.accepted = true
+                return
             }
-            event.accepted = true
-            return
         }
     }
 
@@ -351,6 +472,68 @@ Rectangle {
                             anchors.leftMargin: 6
                             anchors.rightMargin: 4
                             spacing: 4
+
+                            // Move track left
+                            Rectangle {
+                                width: 14
+                                height: 14
+                                radius: 2
+                                Layout.alignment: Qt.AlignVCenter
+                                color: moveLeftMouse.containsMouse ? "rgba(255,255,255,0.2)" : "transparent"
+                                visible: index > 0
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "◀"
+                                    font.pixelSize: 8
+                                    color: (root.selectedTrack === index) ? "#ffffff" : theme.textMuted
+                                }
+                                MouseArea {
+                                    id: moveLeftMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: {
+                                        if (engine) {
+                                            engine.moveTrack(index, index - 1)
+                                            root.selectedTrack = index - 1
+                                            root.gridModified()
+                                        }
+                                    }
+                                    ToolTip.visible: containsMouse
+                                    ToolTip.text: "Move Track Left"
+                                    ToolTip.delay: 300
+                                }
+                            }
+
+                            // Move track right
+                            Rectangle {
+                                width: 14
+                                height: 14
+                                radius: 2
+                                Layout.alignment: Qt.AlignVCenter
+                                color: moveRightMouse.containsMouse ? "rgba(255,255,255,0.2)" : "transparent"
+                                visible: engine && (index < engine.numTracks - 1)
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "▶"
+                                    font.pixelSize: 8
+                                    color: (root.selectedTrack === index) ? "#ffffff" : theme.textMuted
+                                }
+                                MouseArea {
+                                    id: moveRightMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    onClicked: {
+                                        if (engine) {
+                                            engine.moveTrack(index, index + 1)
+                                            root.selectedTrack = index + 1
+                                            root.gridModified()
+                                        }
+                                    }
+                                    ToolTip.visible: containsMouse
+                                    ToolTip.text: "Move Track Right"
+                                    ToolTip.delay: 300
+                                }
+                            }
 
                             TextInput {
                                 id: trkHeaderInput
@@ -652,44 +835,173 @@ Rectangle {
 
                                 Row {
                                     anchors.centerIn: parent
-                                    spacing: 5
+                                    spacing: 4
 
-                                    Text {
-                                        text: root.getNoteString(cellItem.cellData ? cellItem.cellData.note : 255, cellItem.trackIdx)
-                                        font.pixelSize: 10
-                                        font.bold: (cellItem.cellData && cellItem.cellData.note <= 127)
-                                        font.family: "Monospace, JetBrains Mono, Hack, Noto Sans Mono"
-                                        color: {
-                                            if (!cellItem.cellData || cellItem.cellData.note === 255) return theme.textDim
-                                            if (cellItem.cellData.note === 254) return theme.stopAccent
-                                            return theme.colNote
+                                    // Col 0: Note
+                                    Rectangle {
+                                        id: col0Box
+                                        width: noteText.implicitWidth + 4
+                                        height: 16
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        radius: 2
+                                        property bool isColActive: (root.selectedTrack === cellItem.trackIdx && root.selectedRow === rowIndex && root.selectedColumn === 0)
+                                        color: isColActive ? "#3daee9" : "transparent"
+                                        opacity: isColActive ? 0.35 : 1.0
+
+                                        Text {
+                                            id: noteText
+                                            anchors.centerIn: parent
+                                            text: root.getNoteString(cellItem.cellData ? cellItem.cellData.note : 255, cellItem.trackIdx)
+                                            font.pixelSize: 10
+                                            font.bold: (cellItem.cellData && cellItem.cellData.note <= 127)
+                                            font.family: "Monospace, JetBrains Mono, Hack, Noto Sans Mono"
+                                            color: {
+                                                if (!cellItem.cellData || cellItem.cellData.note === 255) return theme.textDim
+                                                if (cellItem.cellData.note === 254) return theme.stopAccent
+                                                return theme.colNote
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: {
+                                                root.selectedTrack = cellItem.trackIdx
+                                                root.selectedRow = rowIndex
+                                                root.selectedColumn = 0
+                                                if (engine) {
+                                                    engine.setSelectedInstrument(cellItem.trackIdx)
+                                                    if (!engine.isPlaying) engine.setCurrentRow(rowIndex)
+                                                }
+                                                root.forceActiveFocus()
+                                            }
+                                            onDoubleClicked: {
+                                                if (root.cellEditorModal) root.cellEditorModal.open(cellItem.trackIdx, rowIndex)
+                                                else root.requestEditCell(cellItem.trackIdx, rowIndex)
+                                            }
                                         }
                                     }
 
-                                    Text {
-                                        text: (cellItem.cellData && cellItem.cellData.note <= 127) ? root.getHex2(cellItem.cellData.instrument) : "--"
-                                        font.pixelSize: 10
-                                        font.family: "Monospace, JetBrains Mono, Hack, Noto Sans Mono"
-                                        color: (cellItem.cellData && cellItem.cellData.note <= 127) ? theme.colInst : theme.textDim
+                                    // Col 1: Inst
+                                    Rectangle {
+                                        id: col1Box
+                                        width: instText.implicitWidth + 4
+                                        height: 16
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        radius: 2
+                                        property bool isColActive: (root.selectedTrack === cellItem.trackIdx && root.selectedRow === rowIndex && root.selectedColumn === 1)
+                                        color: isColActive ? "#3daee9" : "transparent"
+                                        opacity: isColActive ? 0.35 : 1.0
+
+                                        Text {
+                                            id: instText
+                                            anchors.centerIn: parent
+                                            text: (cellItem.cellData && cellItem.cellData.note <= 127) ? root.getHex2(cellItem.cellData.instrument) : "--"
+                                            font.pixelSize: 10
+                                            font.family: "Monospace, JetBrains Mono, Hack, Noto Sans Mono"
+                                            color: (cellItem.cellData && cellItem.cellData.note <= 127) ? theme.colInst : theme.textDim
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: {
+                                                root.selectedTrack = cellItem.trackIdx
+                                                root.selectedRow = rowIndex
+                                                root.selectedColumn = 1
+                                                if (engine) {
+                                                    engine.setSelectedInstrument(cellItem.trackIdx)
+                                                    if (!engine.isPlaying) engine.setCurrentRow(rowIndex)
+                                                }
+                                                root.forceActiveFocus()
+                                            }
+                                            onDoubleClicked: {
+                                                if (root.cellEditorModal) root.cellEditorModal.open(cellItem.trackIdx, rowIndex)
+                                                else root.requestEditCell(cellItem.trackIdx, rowIndex)
+                                            }
+                                        }
                                     }
 
-                                    Text {
-                                        text: (cellItem.cellData && cellItem.cellData.note <= 127 && cellItem.cellData.volume !== 255) ? root.getHex2(cellItem.cellData.volume) : "--"
-                                        font.pixelSize: 10
-                                        font.family: "Monospace, JetBrains Mono, Hack, Noto Sans Mono"
-                                        color: (cellItem.cellData && cellItem.cellData.note <= 127 && cellItem.cellData.volume !== 255) ? theme.colVol : theme.textDim
+                                    // Col 2: Vol
+                                    Rectangle {
+                                        id: col2Box
+                                        width: volText.implicitWidth + 4
+                                        height: 16
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        radius: 2
+                                        property bool isColActive: (root.selectedTrack === cellItem.trackIdx && root.selectedRow === rowIndex && root.selectedColumn === 2)
+                                        color: isColActive ? "#3daee9" : "transparent"
+                                        opacity: isColActive ? 0.35 : 1.0
+
+                                        Text {
+                                            id: volText
+                                            anchors.centerIn: parent
+                                            text: (cellItem.cellData && cellItem.cellData.note <= 127 && cellItem.cellData.volume !== 255) ? root.getHex2(cellItem.cellData.volume) : "--"
+                                            font.pixelSize: 10
+                                            font.family: "Monospace, JetBrains Mono, Hack, Noto Sans Mono"
+                                            color: (cellItem.cellData && cellItem.cellData.note <= 127 && cellItem.cellData.volume !== 255) ? theme.colVol : theme.textDim
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: {
+                                                root.selectedTrack = cellItem.trackIdx
+                                                root.selectedRow = rowIndex
+                                                root.selectedColumn = 2
+                                                if (engine) {
+                                                    engine.setSelectedInstrument(cellItem.trackIdx)
+                                                    if (!engine.isPlaying) engine.setCurrentRow(rowIndex)
+                                                }
+                                                root.forceActiveFocus()
+                                            }
+                                            onDoubleClicked: {
+                                                if (root.cellEditorModal) root.cellEditorModal.open(cellItem.trackIdx, rowIndex)
+                                                else root.requestEditCell(cellItem.trackIdx, rowIndex)
+                                            }
+                                        }
                                     }
 
-                                    Text {
-                                        text: cellItem.cellData ? root.getFxString(cellItem.cellData.effectType, cellItem.cellData.effectParam) : "----"
-                                        font.pixelSize: 10
-                                        font.family: "Monospace, JetBrains Mono, Hack, Noto Sans Mono"
-                                        color: (cellItem.cellData && cellItem.cellData.effectType !== 0) ? theme.colFx : theme.textDim
+                                    // Col 3: FX
+                                    Rectangle {
+                                        id: col3Box
+                                        width: fxText.implicitWidth + 4
+                                        height: 16
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        radius: 2
+                                        property bool isColActive: (root.selectedTrack === cellItem.trackIdx && root.selectedRow === rowIndex && root.selectedColumn === 3)
+                                        color: isColActive ? "#3daee9" : "transparent"
+                                        opacity: isColActive ? 0.35 : 1.0
+
+                                        Text {
+                                            id: fxText
+                                            anchors.centerIn: parent
+                                            text: cellItem.cellData ? root.getFxString(cellItem.cellData.effectType, cellItem.cellData.effectParam) : "----"
+                                            font.pixelSize: 10
+                                            font.family: "Monospace, JetBrains Mono, Hack, Noto Sans Mono"
+                                            color: (cellItem.cellData && cellItem.cellData.effectType !== 0) ? theme.colFx : theme.textDim
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: {
+                                                root.selectedTrack = cellItem.trackIdx
+                                                root.selectedRow = rowIndex
+                                                root.selectedColumn = 3
+                                                if (engine) {
+                                                    engine.setSelectedInstrument(cellItem.trackIdx)
+                                                    if (!engine.isPlaying) engine.setCurrentRow(rowIndex)
+                                                }
+                                                root.forceActiveFocus()
+                                            }
+                                            onDoubleClicked: {
+                                                if (root.cellEditorModal) root.cellEditorModal.open(cellItem.trackIdx, rowIndex)
+                                                else root.requestEditCell(cellItem.trackIdx, rowIndex)
+                                            }
+                                        }
                                     }
                                 }
 
                                 MouseArea {
                                     anchors.fill: parent
+                                    z: -1
                                     onClicked: {
                                         root.selectedTrack = cellItem.trackIdx
                                         root.selectedRow = rowIndex
@@ -700,6 +1012,10 @@ Rectangle {
                                             }
                                         }
                                         root.forceActiveFocus()
+                                    }
+                                    onDoubleClicked: {
+                                        if (root.cellEditorModal) root.cellEditorModal.open(cellItem.trackIdx, rowIndex)
+                                        else root.requestEditCell(cellItem.trackIdx, rowIndex)
                                     }
                                 }
 

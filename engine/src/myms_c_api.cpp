@@ -728,3 +728,32 @@ bool myms_track_pre_fx_open_native_editor(int track, int slot, void* parent_wind
 void myms_track_pre_fx_close_native_editor(int track, int slot) {
     myms::AudioEngine::instance().closeTrackPreFxEditor(track, slot);
 }
+
+// Track & FX Rearranging and Bypass
+bool myms_is_track_fx_enabled(int track, int slot) {
+    return myms::AudioEngine::instance().isTrackFxEnabled(track, slot);
+}
+
+void myms_set_track_fx_enabled(int track, int slot, bool enabled) {
+    myms::AudioEngine::instance().setTrackFxEnabled(track, slot, enabled);
+}
+
+bool myms_is_track_pre_fx_enabled(int track, int slot) {
+    return myms::AudioEngine::instance().isTrackPreFxEnabled(track, slot);
+}
+
+void myms_set_track_pre_fx_enabled(int track, int slot, bool enabled) {
+    myms::AudioEngine::instance().setTrackPreFxEnabled(track, slot, enabled);
+}
+
+bool myms_swap_track_fx(int track, int slot_a, int slot_b) {
+    return myms::AudioEngine::instance().swapTrackFx(track, slot_a, slot_b);
+}
+
+bool myms_swap_track_pre_fx(int track, int slot_a, int slot_b) {
+    return myms::AudioEngine::instance().swapTrackPreFx(track, slot_a, slot_b);
+}
+
+bool myms_move_track(int from_idx, int to_idx) {
+    return myms::AudioEngine::instance().moveTrack(from_idx, to_idx);
+}

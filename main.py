@@ -6,12 +6,15 @@ import os
 if "QT_QPA_PLATFORM" not in os.environ and os.environ.get("DISPLAY"):
     os.environ["QT_QPA_PLATFORM"] = "xcb"
 
-# Force Qt to use native KDE platform theme for global menus and styling
-os.environ["QT_QPA_PLATFORMTHEME"] = "kde"
+# Force Qt to use native KDE platform theme for global menus and styling when not offscreen
+if os.environ.get("QT_QPA_PLATFORM") != "offscreen" and "-platform" not in sys.argv:
+    os.environ["QT_QPA_PLATFORMTHEME"] = "kde"
+else:
+    os.environ.pop("QT_QPA_PLATFORMTHEME", None)
 
 import signal
-from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QWidget
-from PyQt6.QtGui import QAction, QKeySequence, QIcon
+from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QWidget, QMenuBar
+from PyQt6.QtGui import QAction, QKeySequence, QIcon, QGuiApplication
 from PyQt6.QtQuickWidgets import QQuickWidget
 from PyQt6.QtCore import QUrl, Qt, QObject
 from myms_bridge import MymsEngine
@@ -116,7 +119,12 @@ class AppWindow(QMainWindow):
         self.setCentralWidget(self.quick_widget)
 
     def _setup_native_menu(self):
-        mb = self.menuBar()
+        if QGuiApplication.platformName() == "offscreen":
+            mb = QMenuBar(self)
+            mb.setNativeMenuBar(False)
+            self.setMenuBar(mb)
+        else:
+            mb = self.menuBar()
 
         # --- File Menu ---
         file_menu = mb.addMenu("&File")
@@ -265,6 +273,14 @@ class AppWindow(QMainWindow):
         root = self.quick_widget.rootObject() if hasattr(self, 'quick_widget') else None
         if root:
             # Check modals in reverse order of z-index (topmost first)
+            cell_modal = root.findChild(QObject, "cellEditorModal")
+            if cell_modal and cell_modal.property("isOpen"):
+                cell_modal.setProperty("isOpen", False)
+                return
+            macro_modal = root.findChild(QObject, "macroModal")
+            if macro_modal and macro_modal.property("isOpen"):
+                macro_modal.setProperty("isOpen", False)
+                return
             fx_modal = root.findChild(QObject, "fxModal")
             if fx_modal and fx_modal.property("isOpen"):
                 fx_modal.setProperty("isOpen", False)

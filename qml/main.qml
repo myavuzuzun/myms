@@ -15,7 +15,13 @@ Item {
     property real bottomDeckHeight: 330
 
     Keys.onEscapePressed: (event) => {
-        if (fxModal.isOpen) {
+        if (cellModal.isOpen) {
+            cellModal.close()
+            event.accepted = true
+        } else if (macroModal.isOpen) {
+            macroModal.close()
+            event.accepted = true
+        } else if (fxModal.isOpen) {
             fxModal.close()
             event.accepted = true
         } else if (editorModal.isOpen) {
@@ -352,31 +358,107 @@ Item {
                         }
                     }
 
-                    // Pattern Length (Rows)
+                    // Pattern Length (Rows) - Fully editable arbitrary row count
                     RowLayout {
-                        spacing: 2
+                        spacing: 4
                         Layout.alignment: Qt.AlignVCenter
                         Text { text: "ROWS"; font.pixelSize: 9; font.bold: true; color: theme.textMuted }
-                        Row {
-                            spacing: 1
-                            Repeater {
-                                model: [16, 32, 64]
+                        Rectangle {
+                            width: 68
+                            height: 24
+                            color: theme.bgCard
+                            radius: 2
+                            border.color: rowsInput.activeFocus ? theme.accent : theme.border
+
+                            RowLayout {
+                                anchors.fill: parent
+                                spacing: 0
+
                                 Rectangle {
-                                    width: 24
-                                    height: 24
-                                    radius: 2
-                                    color: (mymsEngine && mymsEngine.numRows === modelData) ? theme.accent : theme.bgCard
-                                    border.color: theme.border
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "" + modelData
-                                        font.pixelSize: 9
-                                        font.bold: true
-                                        color: (mymsEngine && mymsEngine.numRows === modelData) ? "#ffffff" : theme.textMuted
-                                    }
+                                    width: 16
+                                    height: parent.height
+                                    color: rowsMinusMouse.containsMouse ? theme.btnHover : "transparent"
+                                    Text { anchors.centerIn: parent; text: "−"; font.bold: true; color: theme.textMain }
                                     MouseArea {
+                                        id: rowsMinusMouse
                                         anchors.fill: parent
-                                        onClicked: if (mymsEngine) mymsEngine.setNumRows(modelData)
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            if (mymsEngine) {
+                                                let cur = mymsEngine.numRows
+                                                let nextVal = Math.max(1, (cur > 16 && cur % 16 === 0) ? cur - 16 : cur - 1)
+                                                mymsEngine.setNumRows(nextVal)
+                                            }
+                                        }
+                                    }
+                                }
+
+                                TextInput {
+                                    id: rowsInput
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    text: mymsEngine ? "" + mymsEngine.numRows : "32"
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    font.family: "Monospace"
+                                    color: activeFocus ? theme.accent : theme.textHeading
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                    selectByMouse: true
+                                    validator: IntValidator { bottom: 1; top: 512 }
+
+                                    property bool isEditing: false
+
+                                    onActiveFocusChanged: {
+                                        if (activeFocus) {
+                                            isEditing = true
+                                            selectAll()
+                                        } else if (isEditing) {
+                                            isEditing = false
+                                            commitValue()
+                                        }
+                                    }
+
+                                    onAccepted: {
+                                        commitValue()
+                                        focus = false
+                                    }
+
+                                    function commitValue() {
+                                        let v = parseInt(text)
+                                        if (!isNaN(v) && v >= 1 && v <= 512) {
+                                            if (mymsEngine) mymsEngine.setNumRows(v)
+                                        } else {
+                                            text = mymsEngine ? "" + mymsEngine.numRows : "32"
+                                        }
+                                    }
+
+                                    Connections {
+                                        target: mymsEngine
+                                        function onNumRowsChanged(newRows) {
+                                            if (!rowsInput.isEditing) {
+                                                rowsInput.text = "" + newRows
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: 16
+                                    height: parent.height
+                                    color: rowsPlusMouse.containsMouse ? theme.btnHover : "transparent"
+                                    Text { anchors.centerIn: parent; text: "+"; font.bold: true; color: theme.textMain }
+                                    MouseArea {
+                                        id: rowsPlusMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            if (mymsEngine) {
+                                                let cur = mymsEngine.numRows
+                                                let nextVal = Math.min(512, (cur % 16 === 0) ? cur + 16 : cur + 1)
+                                                mymsEngine.setNumRows(nextVal)
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -673,8 +755,12 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 engine: mymsEngine
+                cellEditorModal: cellModal
                 onRequestEditInstrument: (track, trackType) => {
                     editorModal.open(track, trackType)
+                }
+                onRequestEditCell: (track, row) => {
+                    cellModal.open(track, row)
                 }
             }
 
@@ -749,7 +835,7 @@ Item {
 
                     Rectangle {
                         Layout.fillWidth: true
-                        height: 26
+                        height: 24
                         color: theme.bgHeader
                         border.color: theme.border
                         border.width: 1
@@ -760,54 +846,12 @@ Item {
                             anchors.rightMargin: 8
                             spacing: 4
 
-                            Rectangle {
-                                width: 110
-                                height: parent.height - 2
-                                Layout.alignment: Qt.AlignBottom
-                                color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 0) ? theme.bgCard : "transparent"
-                                border.color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 0) ? theme.border : "transparent"
-                                border.width: 1
-                                radius: 2
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "🎚 TRACK MIXER"
-                                    font.bold: true
-                                    font.pixelSize: 10
-                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 0) ? theme.accent : theme.textMuted
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: {
-                                        rootItem.bottomDeckCollapsed = false
-                                        bottomStack.currentIndex = 0
-                                    }
-                                }
-                            }
-
-                            Rectangle {
-                                width: 120
-                                height: parent.height - 2
-                                Layout.alignment: Qt.AlignBottom
-                                color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? theme.bgCard : "transparent"
-                                border.color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? theme.border : "transparent"
-                                border.width: 1
-                                radius: 2
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "🎛 SMART MACROS"
-                                    font.bold: true
-                                    font.pixelSize: 10
-                                    color: (!rootItem.bottomDeckCollapsed && bottomStack.currentIndex === 1) ? theme.accent : theme.textMuted
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: {
-                                        rootItem.bottomDeckCollapsed = false
-                                        bottomStack.currentIndex = 1
-                                    }
-                                }
+                            Text {
+                                text: "🎚 TRACK MIXER"
+                                font.bold: true
+                                font.pixelSize: 10
+                                color: theme.textHeading
+                                Layout.alignment: Qt.AlignVCenter
                             }
 
                             Item { Layout.fillWidth: true }
@@ -833,26 +877,20 @@ Item {
                         }
                     }
 
-                    StackLayout {
-                        id: bottomStack
+                    MixerView {
+                        id: mixerView
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         visible: !rootItem.bottomDeckCollapsed
-                        currentIndex: 0
-
-                        MixerView {
-                            id: mixerView
-                            engine: mymsEngine
-                            onRequestEditInstrument: (track, trackType) => {
-                                editorModal.open(track, trackType)
-                            }
-                            onRequestEditFx: (track) => {
-                                fxModal.open(track)
-                            }
+                        engine: mymsEngine
+                        onRequestEditInstrument: (track, trackType) => {
+                            editorModal.open(track, trackType)
                         }
-
-                        MacroView {
-                            engine: mymsEngine
+                        onRequestEditFx: (track) => {
+                            fxModal.open(track)
+                        }
+                        onRequestEditMacros: () => {
+                            macroModal.open()
                         }
                     }
                 }
@@ -909,5 +947,21 @@ Item {
         onRequestEditInstrument: (track, trackType) => {
             editorModal.open(track, trackType)
         }
+    }
+
+    // Pop-up Auto-Mastering Smart Macros Modal
+    SmartMacroModal {
+        id: macroModal
+        objectName: "macroModal"
+        engine: mymsEngine
+        anchors.fill: parent
+    }
+
+    // Pop-up Step Cell Inspector & Editor Modal
+    StepCellEditorModal {
+        id: cellModal
+        objectName: "cellEditorModal"
+        engine: mymsEngine
+        anchors.fill: parent
     }
 }

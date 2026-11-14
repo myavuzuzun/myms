@@ -160,6 +160,15 @@ bool myms_track_pre_fx_has_native_editor(int track, int slot);
 bool myms_track_pre_fx_open_native_editor(int track, int slot, void* parent_window);
 void myms_track_pre_fx_close_native_editor(int track, int slot);
 
+// Track & FX Rearranging and Bypass
+bool myms_is_track_fx_enabled(int track, int slot);
+void myms_set_track_fx_enabled(int track, int slot, bool enabled);
+bool myms_is_track_pre_fx_enabled(int track, int slot);
+void myms_set_track_pre_fx_enabled(int track, int slot, bool enabled);
+bool myms_swap_track_fx(int track, int slot_a, int slot_b);
+bool myms_swap_track_pre_fx(int track, int slot_a, int slot_b);
+bool myms_move_track(int from_idx, int to_idx);
+
 // Pattern & Song Sequencer
 int myms_get_num_patterns();
 int myms_get_current_pattern();

@@ -218,6 +218,17 @@ public:
     bool openTrackPreFxEditor(int track, int slot, void* parentWindow);
     void closeTrackPreFxEditor(int track, int slot);
 
+    // Track & FX Rearranging and Bypass
+    bool isTrackFxEnabled(int track, int slot) const;
+    void setTrackFxEnabled(int track, int slot, bool enabled);
+    bool isTrackPreFxEnabled(int track, int slot) const;
+    void setTrackPreFxEnabled(int track, int slot, bool enabled);
+
+    bool swapTrackFx(int track, int slotA, int slotB);
+    bool swapTrackPreFx(int track, int slotA, int slotB);
+
+    bool moveTrack(int fromIdx, int toIdx);
+
     // Pattern & Song Management
     int getNumPatterns() const;
     int getCurrentPattern() const;

@@ -55,8 +55,19 @@ struct TrackerPattern {
         numTracks--;
     }
 
+    void moveTrack(int fromIdx, int toIdx) {
+        if (fromIdx < 0 || fromIdx >= numTracks || toIdx < 0 || toIdx >= numTracks || fromIdx == toIdx) return;
+        for (int r = 0; r < numRows; ++r) {
+            if (fromIdx < static_cast<int>(rows[r].size()) && toIdx < static_cast<int>(rows[r].size())) {
+                TrackerCell cell = rows[r][fromIdx];
+                rows[r].erase(rows[r].begin() + fromIdx);
+                rows[r].insert(rows[r].begin() + toIdx, cell);
+            }
+        }
+    }
+
     void setRowsCount(int r) {
-        r = std::clamp(r, 8, 256);
+        r = std::clamp(r, 1, 512);
         if (r == numRows) return;
         rows.resize(r);
         for (int i = numRows; i < r; ++i) {
@@ -201,6 +212,17 @@ public:
         }
     }
 
+    bool moveTrack(int fromIdx, int toIdx) {
+        int n = getNumTracks();
+        if (fromIdx < 0 || fromIdx >= n || toIdx < 0 || toIdx >= n || fromIdx == toIdx) {
+            return false;
+        }
+        for (auto& pat : m_patterns) {
+            pat.moveTrack(fromIdx, toIdx);
+        }
+        return true;
+    }
+
     // Pattern Management
     int getNumPatterns() const {
         return static_cast<int>(m_patterns.size());
@@ -224,7 +246,7 @@ public:
         int tracks = getNumTracks();
         m_patterns.emplace_back(rows, tracks);
         int newIdx = static_cast<int>(m_patterns.size()) - 1;
-        m_songOrder.push_back(newIdx);
+        // Do NOT automatically append to song arrangement
         m_currentPattern = newIdx;
         return newIdx;
     }
@@ -236,7 +258,7 @@ public:
         TrackerPattern clone = m_patterns[sourceIdx];
         m_patterns.push_back(clone);
         int newIdx = static_cast<int>(m_patterns.size()) - 1;
-        m_songOrder.push_back(newIdx);
+        // Do NOT automatically append to song arrangement
         m_currentPattern = newIdx;
         return newIdx;
     }

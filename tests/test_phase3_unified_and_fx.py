@@ -471,5 +471,139 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.assertGreaterEqual(cpu_playing, 0.0)
         self.engine.stop()
 
+    def test_16_arbitrary_pattern_rows(self):
+        # Default is 32 rows
+        self.assertEqual(self.engine.numRows, 32)
+        
+        # Set arbitrary rows
+        self.engine.setNumRows(48)
+        self.assertEqual(self.engine.numRows, 48)
+        
+        self.engine.setNumRows(128)
+        self.assertEqual(self.engine.numRows, 128)
+        
+        self.engine.setNumRows(512)
+        self.assertEqual(self.engine.numRows, 512)
+        
+        # Test clamping
+        self.engine.setNumRows(0)
+        self.assertGreaterEqual(self.engine.numRows, 1)
+
+    def test_17_add_pattern_isolation(self):
+        # Initial song arrangement should have 1 step (pattern 0)
+        self.assertEqual(self.engine.numSongSteps, 1)
+        self.assertEqual(self.engine.getSongOrderStep(0), 0)
+        
+        # Adding a pattern should NOT add it to the song order
+        new_pat = self.engine.addPattern()
+        self.assertEqual(new_pat, 1)
+        self.assertEqual(self.engine.numPatterns, 2)
+        self.assertEqual(self.engine.numSongSteps, 1, "addPattern() must not alter song arrangement")
+
+        # Duplicating a pattern should NOT add it to the song order
+        dup_pat = self.engine.duplicatePattern(0)
+        self.assertEqual(dup_pat, 2)
+        self.assertEqual(self.engine.numPatterns, 3)
+        self.assertEqual(self.engine.numSongSteps, 1, "duplicatePattern() must not alter song arrangement")
+
+    def test_18_track_reordering(self):
+        # Set up Track 0
+        self.engine.setInstrumentName(0, "Bassline")
+        self.engine.setTrackType(0, 0) # Synth
+        self.engine.setCell(0, 0, 48, 1, 200, 0, 0)
+
+        # Add Track 1
+        self.engine.addTrack()
+        self.assertEqual(self.engine.numTracks, 2)
+        self.engine.setInstrumentName(1, "Lead Synth")
+        self.engine.setTrackType(1, 1) # SoundFont
+        self.engine.setTrackSf2Preset(1, 10)
+        self.engine.setCell(1, 0, 60, 2, 250, 0, 0)
+
+        # Verify before swap
+        self.assertEqual(self.engine.getInstrumentName(0), "Bassline")
+        self.assertEqual(self.engine.getInstrumentName(1), "Lead Synth")
+        self.assertEqual(self.engine.getCell(0, 0)["note"], 48)
+        self.assertEqual(self.engine.getCell(1, 0)["note"], 60)
+
+        # Move Track 0 to Track 1 (swap them)
+        ok = self.engine.moveTrack(0, 1)
+        self.assertTrue(ok)
+
+        # Verify after swap: Track 0 is now Lead Synth, Track 1 is now Bassline
+        self.assertEqual(self.engine.getInstrumentName(0), "Lead Synth")
+        self.assertEqual(self.engine.getTrackType(0), 1)
+        self.assertEqual(self.engine.getTrackSf2Preset(0), 10)
+        self.assertEqual(self.engine.getCell(0, 0)["note"], 60)
+
+        self.assertEqual(self.engine.getInstrumentName(1), "Bassline")
+        self.assertEqual(self.engine.getTrackType(1), 0)
+        self.assertEqual(self.engine.getCell(1, 0)["note"], 48)
+
+    def test_19_plugin_effect_reordering(self):
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        self.assertTrue(os.path.exists(filter_fx_path))
+
+        # Load effects in slot 0 and slot 1
+        self.engine.loadTrackFx(0, 0, filter_fx_path)
+        self.engine.loadTrackFx(0, 1, filter_fx_path)
+        self.engine.setTrackFxParamValue(0, 0, 0, 0.25)
+        self.engine.setTrackFxParamValue(0, 1, 0, 0.75)
+
+        self.assertAlmostEqual(self.engine.lib.myms_track_fx_get_param_value(0, 0, 0), 0.25, places=2)
+        self.assertAlmostEqual(self.engine.lib.myms_track_fx_get_param_value(0, 1, 0), 0.75, places=2)
+
+        # Swap slot 0 and 1
+        ok = self.engine.swapTrackFx(0, 0, 1)
+        self.assertTrue(ok)
+
+        # After swap, slot 0 should have 0.75 and slot 1 should have 0.25
+        self.assertAlmostEqual(self.engine.lib.myms_track_fx_get_param_value(0, 0, 0), 0.75, places=2)
+        self.assertAlmostEqual(self.engine.lib.myms_track_fx_get_param_value(0, 1, 0), 0.25, places=2)
+
+    def test_20_plugin_effect_bypass_toggle_and_persistence(self):
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        self.assertTrue(os.path.exists(filter_fx_path))
+
+        # Load Post-FX and Pre-FX
+        self.engine.loadTrackFx(0, 0, filter_fx_path)
+        self.engine.loadTrackPreFx(0, 0, filter_fx_path)
+
+        # Initially enabled
+        self.assertTrue(self.engine.isTrackFxEnabled(0, 0))
+        self.assertTrue(self.engine.isTrackPreFxEnabled(0, 0))
+
+        # Toggle bypass off
+        self.engine.setTrackFxEnabled(0, 0, False)
+        self.assertFalse(self.engine.isTrackFxEnabled(0, 0))
+
+        self.engine.setTrackPreFxEnabled(0, 0, False)
+        self.assertFalse(self.engine.isTrackPreFxEnabled(0, 0))
+
+        # Save and reload project
+        with tempfile.NamedTemporaryFile(suffix=".myms", delete=False) as f:
+            tmp_path = f.name
+
+        try:
+            saved = self.engine.saveProject(tmp_path)
+            self.assertTrue(saved)
+
+            self.engine.newProject()
+            self.assertTrue(self.engine.openProject(tmp_path))
+
+            # Verify bypassed state persisted
+            self.assertTrue(self.engine.isTrackFxLoaded(0, 0))
+            self.assertFalse(self.engine.isTrackFxEnabled(0, 0), "Post-FX bypass should persist")
+
+            self.assertTrue(self.engine.isTrackPreFxLoaded(0, 0))
+            self.assertFalse(self.engine.isTrackPreFxEnabled(0, 0), "Pre-FX bypass should persist")
+
+            # Re-enable
+            self.engine.setTrackFxEnabled(0, 0, True)
+            self.assertTrue(self.engine.isTrackFxEnabled(0, 0))
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
 if __name__ == "__main__":
     unittest.main()

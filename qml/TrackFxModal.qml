@@ -458,6 +458,98 @@ Item {
                                                     }
                                                 }
 
+                                                // Power / Bypass Toggle
+                                                Rectangle {
+                                                    width: 20
+                                                    height: 20
+                                                    radius: 3
+                                                    color: modelData.enabled ? "#1e3a5f" : "#252525"
+                                                    border.color: modelData.enabled ? theme.accent : "#555555"
+                                                    border.width: 1
+
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: "⏻"
+                                                        font.pixelSize: 10
+                                                        font.bold: true
+                                                        color: modelData.enabled ? "#3daee9" : theme.textMuted
+                                                    }
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            if (root.engine) {
+                                                                root.engine.setTrackPreFxEnabled(root.targetTrack, modelData.slot, !modelData.enabled)
+                                                                root.refreshSlots()
+                                                            }
+                                                        }
+                                                        ToolTip.visible: containsMouse
+                                                        ToolTip.text: modelData.enabled ? "Active (Click to bypass)" : "Bypassed (Click to enable)"
+                                                        ToolTip.delay: 300
+                                                    }
+                                                }
+
+                                                // Reorder Buttons (Move Up / Down)
+                                                Column {
+                                                    spacing: 1
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    visible: root.preFxList.length > 1
+
+                                                    Rectangle {
+                                                        width: 14
+                                                        height: 9
+                                                        radius: 2
+                                                        color: preUpMouse.containsMouse ? theme.btnHover : "transparent"
+                                                        opacity: index > 0 ? 1.0 : 0.2
+                                                        Text { anchors.centerIn: parent; text: "▲"; font.pixelSize: 6; color: theme.textMuted }
+                                                        MouseArea {
+                                                            id: preUpMouse
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            enabled: index > 0
+                                                            onClicked: {
+                                                                if (root.engine && index > 0) {
+                                                                    let prevSlot = root.preFxList[index - 1].slot
+                                                                    root.engine.swapTrackPreFx(root.targetTrack, modelData.slot, prevSlot)
+                                                                    root.selectedPreFxIndex = index - 1
+                                                                    root.refreshSlots()
+                                                                }
+                                                            }
+                                                            ToolTip.visible: containsMouse && index > 0
+                                                            ToolTip.text: "Move Up in Chain"
+                                                            ToolTip.delay: 300
+                                                        }
+                                                    }
+
+                                                    Rectangle {
+                                                        width: 14
+                                                        height: 9
+                                                        radius: 2
+                                                        color: preDownMouse.containsMouse ? theme.btnHover : "transparent"
+                                                        opacity: index < root.preFxList.length - 1 ? 1.0 : 0.2
+                                                        Text { anchors.centerIn: parent; text: "▼"; font.pixelSize: 6; color: theme.textMuted }
+                                                        MouseArea {
+                                                            id: preDownMouse
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            enabled: index < root.preFxList.length - 1
+                                                            onClicked: {
+                                                                if (root.engine && index < root.preFxList.length - 1) {
+                                                                    let nextSlot = root.preFxList[index + 1].slot
+                                                                    root.engine.swapTrackPreFx(root.targetTrack, modelData.slot, nextSlot)
+                                                                    root.selectedPreFxIndex = index + 1
+                                                                    root.refreshSlots()
+                                                                }
+                                                            }
+                                                            ToolTip.visible: containsMouse && index < root.preFxList.length - 1
+                                                            ToolTip.text: "Move Down in Chain"
+                                                            ToolTip.delay: 300
+                                                        }
+                                                    }
+                                                }
+
                                                 // Remove Button
                                                 Rectangle {
                                                     width: 20
@@ -767,6 +859,98 @@ Item {
                                                         text: modelData.numParams + " params"
                                                         font.pixelSize: 8
                                                         color: theme.textMuted
+                                                    }
+                                                }
+
+                                                // Power / Bypass Toggle
+                                                Rectangle {
+                                                    width: 20
+                                                    height: 20
+                                                    radius: 3
+                                                    color: modelData.enabled ? "#1e3a5f" : "#252525"
+                                                    border.color: modelData.enabled ? theme.accent : "#555555"
+                                                    border.width: 1
+
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: "⏻"
+                                                        font.pixelSize: 10
+                                                        font.bold: true
+                                                        color: modelData.enabled ? "#3daee9" : theme.textMuted
+                                                    }
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: {
+                                                            if (root.engine) {
+                                                                root.engine.setTrackFxEnabled(root.targetTrack, modelData.slot, !modelData.enabled)
+                                                                root.refreshSlots()
+                                                            }
+                                                        }
+                                                        ToolTip.visible: containsMouse
+                                                        ToolTip.text: modelData.enabled ? "Active (Click to bypass)" : "Bypassed (Click to enable)"
+                                                        ToolTip.delay: 300
+                                                    }
+                                                }
+
+                                                // Reorder Buttons (Move Up / Down)
+                                                Column {
+                                                    spacing: 1
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    visible: root.fxList.length > 1
+
+                                                    Rectangle {
+                                                        width: 14
+                                                        height: 9
+                                                        radius: 2
+                                                        color: postUpMouse.containsMouse ? theme.btnHover : "transparent"
+                                                        opacity: index > 0 ? 1.0 : 0.2
+                                                        Text { anchors.centerIn: parent; text: "▲"; font.pixelSize: 6; color: theme.textMuted }
+                                                        MouseArea {
+                                                            id: postUpMouse
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            enabled: index > 0
+                                                            onClicked: {
+                                                                if (root.engine && index > 0) {
+                                                                    let prevSlot = root.fxList[index - 1].slot
+                                                                    root.engine.swapTrackFx(root.targetTrack, modelData.slot, prevSlot)
+                                                                    root.selectedFxIndex = index - 1
+                                                                    root.refreshSlots()
+                                                                }
+                                                            }
+                                                            ToolTip.visible: containsMouse && index > 0
+                                                            ToolTip.text: "Move Up in Chain"
+                                                            ToolTip.delay: 300
+                                                        }
+                                                    }
+
+                                                    Rectangle {
+                                                        width: 14
+                                                        height: 9
+                                                        radius: 2
+                                                        color: postDownMouse.containsMouse ? theme.btnHover : "transparent"
+                                                        opacity: index < root.fxList.length - 1 ? 1.0 : 0.2
+                                                        Text { anchors.centerIn: parent; text: "▼"; font.pixelSize: 6; color: theme.textMuted }
+                                                        MouseArea {
+                                                            id: postDownMouse
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            enabled: index < root.fxList.length - 1
+                                                            onClicked: {
+                                                                if (root.engine && index < root.fxList.length - 1) {
+                                                                    let nextSlot = root.fxList[index + 1].slot
+                                                                    root.engine.swapTrackFx(root.targetTrack, modelData.slot, nextSlot)
+                                                                    root.selectedFxIndex = index + 1
+                                                                    root.refreshSlots()
+                                                                }
+                                                            }
+                                                            ToolTip.visible: containsMouse && index < root.fxList.length - 1
+                                                            ToolTip.text: "Move Down in Chain"
+                                                            ToolTip.delay: 300
+                                                        }
                                                     }
                                                 }
 
@@ -1097,6 +1281,41 @@ Item {
                                 Row {
                                     spacing: 6
                                     Layout.alignment: Qt.AlignVCenter
+
+                                    Button {
+                                        id: inspectorPowerBtn
+                                        property bool isFxEnabled: (root.currentFx && root.currentFx.enabled !== undefined) ? root.currentFx.enabled : true
+                                        text: isFxEnabled ? "⏻ ACTIVE" : "⏻ BYPASSED"
+                                        font.bold: true
+                                        font.pixelSize: 9
+                                        implicitHeight: 28
+                                        background: Rectangle {
+                                            color: inspectorPowerBtn.isFxEnabled ? (inspectorPowerBtn.hovered ? "#2b4c73" : "#1e3a5f") : (inspectorPowerBtn.hovered ? "#3d3d3d" : "#2a2a2a")
+                                            border.color: inspectorPowerBtn.isFxEnabled ? theme.accent : "#555555"
+                                            radius: 3
+                                        }
+                                        contentItem: Text {
+                                            text: parent.text
+                                            font: parent.font
+                                            color: inspectorPowerBtn.isFxEnabled ? "#3daee9" : theme.textMuted
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        onClicked: {
+                                            if (root.engine && root.currentFx) {
+                                                let nextState = !inspectorPowerBtn.isFxEnabled
+                                                if (root.selectedType === "pre") {
+                                                    root.engine.setTrackPreFxEnabled(root.targetTrack, root.currentSlot, nextState)
+                                                } else {
+                                                    root.engine.setTrackFxEnabled(root.targetTrack, root.currentSlot, nextState)
+                                                }
+                                                root.refreshSlots()
+                                            }
+                                        }
+                                        ToolTip.visible: hovered
+                                        ToolTip.text: inspectorPowerBtn.isFxEnabled ? "Effect active. Click to bypass audio processing." : "Effect bypassed. Click to enable."
+                                        ToolTip.delay: 300
+                                    }
 
                                     Button {
                                         text: "🗔 OPEN GUI"

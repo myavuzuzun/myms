@@ -1678,4 +1678,180 @@ void AudioEngine::closeTrackPreFxEditor(int track, int slot) {
     }
 }
 
+// Track & FX Rearranging and Bypass
+bool AudioEngine::isTrackFxEnabled(int track, int slot) const {
+    if (slot < 0 || slot >= MAX_TRACK_FX) return false;
+    if (track == -1) {
+        return m_masterFx[slot] && m_masterFx[slot]->isEnabled();
+    }
+    if (track >= 0 && track < static_cast<int>(m_trackFx.size())) {
+        return m_trackFx[track][slot] && m_trackFx[track][slot]->isEnabled();
+    }
+    return false;
+}
+
+void AudioEngine::setTrackFxEnabled(int track, int slot, bool enabled) {
+    if (slot < 0 || slot >= MAX_TRACK_FX) return;
+    if (track == -1) {
+        if (m_masterFx[slot]) m_masterFx[slot]->setEnabled(enabled);
+        return;
+    }
+    if (track >= 0 && track < static_cast<int>(m_trackFx.size())) {
+        if (m_trackFx[track][slot]) m_trackFx[track][slot]->setEnabled(enabled);
+    }
+}
+
+bool AudioEngine::isTrackPreFxEnabled(int track, int slot) const {
+    if (track >= 0 && track < static_cast<int>(m_trackPreFx.size()) && slot >= 0 && slot < MAX_TRACK_FX) {
+        return m_trackPreFx[track][slot] && m_trackPreFx[track][slot]->isEnabled();
+    }
+    return false;
+}
+
+void AudioEngine::setTrackPreFxEnabled(int track, int slot, bool enabled) {
+    if (track >= 0 && track < static_cast<int>(m_trackPreFx.size()) && slot >= 0 && slot < MAX_TRACK_FX) {
+        if (m_trackPreFx[track][slot]) m_trackPreFx[track][slot]->setEnabled(enabled);
+    }
+}
+
+bool AudioEngine::swapTrackFx(int track, int slotA, int slotB) {
+    if (slotA < 0 || slotA >= MAX_TRACK_FX || slotB < 0 || slotB >= MAX_TRACK_FX || slotA == slotB) {
+        return false;
+    }
+    if (track == -1) {
+        std::swap(m_masterFx[slotA], m_masterFx[slotB]);
+        int maxSlot = 0;
+        for (int s = 0; s < MAX_TRACK_FX; ++s) {
+            if (m_masterFx[s] && m_masterFx[s]->isLoaded()) {
+                maxSlot = s + 1;
+            }
+        }
+        m_masterFxMaxSlot.store(maxSlot, std::memory_order_release);
+        return true;
+    }
+    if (track >= 0 && track < static_cast<int>(m_trackFx.size())) {
+        std::swap(m_trackFx[track][slotA], m_trackFx[track][slotB]);
+        if (track < MAX_INSTRUMENTS) {
+            int maxSlot = 0;
+            for (int s = 0; s < MAX_TRACK_FX; ++s) {
+                if (m_trackFx[track][s] && m_trackFx[track][s]->isLoaded()) {
+                    maxSlot = s + 1;
+                }
+            }
+            m_trackFxMaxSlot[track].store(maxSlot, std::memory_order_release);
+        }
+        return true;
+    }
+    return false;
+}
+
+bool AudioEngine::swapTrackPreFx(int track, int slotA, int slotB) {
+    if (track < 0 || track >= static_cast<int>(m_trackPreFx.size())) return false;
+    if (slotA < 0 || slotA >= MAX_TRACK_FX || slotB < 0 || slotB >= MAX_TRACK_FX || slotA == slotB) {
+        return false;
+    }
+    std::swap(m_trackPreFx[track][slotA], m_trackPreFx[track][slotB]);
+    if (track < MAX_INSTRUMENTS) {
+        int maxSlot = 0;
+        for (int s = 0; s < MAX_TRACK_FX; ++s) {
+            if (m_trackPreFx[track][s] && m_trackPreFx[track][s]->isLoaded()) {
+                maxSlot = s + 1;
+            }
+        }
+        m_trackPreFxMaxSlot[track].store(maxSlot, std::memory_order_release);
+    }
+    return true;
+}
+
+bool AudioEngine::moveTrack(int fromIdx, int toIdx) {
+    int numTracks = static_cast<int>(m_instruments.size());
+    if (fromIdx < 0 || fromIdx >= numTracks || toIdx < 0 || toIdx >= numTracks || fromIdx == toIdx) {
+        return false;
+    }
+
+    // 1. Move instrument synth
+    SynthEngine inst = std::move(m_instruments[fromIdx]);
+    m_instruments.erase(m_instruments.begin() + fromIdx);
+    m_instruments.insert(m_instruments.begin() + toIdx, std::move(inst));
+
+    // 1b. Move instrument name
+    if (fromIdx < static_cast<int>(m_instrumentNames.size()) && toIdx < static_cast<int>(m_instrumentNames.size())) {
+        std::string name = m_instrumentNames[fromIdx];
+        m_instrumentNames.erase(m_instrumentNames.begin() + fromIdx);
+        m_instrumentNames.insert(m_instrumentNames.begin() + toIdx, name);
+    }
+
+    // 2. Move track type
+    if (fromIdx < static_cast<int>(m_trackTypes.size()) && toIdx < static_cast<int>(m_trackTypes.size())) {
+        int tt = m_trackTypes[fromIdx];
+        m_trackTypes.erase(m_trackTypes.begin() + fromIdx);
+        m_trackTypes.insert(m_trackTypes.begin() + toIdx, tt);
+    }
+
+    // 3. Move track mixer state
+    if (fromIdx < static_cast<int>(m_trackMixers.size()) && toIdx < static_cast<int>(m_trackMixers.size())) {
+        TrackMixerState ms = m_trackMixers[fromIdx];
+        m_trackMixers.erase(m_trackMixers.begin() + fromIdx);
+        m_trackMixers.insert(m_trackMixers.begin() + toIdx, ms);
+    }
+
+    // 4. Move plugin instrument
+    if (fromIdx < static_cast<int>(m_plugins.size()) && toIdx < static_cast<int>(m_plugins.size())) {
+        auto plug = std::move(m_plugins[fromIdx]);
+        m_plugins.erase(m_plugins.begin() + fromIdx);
+        m_plugins.insert(m_plugins.begin() + toIdx, std::move(plug));
+    }
+
+    // 5. Move Post-FX chain
+    if (fromIdx < static_cast<int>(m_trackFx.size()) && toIdx < static_cast<int>(m_trackFx.size())) {
+        auto fx = std::move(m_trackFx[fromIdx]);
+        m_trackFx.erase(m_trackFx.begin() + fromIdx);
+        m_trackFx.insert(m_trackFx.begin() + toIdx, std::move(fx));
+    }
+
+    // 6. Move Pre-FX chain
+    if (fromIdx < static_cast<int>(m_trackPreFx.size()) && toIdx < static_cast<int>(m_trackPreFx.size())) {
+        auto preFx = std::move(m_trackPreFx[fromIdx]);
+        m_trackPreFx.erase(m_trackPreFx.begin() + fromIdx);
+        m_trackPreFx.insert(m_trackPreFx.begin() + toIdx, std::move(preFx));
+    }
+
+    // 7. Move slot max atomics
+    int fxMax[MAX_INSTRUMENTS];
+    int preMax[MAX_INSTRUMENTS];
+    for (int i = 0; i < numTracks && i < MAX_INSTRUMENTS; ++i) {
+        fxMax[i] = m_trackFxMaxSlot[i].load(std::memory_order_relaxed);
+        preMax[i] = m_trackPreFxMaxSlot[i].load(std::memory_order_relaxed);
+    }
+    int savedFx = fxMax[fromIdx];
+    int savedPre = preMax[fromIdx];
+    if (fromIdx < toIdx) {
+        for (int i = fromIdx; i < toIdx; ++i) {
+            fxMax[i] = fxMax[i + 1];
+            preMax[i] = preMax[i + 1];
+        }
+    } else {
+        for (int i = fromIdx; i > toIdx; --i) {
+            fxMax[i] = fxMax[i - 1];
+            preMax[i] = preMax[i - 1];
+        }
+    }
+    fxMax[toIdx] = savedFx;
+    preMax[toIdx] = savedPre;
+    for (int i = 0; i < numTracks && i < MAX_INSTRUMENTS; ++i) {
+        m_trackFxMaxSlot[i].store(fxMax[i], std::memory_order_release);
+        m_trackPreFxMaxSlot[i].store(preMax[i], std::memory_order_release);
+    }
+
+    // 8. Move sequencer pattern cells
+    m_sequencer.moveTrack(fromIdx, toIdx);
+
+    // 9. Sync SoundFont channel presets
+    for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
+        m_soundfont.setChannelPreset(t, m_trackMixers[t].sf2Preset);
+    }
+
+    return true;
+}
+
 } // namespace myms

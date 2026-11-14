@@ -14,6 +14,7 @@ Rectangle {
     property var engine
     signal requestEditInstrument(int track, int trackType)
     signal requestEditFx(int track)
+    signal requestEditMacros()
 
     function gainToDb(gain) {
         if (gain <= 0.0001) return "-inf dB"
@@ -170,6 +171,58 @@ Rectangle {
                                     font.bold: true
                                     font.pixelSize: 11
                                     color: (engine && engine.selectedInstrument === strip.trackIdx) ? "#ffffff" : theme.accent
+                                }
+
+                                // Move track left
+                                Rectangle {
+                                    width: 14
+                                    height: 14
+                                    radius: 2
+                                    color: moveLeftMouse.containsMouse ? theme.btnHover : "transparent"
+                                    visible: strip.trackIdx > 0
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "◀"
+                                        font.pixelSize: 8
+                                        color: (engine && engine.selectedInstrument === strip.trackIdx) ? "#ffffff" : theme.textMuted
+                                    }
+                                    MouseArea {
+                                        id: moveLeftMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            if (engine) engine.moveTrack(strip.trackIdx, strip.trackIdx - 1)
+                                        }
+                                        ToolTip.visible: containsMouse
+                                        ToolTip.text: "Move Track Left"
+                                        ToolTip.delay: 300
+                                    }
+                                }
+
+                                // Move track right
+                                Rectangle {
+                                    width: 14
+                                    height: 14
+                                    radius: 2
+                                    color: moveRightMouse.containsMouse ? theme.btnHover : "transparent"
+                                    visible: engine && (strip.trackIdx < engine.numTracks - 1)
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "▶"
+                                        font.pixelSize: 8
+                                        color: (engine && engine.selectedInstrument === strip.trackIdx) ? "#ffffff" : theme.textMuted
+                                    }
+                                    MouseArea {
+                                        id: moveRightMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            if (engine) engine.moveTrack(strip.trackIdx, strip.trackIdx + 1)
+                                        }
+                                        ToolTip.visible: containsMouse
+                                        ToolTip.text: "Move Track Right"
+                                        ToolTip.delay: 300
+                                    }
                                 }
 
                                 TextInput {
@@ -886,38 +939,78 @@ Rectangle {
                         }
                     }
 
-                    // Master FX Chain Button
-                    Button {
-                        id: masterFxBtn
+                    // Master FX & Smart Macros Buttons
+                    RowLayout {
                         Layout.fillWidth: true
-                        implicitHeight: 24
-                        property int fxCount: masterStrip.masterFxCount
-                        text: fxCount > 0 ? ("FX (" + fxCount + ")") : "FX"
-                        font.bold: true
-                        font.pixelSize: 10
-                        background: Rectangle {
-                            color: {
-                                if (masterFxBtn.hovered) return theme.btnHover
-                                if (masterFxBtn.fxCount > 0) return "#1e3a5f"
-                                return theme.bgWellHover
+                        spacing: 4
+
+                        Button {
+                            id: masterFxBtn
+                            Layout.fillWidth: true
+                            implicitHeight: 24
+                            property int fxCount: masterStrip.masterFxCount
+                            text: fxCount > 0 ? ("FX (" + fxCount + ")") : "FX"
+                            font.bold: true
+                            font.pixelSize: 9
+                            background: Rectangle {
+                                color: {
+                                    if (masterFxBtn.hovered) return theme.btnHover
+                                    if (masterFxBtn.fxCount > 0) return "#1e3a5f"
+                                    return theme.bgWellHover
+                                }
+                                border.color: masterFxBtn.fxCount > 0 ? theme.accent : theme.border
+                                border.width: masterFxBtn.fxCount > 0 ? 2 : 1
+                                radius: 3
                             }
-                            border.color: masterFxBtn.fxCount > 0 ? theme.accent : theme.border
-                            border.width: masterFxBtn.fxCount > 0 ? 2 : 1
-                            radius: 3
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: masterFxBtn.fxCount > 0 ? theme.accent : theme.textHeading
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            onClicked: {
+                                root.requestEditFx(-1)
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: (masterFxBtn.fxCount > 0) ? ("Master Insert FX Chain (" + masterFxBtn.fxCount + " active)") : "Open Master Insert FX Chain"
+                            ToolTip.delay: 300
                         }
-                        contentItem: Text {
-                            text: parent.text
-                            font: parent.font
-                            color: masterFxBtn.fxCount > 0 ? theme.accent : theme.textHeading
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
+
+                        Button {
+                            id: masterMacroBtn
+                            Layout.fillWidth: true
+                            implicitHeight: 24
+                            text: "🎛 MACROS"
+                            font.bold: true
+                            font.pixelSize: 9
+                            background: Rectangle {
+                                color: {
+                                    if (masterMacroBtn.hovered) return theme.btnHover
+                                    let anyMacro = engine && (engine.macroPunch > 0.01 || engine.macroWarmth > 0.01 || engine.macroSpace > 0.01 || Math.abs(engine.macroTone - 0.5) > 0.03)
+                                    return anyMacro ? "#2a3b4c" : theme.bgWellHover
+                                }
+                                border.color: {
+                                    let anyMacro = engine && (engine.macroPunch > 0.01 || engine.macroWarmth > 0.01 || engine.macroSpace > 0.01 || Math.abs(engine.macroTone - 0.5) > 0.03)
+                                    return anyMacro ? theme.accent : theme.border
+                                }
+                                border.width: 1
+                                radius: 3
+                            }
+                            contentItem: Text {
+                                text: parent.text
+                                font: parent.font
+                                color: parent.hovered ? "#ffffff" : theme.accent
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            onClicked: {
+                                root.requestEditMacros()
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: "Open Auto-Mastering Smart Macros (Punch, Warmth, Tone, Space)"
+                            ToolTip.delay: 300
                         }
-                        onClicked: {
-                            root.requestEditFx(-1)
-                        }
-                        ToolTip.visible: hovered
-                        ToolTip.text: (masterFxBtn.fxCount > 0) ? ("Master Insert FX Chain (" + masterFxBtn.fxCount + " active)") : "Open Master Insert FX Chain"
-                        ToolTip.delay: 300
                     }
 
                     // Soft Limiter / Output Peak Status

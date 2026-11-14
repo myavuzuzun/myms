@@ -39,10 +39,32 @@
 ```
 
 - **Tracker Columns per Track**:
-  - `NOTE`: Musical note and octave (e.g. `C-4`, `F#3`, `OFF`).
-  - `INST`: Instrument ID (`01`, `02`, `03`...).
-  - `VOL`: Step volume / velocity (`00`–`FF`).
-  - `FX`: Parameter locks & effects (`10` Cutoff, `01` Pitch Up, `02` Pitch Down, `0C` Retrigger/Roll, `0E` Delay).
+  - `NOTE`: Musical note and octave (e.g. `C-4`, `F#3`, `OFF`, `---`).
+  - `INST`: Instrument ID (`01`, `02`, `03`... corresponding in hex to Track 1, Track 2, Track 3...).
+  - `VOL`: Step volume / velocity (`00`–`FF` in hex, `--` = 255 default max).
+  - `FX`: Parameter locks & effects commands + value in hex (e.g. `102A` = Command `10` Filter Cutoff with value `2A` / 42; `01` Pitch Up, `02` Pitch Down, `0C` Retrigger/Roll, `0E` Delay).
+- **Sub-Column Navigation & Hex Editing**:
+  - Left / Right arrows navigate smoothly between the 4 sub-columns (`selectedColumn`: 0 = Note, 1 = Inst, 2 = Vol, 3 = FX) and cross track boundaries seamlessly.
+  - Active sub-column is visibly highlighted with an elegant KDE Breeze highlight box.
+  - Direct typing on sub-columns: `0-9` and `+`/`-` for Inst; `0-9, A-F` for Vol and FX.
+  - Column-specific Delete key clears only the selected sub-column without erasing the entire cell (`Shift+Del` clears whole cell).
+- **Step Cell Inspector & Editor Modal (`StepCellEditorModal`)**:
+  - Double-clicking any cell opens a full-featured in-app editor modal.
+  - Interactive semitone buttons (`C`..`B`, `OFF`, `---`) with octave stepper and MIDI note number readout.
+  - Hex Instrument ID stepper with track name preview (`01 · Synth 1`).
+  - Volume slider with hex (`C8`) and percentage (`78%`) display and `DEFAULT` reset.
+  - Human-readable Effect Command dropdown (Filter Cutoff, Pitch Slide Up/Down, Retrigger, Delay) with parameter slider, hex readout, and `CLEAR FX` button.
+- **Arbitrary Pattern Row Length (1..512 Rows)**:
+  - Eliminated hardcoded row presets (`16`, `32`, `64`).
+  - Replaced with an interactive arbitrary row control `[ − ] [ 32 ] [ + ]` in the top transport toolbar.
+  - Supports direct numeric typing of any row count between 1 and 512, plus step increment/decrement buttons.
+- **Pattern Creation Isolation**:
+  - Creating a new pattern (`+ NEW PAT`) or duplicating a pattern (`DUPLICATE`) creates the pattern in the project without automatically appending it to the song arrangement structure (`m_songOrder`).
+  - The song structure remains strictly author-controlled.
+- **Track & Plugin Effect Reordering & Bypass**:
+  - **Track Order Rearranging**: Tracks can be moved left and right via `◀` and `▶` buttons on Mixer channel strips and Tracker matrix headers (`moveTrack(from, to)`). Reorders synth state, plugins, mixer controls, Pre/Post FX chains, and sequencer cells atomically.
+  - **Plugin Effect Reordering**: Insert and Pre-effects can be reordered up and down in the chain via `▲` and `▼` buttons (`swapTrackFx`, `swapTrackPreFx`).
+  - **Plugin Effect Power Bypass Toggle**: Each effect has a dedicated zero-allocation `[ ⏻ ]` bypass button. When bypassed, the real-time audio thread passes audio dry with zero CPU overhead. Bypass state is fully persisted in `.myms` project files.
 - **2-Octave Piano Keyboard Entry**:
   - Native auto-detected **Turkish Q layout** (`A..Ğ` lower octave, `Q..I` upper octave, `ı`/`i` separation, `<`/`>` octave shifts) with live toggle to standard **US QWERTY**.
   - Jam Mode (audition without writing) vs. Edit Mode (stamp note into cell and auto-advance row).
@@ -59,6 +81,10 @@
 
 ## 3. "Smart Macro" Mixing & Mastering Engine
 
+- **Master Bus Smart Macros Modal (`SmartMacroModal`)**:
+  - Removed the horizontal 26px dock tab bar header from the bottom dock to reclaim screen real estate for the mixer and tracker view.
+  - Smart Macros are directly accessible via a dedicated `[ 🎛 MACROS ]` button on the Master channel strip in the Mixer deck.
+  - Opens a clean KDE Breeze auto-mastering modal (580x220) with floating centered `✕` close button, PUNCH, WARMTH, TONE, SPACE, and MASTER knobs with live percentage readouts, and `↺ RESET` action.
 - **Per-Track / Master DSP Chain**:
   - **Punch**: Dynamic transient designer + parallel punch compression.
   - **Warmth**: Tube and tape soft-saturation curve.

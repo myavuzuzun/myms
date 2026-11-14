@@ -358,6 +358,7 @@ public:
 
         m_format = PLUGIN_FORMAT_NONE;
         m_hasEditor = false;
+        m_isEnabled.store(true, std::memory_order_release);
         m_name.clear();
         m_vendor.clear();
         m_path.clear();
@@ -367,6 +368,14 @@ public:
 
     bool isLoaded() const {
         return m_isLoaded.load(std::memory_order_acquire);
+    }
+
+    bool isEnabled() const {
+        return m_isEnabled.load(std::memory_order_relaxed);
+    }
+
+    void setEnabled(bool enabled) {
+        m_isEnabled.store(enabled, std::memory_order_release);
     }
 
     PluginFormat getFormat() const { return m_format; }
@@ -496,7 +505,7 @@ public:
 
     // Instrument Audio Rendering (sample-by-sample for tracker integration)
     inline void processSample(float& outL, float& outR) {
-        if (!m_isLoaded.load(std::memory_order_relaxed)) return;
+        if (!m_isLoaded.load(std::memory_order_relaxed) || !m_isEnabled.load(std::memory_order_relaxed)) return;
 
         if (m_bufferReadIndex >= m_bufferAvailable) {
             renderAudioBlock(m_blockSize);
@@ -512,7 +521,7 @@ public:
 
     // Insert Audio FX Processing (Takes audio input and modifies in-place)
     void processEffectBlock(float* inL, float* inR, float* outL, float* outR, int numFrames) {
-        if (!m_isLoaded.load(std::memory_order_relaxed)) {
+        if (!m_isLoaded.load(std::memory_order_relaxed) || !m_isEnabled.load(std::memory_order_relaxed)) {
             if (inL != outL) {
                 std::memcpy(outL, inL, numFrames * sizeof(float));
                 std::memcpy(outR, inR, numFrames * sizeof(float));
@@ -579,7 +588,7 @@ public:
     }
 
     inline void processEffectSample(float& ioL, float& ioR) {
-        if (!m_isLoaded.load(std::memory_order_relaxed)) return;
+        if (!m_isLoaded.load(std::memory_order_relaxed) || !m_isEnabled.load(std::memory_order_relaxed)) return;
         float inL[1] = { ioL };
         float inR[1] = { ioR };
         float outL[1] = { 0.0f };
@@ -1288,6 +1297,9 @@ private:
 
     // Parameter dirty flag for bi-directional UI sync
     std::atomic<bool> m_paramsDirty{false};
+
+    // Effect enable / bypass toggle
+    std::atomic<bool> m_isEnabled{true};
 
     // VST3 Component Handler
     HostVst3ComponentHandler m_componentHandler;
