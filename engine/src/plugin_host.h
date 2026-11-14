@@ -357,6 +357,7 @@ public:
         }
 
         m_format = PLUGIN_FORMAT_NONE;
+        m_hasEditor = false;
         m_name.clear();
         m_vendor.clear();
         m_path.clear();
@@ -482,8 +483,15 @@ public:
 
     void allNotesOff() {
         if (!isLoaded()) return;
+        if (m_lastNote >= 0) {
+            queueEvent(QueuedMidiEvent{QueuedMidiEvent::NOTE_OFF, m_lastNote, 0.0f, 0, 0.0f});
+            m_lastNote = -1;
+        }
         queueEvent(QueuedMidiEvent{QueuedMidiEvent::ALL_OFF, 0, 0.0f, 0, 0.0f});
-        m_lastNote = -1;
+        m_bufferAvailable = 0;
+        m_bufferReadIndex = 0;
+        std::fill(m_tempOutL.begin(), m_tempOutL.end(), 0.0f);
+        std::fill(m_tempOutR.begin(), m_tempOutR.end(), 0.0f);
     }
 
     // Instrument Audio Rendering (sample-by-sample for tracker integration)
@@ -583,16 +591,7 @@ public:
 
     // Native GUI / Editor
     bool hasNativeEditor() const {
-        if (m_format == PLUGIN_FORMAT_VST2 && m_vstEffect) {
-            return (m_vstEffect->flags & effFlagsHasEditor) != 0;
-        }
-        if (m_format == PLUGIN_FORMAT_CLAP && m_clapPlugin) {
-            return (m_clapPlugin->get_extension(m_clapPlugin, CLAP_EXT_GUI) != nullptr);
-        }
-        if (m_format == PLUGIN_FORMAT_VST3 && m_vst3Controller) {
-            return true;
-        }
-        return false;
+        return m_hasEditor;
     }
 
     bool openNativeEditor(void* parentWindow) {
@@ -751,6 +750,17 @@ private:
             }
         }
 
+        if (m_vst3Controller) {
+            Steinberg_IPlugView* testView = m_vst3Controller->lpVtbl->createView(m_vst3Controller, "editor");
+            if (testView) {
+                m_hasEditor = true;
+                testView->lpVtbl->release(testView);
+            } else {
+                m_hasEditor = false;
+            }
+        } else {
+            m_hasEditor = false;
+        }
         return true;
     }
 
@@ -768,6 +778,10 @@ private:
                 evList.addNoteOn(q.note, q.velocity);
             } else if (q.type == QueuedMidiEvent::NOTE_OFF) {
                 evList.addNoteOff(q.note);
+            } else if (q.type == QueuedMidiEvent::ALL_OFF) {
+                for (int p = 0; p < 128; ++p) {
+                    evList.addNoteOff(p);
+                }
             } else if (q.type == QueuedMidiEvent::PARAM_CHANGE) {
                 paramChanges.addChange(q.paramId, q.paramValue);
                 if (m_vst3Controller) {
@@ -916,6 +930,7 @@ private:
             }
         }
 
+        m_hasEditor = (m_vstEffect->flags & effFlagsHasEditor) != 0;
         return true;
     }
 
@@ -960,16 +975,26 @@ private:
                 vstEvents.events[evCount] = reinterpret_cast<VstEvent*>(&m);
                 evCount++;
             } else if (q.type == QueuedMidiEvent::ALL_OFF) {
-                for (int ch = 0; ch < 16 && evCount < MAX_QUEUED_EVENTS; ++ch) {
-                    VstMidiEvent& m = midiEvents[evCount];
-                    std::memset(&m, 0, sizeof(VstMidiEvent));
-                    m.type = kVstMidiType;
-                    m.byteSize = sizeof(VstMidiEvent);
-                    m.midiData[0] = static_cast<char>(0xB0 | ch);
-                    m.midiData[1] = 123; // All Notes Off
-                    m.midiData[2] = 0;
-                    vstEvents.events[evCount] = reinterpret_cast<VstEvent*>(&m);
-                    evCount++;
+                for (int ch = 0; ch < 16 && evCount + 2 < MAX_QUEUED_EVENTS; ++ch) {
+                    // All Sound Off (CC 120)
+                    VstMidiEvent& m1 = midiEvents[evCount++];
+                    std::memset(&m1, 0, sizeof(VstMidiEvent));
+                    m1.type = kVstMidiType;
+                    m1.byteSize = sizeof(VstMidiEvent);
+                    m1.midiData[0] = static_cast<char>(0xB0 | ch);
+                    m1.midiData[1] = 120;
+                    m1.midiData[2] = 0;
+                    vstEvents.events[evCount - 1] = reinterpret_cast<VstEvent*>(&m1);
+
+                    // All Notes Off (CC 123)
+                    VstMidiEvent& m2 = midiEvents[evCount++];
+                    std::memset(&m2, 0, sizeof(VstMidiEvent));
+                    m2.type = kVstMidiType;
+                    m2.byteSize = sizeof(VstMidiEvent);
+                    m2.midiData[0] = static_cast<char>(0xB0 | ch);
+                    m2.midiData[1] = 123;
+                    m2.midiData[2] = 0;
+                    vstEvents.events[evCount - 1] = reinterpret_cast<VstEvent*>(&m2);
                 }
             } else if (q.type == QueuedMidiEvent::PARAM_CHANGE) {
                 if (m_vstEffect->setParameter) {
@@ -1064,6 +1089,7 @@ private:
             }
         }
 
+        m_hasEditor = (m_clapPlugin->get_extension(m_clapPlugin, CLAP_EXT_GUI) != nullptr);
         return true;
     }
 
@@ -1127,6 +1153,22 @@ private:
                 n.velocity = 0.0;
                 evBuf.headers[evBuf.count] = &n.header;
                 evBuf.count++;
+            } else if (q.type == QueuedMidiEvent::ALL_OFF) {
+                for (int k = 0; k < 128 && evBuf.count < MAX_QUEUED_EVENTS; ++k) {
+                    clap_event_note_t& n = evBuf.notes[evBuf.count];
+                    n.header.size = sizeof(clap_event_note_t);
+                    n.header.time = 0;
+                    n.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+                    n.header.type = CLAP_EVENT_NOTE_OFF;
+                    n.header.flags = 0;
+                    n.note_id = -1;
+                    n.port_index = 0;
+                    n.channel = 0;
+                    n.key = k;
+                    n.velocity = 0.0;
+                    evBuf.headers[evBuf.count] = &n.header;
+                    evBuf.count++;
+                }
             } else if (q.type == QueuedMidiEvent::PARAM_CHANGE) {
                 clap_event_param_value_t& p = evBuf.params[evBuf.count];
                 p.header.size = sizeof(clap_event_param_value_t);
@@ -1204,6 +1246,7 @@ private:
 
     void* m_handle = nullptr;
     std::atomic<bool> m_isLoaded{false};
+    bool m_hasEditor = false;
     PluginFormat m_format = PLUGIN_FORMAT_NONE;
     std::string m_path;
     std::string m_name;

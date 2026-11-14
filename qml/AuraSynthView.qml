@@ -78,91 +78,48 @@ Rectangle {
         anchors.margins: 8
         spacing: 12
 
-        // --- ACTIVE TRACK INSTRUMENT CARD ---
+        // --- SYNTH INFO & PATCH CARD ---
         ColumnLayout {
-            spacing: 6
-            Layout.preferredWidth: 125
+            spacing: 8
+            Layout.preferredWidth: 100
             Layout.fillHeight: true
             Layout.alignment: Qt.AlignVCenter
 
-            RowLayout {
+            Rectangle {
                 Layout.fillWidth: true
-                spacing: 4
-
-                Text {
-                    text: "TRACK " + (root.currentInstrument + 1)
-                    font.bold: true
-                    font.pixelSize: 10
-                    font.letterSpacing: 0.8
-                    color: theme.accent
-                }
-
-                Item { Layout.fillWidth: true }
-
-                // Quick Add Track Button
-                Rectangle {
-                    width: 18
-                    height: 18
-                    radius: 2
-                    color: addTrackQuickMouse.containsMouse ? theme.btnHover : theme.btnBg
-                    border.color: theme.border
-                    Text { anchors.centerIn: parent; text: "+"; font.bold: true; color: theme.accent; font.pixelSize: 11 }
-                    MouseArea {
-                        id: addTrackQuickMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: {
-                            if (engine) {
-                                engine.addTrack()
-                                engine.setSelectedInstrument(engine.numTracks - 1)
-                            }
-                        }
+                height: 28
+                radius: 3
+                color: theme.bgHeader
+                border.color: theme.border
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 5
+                    Text { text: "🎹"; font.pixelSize: 11 }
+                    Text {
+                        text: "AuraSynth"
+                        font.bold: true
+                        font.pixelSize: 10
+                        color: theme.accent
                     }
                 }
             }
 
-            // Track Switcher Tabs (Only existing tracks, no predefined list!)
-            Row {
-                spacing: 2
-                Layout.fillWidth: true
-                Repeater {
-                    model: engine ? engine.numTracks : 1
-                    Rectangle {
-                        width: Math.max(22, (125 - ((engine ? engine.numTracks : 1) - 1) * 2) / (engine ? engine.numTracks : 1))
-                        height: 20
-                        radius: 2
-                        color: (root.currentInstrument === index) ? theme.accent : (tabMouse.containsMouse ? theme.btnHover : theme.btnBg)
-                        border.color: (root.currentInstrument === index) ? theme.accent : theme.border
-                        Text {
-                            anchors.centerIn: parent
-                            text: "T" + (index + 1)
-                            font.pixelSize: 9
-                            font.bold: (root.currentInstrument === index)
-                            color: (root.currentInstrument === index) ? "#ffffff" : theme.textMuted
-                        }
-                        MouseArea {
-                            id: tabMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: engine.setSelectedInstrument(index)
-                        }
-                    }
-                }
-            }
+            Item { Layout.fillHeight: true }
 
             // Init Patch Button
             Rectangle {
                 Layout.fillWidth: true
-                height: 20
-                radius: 2
+                height: 26
+                radius: 3
                 color: initMouse.containsMouse ? theme.btnHover : theme.btnBg
                 border.color: theme.border
 
                 Text {
                     anchors.centerIn: parent
                     text: "Init Patch"
-                    font.pixelSize: 9
-                    color: theme.textMuted
+                    font.pixelSize: 10
+                    font.bold: true
+                    color: theme.textMain
                 }
 
                 MouseArea {

@@ -22,6 +22,10 @@ Item {
         if (modalTrackNameInput && engine) {
             modalTrackNameInput.text = engine.getInstrumentName(track)
         }
+        if (modalPluginView) {
+            modalPluginView.currentTrack = track
+            modalPluginView.refreshParams()
+        }
         isOpen = true
         root.forceActiveFocus()
     }
@@ -288,6 +292,7 @@ Item {
                 }
 
                 PluginView {
+                    id: modalPluginView
                     engine: root.engine
                     currentTrack: root.targetTrack
                 }

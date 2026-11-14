@@ -31,6 +31,16 @@ public:
         m_tiltLowR = 0.0f;
     }
 
+    void resetBuffers() {
+        std::fill(m_delayBufferL.begin(), m_delayBufferL.end(), 0.0f);
+        std::fill(m_delayBufferR.begin(), m_delayBufferR.end(), 0.0f);
+        m_delayWritePos = 0;
+        m_fastEnv = 0.0f;
+        m_slowEnv = 0.0f;
+        m_tiltLowL = 0.0f;
+        m_tiltLowR = 0.0f;
+    }
+
     void setControls(const MacroControls& controls) {
         m_controls = controls;
     }

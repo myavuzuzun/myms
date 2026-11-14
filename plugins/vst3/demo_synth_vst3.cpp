@@ -4,6 +4,10 @@
 #include <algorithm>
 #include <atomic>
 #include <string>
+#include <thread>
+#include <unistd.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
 
 #include "vst3/vst3_c_api.h"
 
@@ -402,13 +406,289 @@ public:
         plugin.ctrlVtbl.setComponentHandler = [](void* thisInterface, Steinberg_Vst_IComponentHandler* handler) -> Steinberg_tresult {
             return Steinberg_kResultOk;
         };
-        plugin.ctrlVtbl.createView = [](void* thisInterface, Steinberg_FIDString name) -> Steinberg_IPlugView* {
-            return nullptr;
-        };
+        plugin.ctrlVtbl.createView = createPluginView;
 
         plugin.ctrlIface.lpVtbl = &plugin.ctrlVtbl;
     }
+
+    static Steinberg_IPlugView* createPluginView(void* thisInterface, Steinberg_FIDString name);
 };
+
+struct Vst3PlugView {
+    Steinberg_IPlugViewVtbl vtbl;
+    Steinberg_IPlugView iface;
+    std::atomic<uint32_t> refCount{1};
+    DemoVst3Synth* parent = nullptr;
+
+    Display* display = nullptr;
+    Window parentWindow = 0;
+    Window window = 0;
+    GC gc = nullptr;
+    std::atomic<bool> guiRunning{false};
+    std::thread guiThread;
+    int draggedSlider = -1;
+
+    Vst3PlugView(DemoVst3Synth* p) : parent(p) {
+        std::memset(&vtbl, 0, sizeof(vtbl));
+        vtbl.queryInterface = [](void* thisInterface, const Steinberg_TUID iid, void** obj) -> Steinberg_tresult {
+            if (!obj) return Steinberg_kInvalidArgument;
+            if (std::memcmp(iid, Steinberg_IPlugView_iid, sizeof(Steinberg_TUID)) == 0 ||
+                std::memcmp(iid, Steinberg_FUnknown_iid, sizeof(Steinberg_TUID)) == 0) {
+                *obj = thisInterface;
+                return Steinberg_kResultOk;
+            }
+            *obj = nullptr;
+            return Steinberg_kNoInterface;
+        };
+        vtbl.addRef = [](void* thisInterface) -> Steinberg_uint32 {
+            auto* v = reinterpret_cast<Vst3PlugView*>(static_cast<char*>(thisInterface) - offsetof(Vst3PlugView, iface));
+            return ++v->refCount;
+        };
+        vtbl.release = [](void* thisInterface) -> Steinberg_uint32 {
+            auto* v = reinterpret_cast<Vst3PlugView*>(static_cast<char*>(thisInterface) - offsetof(Vst3PlugView, iface));
+            uint32_t count = --v->refCount;
+            if (count == 0) {
+                delete v;
+            }
+            return count;
+        };
+        vtbl.isPlatformTypeSupported = [](void* thisInterface, Steinberg_FIDString type) -> Steinberg_tresult {
+            if (type && (std::strcmp(type, "X11EmbedWindowID") == 0 || std::strcmp(type, "X11") == 0)) {
+                return Steinberg_kResultOk;
+            }
+            return Steinberg_kResultFalse;
+        };
+        vtbl.attached = [](void* thisInterface, void* parent, Steinberg_FIDString type) -> Steinberg_tresult {
+            if (!parent) return Steinberg_kInvalidArgument;
+            auto* v = reinterpret_cast<Vst3PlugView*>(static_cast<char*>(thisInterface) - offsetof(Vst3PlugView, iface));
+            return v->openX11Gui(parent) ? Steinberg_kResultOk : Steinberg_kResultFalse;
+        };
+        vtbl.removed = [](void* thisInterface) -> Steinberg_tresult {
+            auto* v = reinterpret_cast<Vst3PlugView*>(static_cast<char*>(thisInterface) - offsetof(Vst3PlugView, iface));
+            v->closeX11Gui();
+            return Steinberg_kResultOk;
+        };
+        vtbl.getSize = [](void* thisInterface, struct Steinberg_ViewRect* size) -> Steinberg_tresult {
+            if (!size) return Steinberg_kInvalidArgument;
+            size->left = 0;
+            size->top = 0;
+            size->right = 480;
+            size->bottom = 320;
+            return Steinberg_kResultOk;
+        };
+        vtbl.onWheel = [](void*, float) -> Steinberg_tresult { return Steinberg_kResultOk; };
+        vtbl.onKeyDown = [](void*, Steinberg_char16, Steinberg_int16, Steinberg_int16) -> Steinberg_tresult { return Steinberg_kResultOk; };
+        vtbl.onKeyUp = [](void*, Steinberg_char16, Steinberg_int16, Steinberg_int16) -> Steinberg_tresult { return Steinberg_kResultOk; };
+        vtbl.onSize = [](void*, struct Steinberg_ViewRect*) -> Steinberg_tresult { return Steinberg_kResultOk; };
+        vtbl.onFocus = [](void*, Steinberg_TBool) -> Steinberg_tresult { return Steinberg_kResultOk; };
+        vtbl.setFrame = [](void*, struct Steinberg_IPlugFrame*) -> Steinberg_tresult { return Steinberg_kResultOk; };
+        vtbl.canResize = [](void*) -> Steinberg_tresult { return Steinberg_kResultFalse; };
+        vtbl.checkSizeConstraint = [](void*, struct Steinberg_ViewRect*) -> Steinberg_tresult { return Steinberg_kResultOk; };
+
+        iface.lpVtbl = &vtbl;
+    }
+
+    ~Vst3PlugView() {
+        closeX11Gui();
+    }
+
+    bool openX11Gui(void* parentWin) {
+        closeX11Gui();
+        if (!parentWin) return false;
+
+        Display* dpy = XOpenDisplay(nullptr);
+        if (!dpy) return false;
+
+        display = dpy;
+        parentWindow = reinterpret_cast<Window>(parentWin);
+
+        XSetWindowAttributes swa;
+        swa.background_pixel = 0x232629;
+        swa.event_mask = ExposureMask | ButtonPressMask | ButtonReleaseMask | PointerMotionMask | StructureNotifyMask;
+
+        window = XCreateWindow(dpy, parentWindow, 0, 0, 480, 320, 0,
+                              CopyFromParent, InputOutput, CopyFromParent,
+                              CWBackPixel | CWEventMask, &swa);
+
+        gc = XCreateGC(dpy, window, 0, nullptr);
+        XMapWindow(dpy, window);
+        XFlush(dpy);
+
+        guiRunning.store(true);
+        guiThread = std::thread(&Vst3PlugView::guiEventLoop, this);
+        return true;
+    }
+
+    void closeX11Gui() {
+        if (!guiRunning.load()) return;
+        guiRunning.store(false);
+
+        if (guiThread.joinable()) {
+            guiThread.join();
+        }
+
+        if (display) {
+            if (gc) {
+                XFreeGC(display, gc);
+                gc = nullptr;
+            }
+            if (window) {
+                XDestroyWindow(display, window);
+                window = 0;
+            }
+            XCloseDisplay(display);
+            display = nullptr;
+        }
+    }
+
+    void guiEventLoop() {
+        while (guiRunning.load()) {
+            if (!display || !window) break;
+
+            while (XPending(display)) {
+                XEvent ev;
+                XNextEvent(display, &ev);
+                if (ev.type == Expose) {
+                    redrawGui();
+                } else if (ev.type == ButtonPress) {
+                    handleMouse(ev.xbutton.x, ev.xbutton.y, true);
+                } else if (ev.type == MotionNotify) {
+                    if (ev.xmotion.state & Button1Mask) {
+                        handleMouse(ev.xmotion.x, ev.xmotion.y, false);
+                    }
+                } else if (ev.type == ButtonRelease) {
+                    draggedSlider = -1;
+                }
+            }
+
+            redrawGui();
+            usleep(30000); // ~33 FPS
+        }
+    }
+
+    void handleMouse(int x, int y, bool isPress) {
+        int sliderStartY = 88;
+        int sliderHeight = 36;
+        int sliderSpacing = 56;
+
+        for (int i = 0; i < 3; ++i) {
+            int sy = sliderStartY + i * sliderSpacing;
+            if (y >= sy && y <= sy + sliderHeight) {
+                draggedSlider = i;
+                break;
+            }
+        }
+
+        if (draggedSlider >= 0 && draggedSlider < 3 && parent) {
+            int trackLeft = 140;
+            int trackRight = 360;
+            float val = static_cast<float>(x - trackLeft) / static_cast<float>(trackRight - trackLeft);
+            parent->params[draggedSlider] = std::clamp(val, 0.0f, 1.0f);
+        }
+    }
+
+    void redrawGui() {
+        if (!display || !window || !gc) return;
+
+        // Background
+        XSetForeground(display, gc, 0x232629);
+        XFillRectangle(display, window, gc, 0, 0, 480, 320);
+
+        // Header Bar
+        XSetForeground(display, gc, 0x31363b);
+        XFillRectangle(display, window, gc, 0, 0, 480, 44);
+        XSetForeground(display, gc, 0x00b894); // VST3 Emerald Accent
+        XDrawLine(display, window, gc, 0, 44, 480, 44);
+
+        // Title text
+        XSetForeground(display, gc, 0xffffff);
+        const char* title = "Steinberg VST3 Reference Synth";
+        XDrawString(display, window, gc, 16, 28, title, std::strlen(title));
+
+        const char* sub = "[VST3 Native Editor]";
+        XSetForeground(display, gc, 0x00b894);
+        XDrawString(display, window, gc, 330, 28, sub, std::strlen(sub));
+
+        // Oscilloscope Box
+        XSetForeground(display, gc, 0x1b1e20);
+        XFillRectangle(display, window, gc, 20, 52, 440, 22);
+        XSetForeground(display, gc, 0x00b894);
+        XDrawRectangle(display, window, gc, 20, 52, 440, 22);
+
+        // Simulated/Animated waveform line
+        XSetForeground(display, gc, 0x00ffcc);
+        static float animPhase = 0.0f;
+        animPhase += 0.08f;
+        int prevX = 20, prevY = 63;
+        for (int px = 0; px < 440; px += 2) {
+            float s = std::sin(animPhase + px * 0.05f) * 0.8f;
+            int py = 63 - static_cast<int>(s * 8.0f);
+            py = std::clamp(py, 54, 72);
+            if (px > 0) {
+                XDrawLine(display, window, gc, prevX, prevY, 20 + px, py);
+            }
+            prevX = 20 + px;
+            prevY = py;
+        }
+
+        // Draw 3 Interactive Breeze Sliders
+        const char* paramLabels[3] = { "CUTOFF", "RESONANCE", "VOLUME" };
+        int sliderStartY = 88;
+        int sliderSpacing = 56;
+        int trackLeft = 140;
+        int trackWidth = 220;
+
+        for (int i = 0; i < 3; ++i) {
+            int sy = sliderStartY + i * sliderSpacing;
+
+            // Parameter Label
+            XSetForeground(display, gc, 0xbdc3c7);
+            XDrawString(display, window, gc, 24, sy + 18, paramLabels[i], std::strlen(paramLabels[i]));
+
+            // Track Background
+            XSetForeground(display, gc, 0x31363b);
+            XFillRectangle(display, window, gc, trackLeft, sy + 6, trackWidth, 18);
+            XSetForeground(display, gc, 0x474747);
+            XDrawRectangle(display, window, gc, trackLeft, sy + 6, trackWidth, 18);
+
+            // Active Fill
+            float val = parent ? parent->params[i] : 0.5f;
+            int fillW = static_cast<int>(val * trackWidth);
+            XSetForeground(display, gc, 0x00b894);
+            if (fillW > 0) {
+                XFillRectangle(display, window, gc, trackLeft + 1, sy + 7, fillW - 1, 16);
+            }
+
+            // Slider Thumb
+            int thumbX = trackLeft + fillW - 4;
+            thumbX = std::clamp(thumbX, trackLeft, trackLeft + trackWidth - 8);
+            XSetForeground(display, gc, 0xffffff);
+            XFillRectangle(display, window, gc, thumbX, sy + 3, 8, 24);
+
+            // Value text
+            char valStr[16];
+            std::snprintf(valStr, sizeof(valStr), "%.0f%%", val * 100.0f);
+            XSetForeground(display, gc, 0xf0f2f5);
+            XDrawString(display, window, gc, trackLeft + trackWidth + 12, sy + 18, valStr, std::strlen(valStr));
+        }
+
+        // Footer hint
+        XSetForeground(display, gc, 0x7f8c8d);
+        const char* hint = "Steinberg VST3 IPlugView Native Linux X11 Host";
+        XDrawString(display, window, gc, 90, 290, hint, std::strlen(hint));
+
+        XFlush(display);
+    }
+};
+
+Steinberg_IPlugView* DemoVst3Synth::createPluginView(void* thisInterface, Steinberg_FIDString name) {
+    if (name && (std::strcmp(name, "editor") == 0 || std::strcmp(name, "") == 0)) {
+        auto* p = reinterpret_cast<PluginImpl*>(static_cast<char*>(thisInterface) - offsetof(PluginImpl, ctrlIface));
+        auto* view = new Vst3PlugView(p->parent);
+        return &view->iface;
+    }
+    return nullptr;
+}
 
 static DemoVst3Synth g_synth;
 

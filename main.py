@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
 import sys
 import os
+
+# Use xcb under X11/XWayland to allow X11 plugin GUI window embedding
+if "QT_QPA_PLATFORM" not in os.environ and os.environ.get("DISPLAY"):
+    os.environ["QT_QPA_PLATFORM"] = "xcb"
+
+# Force Qt to use native KDE platform theme for global menus and styling
+os.environ["QT_QPA_PLATFORMTHEME"] = "kde"
+
 import signal
 from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QWidget
 from PyQt6.QtGui import QAction, QKeySequence, QIcon
@@ -14,12 +22,13 @@ class PluginNativeHostWindow(QMainWindow):
     Embeds the plugin's native X11 window into an isolated WA_NativeWindow container.
     """
     def __init__(self, parent, engine, track, slot=None, is_fx=False, on_close_cb=None):
-        super().__init__(parent)
+        super().__init__(None, Qt.WindowType.Window)
         self.engine = engine
         self.track = track
         self.slot = slot
         self.is_fx = is_fx
         self.on_close_cb = on_close_cb
+        self.setWindowFlags(Qt.WindowType.Window)
 
         # Set title reflecting plugin name, format, and track context
         if is_fx:
@@ -301,6 +310,8 @@ class AppWindow(QMainWindow):
         win = PluginNativeHostWindow(self, self.engine, track, is_fx=False, on_close_cb=_cleanup)
         self._plugin_gui_windows[key] = win
         win.show()
+        win.raise_()
+        win.activateWindow()
 
     def _on_open_track_fx_dialog(self, track, slot):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -335,6 +346,8 @@ class AppWindow(QMainWindow):
         win = PluginNativeHostWindow(self, self.engine, track, slot=slot, is_fx=True, on_close_cb=_cleanup)
         self._plugin_gui_windows[key] = win
         win.show()
+        win.raise_()
+        win.activateWindow()
 
     def closeEvent(self, event):
         for win in list(self._plugin_gui_windows.values()):
@@ -348,13 +361,6 @@ class AppWindow(QMainWindow):
 
 def main():
     signal.signal(signal.SIGINT, signal.SIG_DFL)
-
-    # Use xcb under X11/XWayland to allow X11 plugin GUI window embedding
-    if "QT_QPA_PLATFORM" not in os.environ and os.environ.get("DISPLAY"):
-        os.environ["QT_QPA_PLATFORM"] = "xcb"
-
-    # Force Qt to use native KDE platform theme for global menus and styling
-    os.environ["QT_QPA_PLATFORMTHEME"] = "kde"
     
     QApplication.setApplicationName("myms")
     QApplication.setDesktopFileName("myms")

@@ -106,6 +106,8 @@
 
 ### 4.3. Native Plugin GUI Window Host (`PluginNativeHostWindow`)
 - Standalone top-level floating window wrapping an X11 container widget (`WA_NativeWindow`, `WA_PaintOnScreen`).
+- **Wayland / XWayland Compatibility**: Forces `QT_QPA_PLATFORM=xcb` at line 1 before any PyQt6 module loads to guarantee `winId()` returns a true X11 Window ID instead of an incompatible Wayland surface handle.
+- **Modal Window Independence**: Instantiates with `super().__init__(None, Qt.WindowType.Window)` and raises over full-screen modal overlays (`InstrumentEditorModal`, `TrackFxModal`) so plugin GUIs never get occluded or suppressed by modal backdrop scrims.
 - Dynamically resizes to match plugin's native dimensions (`effEditGetRect`, `CLAP_EXT_GUI`, or `IPlugView::getSize`).
 - Forwards mouse clicks and drags seamlessly to plugin editors with dedicated X11 event pumps.
 - Title bar reflects plugin and track context: `myms — [Plugin Name] ([Format]) — Track [N]`.
@@ -115,19 +117,29 @@
 1. **Interactive GUI Test Synth (`plugins/gui_synth/demo_gui_synth.so`)**:
    - Bundled lightweight Linux synthesizer featuring a custom interactive X11 graphical interface.
    - Real-time animated oscilloscope/waveform display, custom draggable knobs/sliders for Cutoff, Resonance, Decay, and Volume, and instant parameter feedback.
-2. **Track Insert Filter FX (`plugins/effects/demo_filter_fx.so`)**:
-   - Bundled stereo resonant multi-mode filter and saturation insert effect with interactive X11 GUI.
-3. **Steinberg VST3 Reference Synth (`plugins/vst3/demo_synth_vst3.so`)**:
+2. **Steinberg VST3 Reference Synth (`plugins/vst3/demo_synth_vst3.so`)**:
    - Native 64-bit Linux VST3 synthesizer built with official `vst3_c_api.h` implementing `IPluginFactory`, `IComponent`, `IAudioProcessor`, and `IEditController`.
+   - Equipped with complete Steinberg `IPlugView` native X11 graphical interface with emerald header, animated waveform visualizer, and draggable Cutoff, Resonance, and Volume controls.
+3. **Track Insert Filter FX (`plugins/effects/demo_filter_fx.so`)**:
+   - Bundled stereo resonant multi-mode filter and saturation insert effect with interactive X11 GUI.
 4. **CLAP Reference Synth (`plugins/clap/demo_synth_clap.clap`)**:
    - Native CLAP synthesizer plugin implementing `clap_entry`, params, and note events.
 5. **VST 2.4 Reference Synth (`plugins/vst2/demo_synth_vst2.so`)**:
    - Standard 64-bit Linux VST2 plugin.
 
-### 4.5. Streamlined Dock System
+### 4.5. Streamlined Dock & Dedicated Synth Editor
 - Dynamic splitter bar using global coordinate delta mapping (`mapToItem`) to smoothly adjust bottom deck height against the Tracker matrix without jitter.
 - Simplified 2-Tab Dock: `🎚 TRACK MIXER` and `🎛 SMART MACROS`.
 - Eliminates dock clutter: sound design and plugin instruments are edited exclusively in the dedicated in-app `InstrumentEditorModal` when clicking `[ ⚙ EDIT SOUND ]`.
+- **AuraSynth Studio Card (`AuraSynthView.qml`)**: Removed redundant track switcher tabs (`T1, T2...`) and `+` add track button. The synth view focuses purely on sound design (Dual Oscillators, ZDF Resonant Filter, ADSR Envelope, and `Init Patch`). Track management remains strictly in the Mixer and Tracker Matrix headers.
+
+### 4.6. Future Modular Device Chain: Pre-Instrument MIDI FX & Post-Instrument Audio FX
+- Modern DAWs (Bitwig, Reaper) support placing plugins both *before* and *after* instruments:
+  - **Pre-Instrument (MIDI / Event Processors)**: Process musical note events before sound synthesis (Arpeggiators, Chord Generators, Scale Quantizers, Transposers, Velocity Randomizers).
+  - **The Instrument**: Transforms MIDI notes into stereo audio samples.
+  - **Post-Instrument (Audio Insert Effects)**: Process generated stereo audio waveforms (Filters, Delays, Reverbs, Compressors, Saturation).
+- Signal Architecture:
+  `[Tracker Sequencer / Keyboard] ➔ [MIDI Pre-FX Chain] ➔ [Sound Generator: Synth / SoundFont / Sampler / Plugin] ➔ [Audio Post-FX Chain] ➔ [Track Vol & Pan] ➔ [Master Bus]`.
 
 ---
 

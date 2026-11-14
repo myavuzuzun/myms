@@ -15,10 +15,12 @@ Rectangle {
     property int currentTrack: 0
     property var paramList: []
     property bool isLoaded: engine ? engine.isTrackPluginLoaded(currentTrack) : false
+    property bool hasEditor: (engine && isLoaded) ? engine.hasTrackPluginNativeEditor(currentTrack) : false
 
     function refreshParams() {
         if (!engine) return
         isLoaded = engine.isTrackPluginLoaded(currentTrack)
+        hasEditor = isLoaded ? engine.hasTrackPluginNativeEditor(currentTrack) : false
         if (isLoaded) {
             paramList = engine.getTrackPluginParams(currentTrack)
         } else {
@@ -129,7 +131,7 @@ Rectangle {
                         font.bold: true
                         font.pixelSize: 9
                         implicitHeight: 28
-                        visible: root.isLoaded && (engine ? engine.hasTrackPluginNativeEditor(root.currentTrack) : false)
+                        visible: root.isLoaded && root.hasEditor
                         background: Rectangle {
                             color: parent.hovered ? theme.btnHover : theme.accent
                             radius: 3

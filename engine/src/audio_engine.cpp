@@ -209,12 +209,18 @@ void AudioEngine::play() {
 
 void AudioEngine::pause() {
     m_sequencer.pause();
+    for (size_t i = 0; i < m_previewCountdowns.size(); ++i) {
+        m_previewCountdowns[i] = 0;
+    }
     allNotesOff();
     m_uiCurrentRow.store(m_sequencer.getCurrentRow(), std::memory_order_relaxed);
 }
 
 void AudioEngine::stop() {
     m_sequencer.stop();
+    for (size_t i = 0; i < m_previewCountdowns.size(); ++i) {
+        m_previewCountdowns[i] = 0;
+    }
     allNotesOff();
     m_uiCurrentRow.store(0, std::memory_order_relaxed);
     m_uiCurrentPattern.store(m_sequencer.getCurrentPattern(), std::memory_order_relaxed);
@@ -492,6 +498,7 @@ void AudioEngine::allNotesOff() {
     for (size_t i = 0; i < m_plugins.size(); ++i) {
         if (m_plugins[i]) m_plugins[i]->allNotesOff();
     }
+    m_macros.resetBuffers();
 }
 
 void AudioEngine::setInstrumentOsc1(int inst, int wave) {
@@ -799,6 +806,25 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
                 }
             }
         }
+
+        bool anyPreview = false;
+        for (int t = 0; t < numTracks && t < MAX_INSTRUMENTS; ++t) {
+            if (m_previewCountdowns[t] > 0) {
+                anyPreview = true;
+                break;
+            }
+        }
+        if (!anyPreview) {
+            std::memset(output, 0, frameCount * channels * sizeof(float));
+            m_peakL.store(0.0f, std::memory_order_relaxed);
+            m_peakR.store(0.0f, std::memory_order_relaxed);
+            m_rms.store(0.0f, std::memory_order_relaxed);
+            for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
+                m_trackMixers[t].peakL.store(0.0f, std::memory_order_relaxed);
+                m_trackMixers[t].peakR.store(0.0f, std::memory_order_relaxed);
+            }
+            return;
+        }
     }
 
     // Configure SoundFont channel volumes and pans
@@ -867,6 +893,8 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
         // 1. Process AuraSynth tracks with Insert FX & per-track volume & panning
         for (int t = 0; t < numTracks && t < static_cast<int>(m_instruments.size()) && t < static_cast<int>(m_trackMixers.size()); ++t) {
             if (m_trackMixers[t].type == TRACK_TYPE_SYNTH) {
+                bool canSound = isPlayingNow || (t < MAX_INSTRUMENTS && m_previewCountdowns[t] > 0);
+                if (!canSound) continue;
                 float instL = 0.0f, instR = 0.0f;
                 m_instruments[t].processBlock(&instL, &instR, 1);
                 
@@ -901,6 +929,8 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
         // 2. Process SoundFont tracks with Insert FX & per-track volume & panning
         for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
             if (m_trackMixers[t].type == TRACK_TYPE_SOUNDFONT) {
+                bool canSound = isPlayingNow || (t < MAX_INSTRUMENTS && m_previewCountdowns[t] > 0);
+                if (!canSound) continue;
                 float sfL = 0.0f, sfR = 0.0f;
                 m_soundfont.processChannelSample(t, sfL, sfR);
 
@@ -937,6 +967,8 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
         m_drumSampler.processBlock(drumBuf, 1);
         for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
             if (m_trackMixers[t].type == TRACK_TYPE_DRUMS) {
+                bool canSound = isPlayingNow || (t < MAX_INSTRUMENTS && m_previewCountdowns[t] > 0);
+                if (!canSound) continue;
                 float dL = drumBuf[0];
                 float dR = drumBuf[1];
 
@@ -971,6 +1003,8 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
         // 4. Process Unified Plugin Instrument tracks (VST3, CLAP, VST2) with Insert FX
         for (int t = 0; t < numTracks && t < static_cast<int>(m_plugins.size()) && t < static_cast<int>(m_trackMixers.size()); ++t) {
             if (m_trackMixers[t].type == TRACK_TYPE_PLUGIN && m_plugins[t]->isLoaded()) {
+                bool canSound = isPlayingNow || (t < MAX_INSTRUMENTS && m_previewCountdowns[t] > 0);
+                if (!canSound) continue;
                 float plgL = 0.0f, plgR = 0.0f;
                 m_plugins[t]->processSample(plgL, plgR);
 
