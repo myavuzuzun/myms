@@ -630,3 +630,97 @@ bool myms_track_fx_open_native_editor(int track, int slot, void* parent_window) 
 void myms_track_fx_close_native_editor(int track, int slot) {
     myms::AudioEngine::instance().closeTrackFxEditor(track, slot);
 }
+
+// ==========================================
+// Track Pre-Instrument FX Host (Plugins Before Instrument)
+// ==========================================
+bool myms_track_pre_fx_load(int track, int slot, const char* filepath) {
+    if (!filepath) return false;
+    return myms::AudioEngine::instance().loadTrackPreFx(track, slot, filepath);
+}
+
+void myms_track_pre_fx_unload(int track, int slot) {
+    myms::AudioEngine::instance().unloadTrackPreFx(track, slot);
+}
+
+bool myms_track_pre_fx_is_loaded(int track, int slot) {
+    return myms::AudioEngine::instance().isTrackPreFxLoaded(track, slot);
+}
+
+int myms_track_pre_fx_get_count(int track) {
+    return myms::AudioEngine::instance().getTrackPreFxCount(track);
+}
+
+void myms_track_pre_fx_get_name(int track, int slot, char* out_name, int max_len) {
+    if (!out_name || max_len <= 0) return;
+    std::string name = myms::AudioEngine::instance().getTrackPreFxName(track, slot);
+    std::strncpy(out_name, name.c_str(), max_len - 1);
+    out_name[max_len - 1] = '\0';
+}
+
+void myms_track_pre_fx_get_vendor(int track, int slot, char* out_vendor, int max_len) {
+    if (!out_vendor || max_len <= 0) return;
+    std::string vendor = myms::AudioEngine::instance().getTrackPreFxVendor(track, slot);
+    std::strncpy(out_vendor, vendor.c_str(), max_len - 1);
+    out_vendor[max_len - 1] = '\0';
+}
+
+void myms_track_pre_fx_get_path(int track, int slot, char* out_path, int max_len) {
+    if (!out_path || max_len <= 0) return;
+    std::string path = myms::AudioEngine::instance().getTrackPreFxPath(track, slot);
+    std::strncpy(out_path, path.c_str(), max_len - 1);
+    out_path[max_len - 1] = '\0';
+}
+
+int myms_track_pre_fx_get_format(int track, int slot) {
+    return myms::AudioEngine::instance().getTrackPreFxFormat(track, slot);
+}
+
+void myms_track_pre_fx_get_format_name(int track, int slot, char* out_format, int max_len) {
+    if (!out_format || max_len <= 0) return;
+    std::string fmt = myms::AudioEngine::instance().getTrackPreFxFormatName(track, slot);
+    std::strncpy(out_format, fmt.c_str(), max_len - 1);
+    out_format[max_len - 1] = '\0';
+}
+
+int myms_track_pre_fx_get_num_params(int track, int slot) {
+    return myms::AudioEngine::instance().getTrackPreFxNumParams(track, slot);
+}
+
+void myms_track_pre_fx_get_param_name(int track, int slot, int param_idx, char* out_name, int max_len) {
+    if (!out_name || max_len <= 0) return;
+    std::string name = myms::AudioEngine::instance().getTrackPreFxParamName(track, slot, param_idx);
+    std::strncpy(out_name, name.c_str(), max_len - 1);
+    out_name[max_len - 1] = '\0';
+}
+
+void myms_track_pre_fx_get_param_display(int track, int slot, int param_idx, char* out_display, int max_len) {
+    if (!out_display || max_len <= 0) return;
+    std::string disp = myms::AudioEngine::instance().getTrackPreFxParamDisplay(track, slot, param_idx);
+    std::strncpy(out_display, disp.c_str(), max_len - 1);
+    out_display[max_len - 1] = '\0';
+}
+
+float myms_track_pre_fx_get_param_value(int track, int slot, int param_idx) {
+    return myms::AudioEngine::instance().getTrackPreFxParamValue(track, slot, param_idx);
+}
+
+void myms_track_pre_fx_set_param_value(int track, int slot, int param_idx, float val) {
+    myms::AudioEngine::instance().setTrackPreFxParamValue(track, slot, param_idx, val);
+}
+
+bool myms_track_pre_fx_is_params_dirty(int track, int slot) {
+    return myms::AudioEngine::instance().isTrackPreFxParamsDirty(track, slot);
+}
+
+bool myms_track_pre_fx_has_native_editor(int track, int slot) {
+    return myms::AudioEngine::instance().hasTrackPreFxEditor(track, slot);
+}
+
+bool myms_track_pre_fx_open_native_editor(int track, int slot, void* parent_window) {
+    return myms::AudioEngine::instance().openTrackPreFxEditor(track, slot, parent_window);
+}
+
+void myms_track_pre_fx_close_native_editor(int track, int slot) {
+    myms::AudioEngine::instance().closeTrackPreFxEditor(track, slot);
+}

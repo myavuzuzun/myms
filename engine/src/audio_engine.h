@@ -198,6 +198,26 @@ public:
     bool openTrackFxEditor(int track, int slot, void* parentWindow);
     void closeTrackFxEditor(int track, int slot);
 
+    // Track Pre-Instrument FX Controls (Plugins Before Instrument)
+    bool loadTrackPreFx(int track, int slot, const std::string& path);
+    void unloadTrackPreFx(int track, int slot);
+    bool isTrackPreFxLoaded(int track, int slot) const;
+    int getTrackPreFxCount(int track) const;
+    std::string getTrackPreFxName(int track, int slot) const;
+    std::string getTrackPreFxVendor(int track, int slot) const;
+    std::string getTrackPreFxPath(int track, int slot) const;
+    int getTrackPreFxFormat(int track, int slot) const;
+    std::string getTrackPreFxFormatName(int track, int slot) const;
+    int getTrackPreFxNumParams(int track, int slot) const;
+    std::string getTrackPreFxParamName(int track, int slot, int paramIdx) const;
+    std::string getTrackPreFxParamDisplay(int track, int slot, int paramIdx) const;
+    float getTrackPreFxParamValue(int track, int slot, int paramIdx) const;
+    void setTrackPreFxParamValue(int track, int slot, int paramIdx, float val);
+    bool isTrackPreFxParamsDirty(int track, int slot);
+    bool hasTrackPreFxEditor(int track, int slot) const;
+    bool openTrackPreFxEditor(int track, int slot, void* parentWindow);
+    void closeTrackPreFxEditor(int track, int slot);
+
     // Pattern & Song Management
     int getNumPatterns() const;
     int getCurrentPattern() const;
@@ -252,6 +272,10 @@ private:
     DrumSampler m_drumSampler;
     std::vector<std::unique_ptr<PluginInstance>> m_plugins;
     std::vector<std::array<std::unique_ptr<PluginInstance>, MAX_TRACK_FX>> m_trackFx;
+    std::vector<std::array<std::unique_ptr<PluginInstance>, MAX_TRACK_FX>> m_trackPreFx;
+
+    std::array<std::unique_ptr<PluginInstance>, MAX_TRACK_FX> m_masterFx;
+    std::atomic<int> m_masterFxMaxSlot{0};
 
     MacroProcessor m_macros;
     TrackerSequencer m_sequencer;
@@ -266,6 +290,7 @@ private:
     bool m_wasPlaying = false;
     std::array<int, MAX_INSTRUMENTS> m_previewCountdowns{};
     std::array<std::atomic<int>, MAX_INSTRUMENTS> m_trackFxMaxSlot{};
+    std::array<std::atomic<int>, MAX_INSTRUMENTS> m_trackPreFxMaxSlot{};
 };
 
 } // namespace myms

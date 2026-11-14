@@ -140,6 +140,26 @@ bool myms_track_fx_has_native_editor(int track, int slot);
 bool myms_track_fx_open_native_editor(int track, int slot, void* parent_window);
 void myms_track_fx_close_native_editor(int track, int slot);
 
+// Track Pre-Instrument FX Host (Plugins Before Instrument)
+bool myms_track_pre_fx_load(int track, int slot, const char* filepath);
+void myms_track_pre_fx_unload(int track, int slot);
+bool myms_track_pre_fx_is_loaded(int track, int slot);
+int myms_track_pre_fx_get_count(int track);
+void myms_track_pre_fx_get_name(int track, int slot, char* out_name, int max_len);
+void myms_track_pre_fx_get_vendor(int track, int slot, char* out_vendor, int max_len);
+void myms_track_pre_fx_get_path(int track, int slot, char* out_path, int max_len);
+int myms_track_pre_fx_get_format(int track, int slot);
+void myms_track_pre_fx_get_format_name(int track, int slot, char* out_format, int max_len);
+int myms_track_pre_fx_get_num_params(int track, int slot);
+void myms_track_pre_fx_get_param_name(int track, int slot, int param_idx, char* out_name, int max_len);
+void myms_track_pre_fx_get_param_display(int track, int slot, int param_idx, char* out_display, int max_len);
+float myms_track_pre_fx_get_param_value(int track, int slot, int param_idx);
+void myms_track_pre_fx_set_param_value(int track, int slot, int param_idx, float val);
+bool myms_track_pre_fx_is_params_dirty(int track, int slot);
+bool myms_track_pre_fx_has_native_editor(int track, int slot);
+bool myms_track_pre_fx_open_native_editor(int track, int slot, void* parent_window);
+void myms_track_pre_fx_close_native_editor(int track, int slot);
+
 // Pattern & Song Sequencer
 int myms_get_num_patterns();
 int myms_get_current_pattern();

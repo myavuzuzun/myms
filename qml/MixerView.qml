@@ -844,6 +844,7 @@ Rectangle {
                 property real masterVol: engine ? engine.masterVolume : 0.85
                 property real masterPeakL: 0.0
                 property real masterPeakR: 0.0
+                property int masterFxCount: engine ? engine.getTrackFxCount(-1) : 0
 
                 Connections {
                     target: engine
@@ -853,6 +854,14 @@ Rectangle {
                     }
                     function onMacrosChanged() {
                         masterStrip.masterVol = engine ? engine.masterVolume : 0.85
+                    }
+                    function onTrackFxChanged(t, s) {
+                        if (t === -1) {
+                            masterStrip.masterFxCount = engine ? engine.getTrackFxCount(-1) : 0
+                        }
+                    }
+                    function onProjectLoaded() {
+                        masterStrip.masterFxCount = engine ? engine.getTrackFxCount(-1) : 0
                     }
                 }
 
@@ -875,6 +884,40 @@ Rectangle {
                             font.pixelSize: 11
                             color: theme.textHeading
                         }
+                    }
+
+                    // Master FX Chain Button
+                    Button {
+                        id: masterFxBtn
+                        Layout.fillWidth: true
+                        implicitHeight: 24
+                        property int fxCount: masterStrip.masterFxCount
+                        text: fxCount > 0 ? ("FX (" + fxCount + ")") : "FX"
+                        font.bold: true
+                        font.pixelSize: 10
+                        background: Rectangle {
+                            color: {
+                                if (masterFxBtn.hovered) return theme.btnHover
+                                if (masterFxBtn.fxCount > 0) return "#1e3a5f"
+                                return theme.bgWellHover
+                            }
+                            border.color: masterFxBtn.fxCount > 0 ? theme.accent : theme.border
+                            border.width: masterFxBtn.fxCount > 0 ? 2 : 1
+                            radius: 3
+                        }
+                        contentItem: Text {
+                            text: parent.text
+                            font: parent.font
+                            color: masterFxBtn.fxCount > 0 ? theme.accent : theme.textHeading
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                        onClicked: {
+                            root.requestEditFx(-1)
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: (masterFxBtn.fxCount > 0) ? ("Master Insert FX Chain (" + masterFxBtn.fxCount + " active)") : "Open Master Insert FX Chain"
+                        ToolTip.delay: 300
                     }
 
                     // Soft Limiter / Output Peak Status

@@ -820,5 +820,8 @@ Item {
         id: fxModal
         objectName: "fxModal"
         engine: mymsEngine
+        onRequestEditInstrument: (track, trackType) => {
+            editorModal.open(track, trackType)
+        }
     }
 }

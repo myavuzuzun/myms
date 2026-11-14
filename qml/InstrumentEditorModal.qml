@@ -244,30 +244,6 @@ Item {
                             }
                         }
                     }
-
-                    Rectangle { width: 1; height: 16; color: theme.border }
-
-                    // Close / Done Button
-                    Button {
-                        implicitHeight: 26
-                        implicitWidth: 80
-                        text: "✓ DONE"
-                        font.bold: true
-                        font.pixelSize: 10
-                        background: Rectangle {
-                            color: parent.hovered ? theme.playAccent : theme.btnBg
-                            border.color: theme.border
-                            radius: 3
-                        }
-                        contentItem: Text {
-                            text: parent.text
-                            font: parent.font
-                            color: parent.parent.hovered ? "#ffffff" : theme.textMain
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        onClicked: root.close()
-                    }
                 }
             }
 
@@ -297,6 +273,40 @@ Item {
                     currentTrack: root.targetTrack
                 }
             }
+        }
+    }
+
+    // Floating X Close Button (Above modal window, centered horizontally)
+    Rectangle {
+        id: floatingCloseButton
+        width: 32
+        height: 32
+        radius: 16
+        anchors.bottom: modalDialog.top
+        anchors.bottomMargin: 10
+        anchors.horizontalCenter: modalDialog.horizontalCenter
+        color: closeMouseArea.containsMouse ? "#da4453" : "#31363b"
+        border.color: closeMouseArea.containsMouse ? "#e74c3c" : theme.borderLight
+        border.width: 1
+        z: 10
+
+        Text {
+            anchors.centerIn: parent
+            text: "✕"
+            font.pixelSize: 13
+            font.bold: true
+            color: closeMouseArea.containsMouse ? "#ffffff" : theme.textHeading
+        }
+
+        MouseArea {
+            id: closeMouseArea
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.close()
+            ToolTip.visible: containsMouse
+            ToolTip.text: "Close Window (Esc)"
+            ToolTip.delay: 300
         }
     }
 

@@ -47,6 +47,10 @@ class MymsEngine(QObject):
     trackFxParamsChanged = pyqtSignal(int, int)
     requestOpenTrackFxDialog = pyqtSignal(int, int)
     requestOpenTrackFxGui = pyqtSignal(int, int)
+    trackPreFxChanged = pyqtSignal(int, int)
+    trackPreFxParamsChanged = pyqtSignal(int, int)
+    requestOpenTrackPreFxDialog = pyqtSignal(int, int)
+    requestOpenTrackPreFxGui = pyqtSignal(int, int)
 
     def _detect_system_keyboard_layout(self):
         try:
@@ -274,6 +278,35 @@ class MymsEngine(QObject):
         self.lib.myms_track_fx_open_native_editor.restype = ctypes.c_bool
         self.lib.myms_track_fx_close_native_editor.argtypes = [ctypes.c_int, ctypes.c_int]
 
+        # Track Pre-Instrument FX Host (Plugins Before Instrument)
+        self.lib.myms_track_pre_fx_load.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_char_p]
+        self.lib.myms_track_pre_fx_load.restype = ctypes.c_bool
+        self.lib.myms_track_pre_fx_unload.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_track_pre_fx_is_loaded.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_track_pre_fx_is_loaded.restype = ctypes.c_bool
+        self.lib.myms_track_pre_fx_get_count.argtypes = [ctypes.c_int]
+        self.lib.myms_track_pre_fx_get_count.restype = ctypes.c_int
+        self.lib.myms_track_pre_fx_get_name.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.lib.myms_track_pre_fx_get_vendor.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.lib.myms_track_pre_fx_get_path.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.lib.myms_track_pre_fx_get_format.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_track_pre_fx_get_format.restype = ctypes.c_int
+        self.lib.myms_track_pre_fx_get_format_name.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.lib.myms_track_pre_fx_get_num_params.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_track_pre_fx_get_num_params.restype = ctypes.c_int
+        self.lib.myms_track_pre_fx_get_param_name.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.lib.myms_track_pre_fx_get_param_display.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+        self.lib.myms_track_pre_fx_get_param_value.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int]
+        self.lib.myms_track_pre_fx_get_param_value.restype = ctypes.c_float
+        self.lib.myms_track_pre_fx_set_param_value.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_float]
+        self.lib.myms_track_pre_fx_is_params_dirty.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_track_pre_fx_is_params_dirty.restype = ctypes.c_bool
+        self.lib.myms_track_pre_fx_has_native_editor.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_track_pre_fx_has_native_editor.restype = ctypes.c_bool
+        self.lib.myms_track_pre_fx_open_native_editor.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_void_p]
+        self.lib.myms_track_pre_fx_open_native_editor.restype = ctypes.c_bool
+        self.lib.myms_track_pre_fx_close_native_editor.argtypes = [ctypes.c_int, ctypes.c_int]
+
         # Pattern & Song Sequencer
         self.lib.myms_get_num_patterns.restype = ctypes.c_int
         self.lib.myms_get_current_pattern.restype = ctypes.c_int
@@ -365,6 +398,15 @@ class MymsEngine(QObject):
                 if self.lib.myms_track_fx_is_params_dirty(t, s):
                     self.trackFxParamsChanged.emit(t, s)
                     self.trackFxChanged.emit(t, s)
+                if self.lib.myms_track_pre_fx_is_params_dirty(t, s):
+                    self.trackPreFxParamsChanged.emit(t, s)
+                    self.trackPreFxChanged.emit(t, s)
+
+        # Master Bus FX dirty check
+        for s in range(self.getMaxTrackFx()):
+            if self.lib.myms_track_fx_is_params_dirty(-1, s):
+                self.trackFxParamsChanged.emit(-1, s)
+                self.trackFxChanged.emit(-1, s)
 
     @pyqtProperty(bool, notify=playingChanged)
     def isPlaying(self):
@@ -948,6 +990,184 @@ class MymsEngine(QObject):
     def removeTrackFx(self, track, slot):
         self.unloadTrackFx(track, slot)
 
+    @pyqtSlot(int, str, result=int)
+    def addTrackPreFx(self, track, path):
+        if not path:
+            return -1
+        if not os.path.isabs(path):
+            proj_root = os.path.dirname(os.path.abspath(__file__))
+            candidate = os.path.join(proj_root, path)
+            if os.path.exists(candidate):
+                path = candidate
+        if not os.path.exists(path):
+            return -1
+        max_fx = self.getMaxTrackFx()
+        for s in range(max_fx):
+            if not self.isTrackPreFxLoaded(track, s):
+                if self.loadTrackPreFx(track, s, path):
+                    return s
+                return -1
+        return -1
+
+    @pyqtSlot(int, int, str, result=bool)
+    def loadTrackPreFx(self, track, slot, path):
+        if not path:
+            return False
+        if not os.path.isabs(path):
+            proj_root = os.path.dirname(os.path.abspath(__file__))
+            candidate = os.path.join(proj_root, path)
+            if os.path.exists(candidate):
+                path = candidate
+        if not os.path.exists(path):
+            return False
+        res = bool(self.lib.myms_track_pre_fx_load(track, slot, path.encode('utf-8')))
+        if res:
+            self.trackPreFxChanged.emit(track, slot)
+            self.trackPreFxParamsChanged.emit(track, slot)
+        return res
+
+    @pyqtSlot(int, int, int, result=str)
+    def getTrackPreFxParamDisplay(self, track, slot, param_idx):
+        buf = ctypes.create_string_buffer(32)
+        self.lib.myms_track_pre_fx_get_param_display(track, slot, param_idx, buf, 32)
+        return buf.value.decode('utf-8', errors='ignore')
+
+    @pyqtSlot(int, int)
+    def unloadTrackPreFx(self, track, slot):
+        self.lib.myms_track_pre_fx_unload(track, slot)
+        self.trackPreFxChanged.emit(track, slot)
+        self.trackPreFxParamsChanged.emit(track, slot)
+
+    @pyqtSlot(int, int)
+    def removeTrackPreFx(self, track, slot):
+        self.unloadTrackPreFx(track, slot)
+
+    @pyqtSlot(int, int, result=bool)
+    def isTrackPreFxLoaded(self, track, slot):
+        return bool(self.lib.myms_track_pre_fx_is_loaded(track, slot))
+
+    @pyqtSlot(int, result=int)
+    def getTrackPreFxCount(self, track):
+        return self.lib.myms_track_pre_fx_get_count(track)
+
+    @pyqtSlot(int, result='QVariantList')
+    def getTrackPreFxList(self, track):
+        res = []
+        max_fx = self.getMaxTrackFx()
+        for s in range(max_fx):
+            if self.isTrackPreFxLoaded(track, s):
+                res.append({
+                    "slot": s,
+                    "name": self.getTrackPreFxName(track, s),
+                    "vendor": self.getTrackPreFxVendor(track, s),
+                    "format": self.getTrackPreFxFormatName(track, s),
+                    "path": self.getTrackPreFxPath(track, s),
+                    "numParams": self.getTrackPreFxNumParams(track, s)
+                })
+        return res
+
+    @pyqtSlot(int, int, result=str)
+    def getTrackPreFxName(self, track, slot):
+        buf = ctypes.create_string_buffer(64)
+        self.lib.myms_track_pre_fx_get_name(track, slot, buf, 64)
+        return buf.value.decode('utf-8', errors='ignore')
+
+    @pyqtSlot(int, int, result=str)
+    def getTrackPreFxVendor(self, track, slot):
+        buf = ctypes.create_string_buffer(64)
+        self.lib.myms_track_pre_fx_get_vendor(track, slot, buf, 64)
+        return buf.value.decode('utf-8', errors='ignore')
+
+    @pyqtSlot(int, int, result=str)
+    def getTrackPreFxPath(self, track, slot):
+        buf = ctypes.create_string_buffer(512)
+        self.lib.myms_track_pre_fx_get_path(track, slot, buf, 512)
+        return buf.value.decode('utf-8', errors='ignore')
+
+    @pyqtSlot(int, int, result=int)
+    def getTrackPreFxFormat(self, track, slot):
+        return self.lib.myms_track_pre_fx_get_format(track, slot)
+
+    @pyqtSlot(int, int, result=str)
+    def getTrackPreFxFormatName(self, track, slot):
+        buf = ctypes.create_string_buffer(16)
+        self.lib.myms_track_pre_fx_get_format_name(track, slot, buf, 16)
+        res = buf.value.decode('utf-8', errors='ignore')
+        return res if res else "None"
+
+    @pyqtSlot(int, int, result=int)
+    def getTrackPreFxNumParams(self, track, slot):
+        return self.lib.myms_track_pre_fx_get_num_params(track, slot)
+
+    @pyqtSlot(int, int, result='QVariantList')
+    def getTrackPreFxParams(self, track, slot):
+        n = self.lib.myms_track_pre_fx_get_num_params(track, slot)
+        res = []
+        name_buf = ctypes.create_string_buffer(32)
+        disp_buf = ctypes.create_string_buffer(32)
+        for i in range(n):
+            self.lib.myms_track_pre_fx_get_param_name(track, slot, i, name_buf, 32)
+            self.lib.myms_track_pre_fx_get_param_display(track, slot, i, disp_buf, 32)
+            val = self.lib.myms_track_pre_fx_get_param_value(track, slot, i)
+            p_name = name_buf.value.decode('utf-8', errors='ignore')
+            p_disp = disp_buf.value.decode('utf-8', errors='ignore')
+            res.append({
+                "id": i,
+                "name": p_name if p_name else f"Param {i+1}",
+                "display": p_disp,
+                "value": float(val)
+            })
+        return res
+
+    @pyqtSlot(int, int, int, result=str)
+    def getTrackPreFxParamName(self, track, slot, param_idx):
+        buf = ctypes.create_string_buffer(32)
+        self.lib.myms_track_pre_fx_get_param_name(track, slot, param_idx, buf, 32)
+        p_name = buf.value.decode('utf-8', errors='ignore')
+        return p_name if p_name else f"Param {param_idx+1}"
+
+    @pyqtSlot(int, int, int, result=float)
+    def getTrackPreFxParamValue(self, track, slot, param_idx):
+        return float(self.lib.myms_track_pre_fx_get_param_value(track, slot, param_idx))
+
+    @pyqtSlot(int, int, int, float)
+    def setTrackPreFxParamValue(self, track, slot, param_idx, val):
+        self.lib.myms_track_pre_fx_set_param_value(track, slot, param_idx, ctypes.c_float(val))
+
+    @pyqtSlot(int, int, result=bool)
+    def hasTrackPreFxNativeEditor(self, track, slot):
+        return bool(self.lib.myms_track_pre_fx_has_native_editor(track, slot))
+
+    @pyqtSlot(int, int, int, result=bool)
+    def openTrackPreFxNativeEditor(self, track, slot, win_id):
+        return bool(self.lib.myms_track_pre_fx_open_native_editor(track, slot, ctypes.c_void_p(win_id)))
+
+    @pyqtSlot(int, int)
+    def closeTrackPreFxNativeEditor(self, track, slot):
+        self.lib.myms_track_pre_fx_close_native_editor(track, slot)
+
+    @pyqtSlot(int, int)
+    def promptOpenTrackPreFxGui(self, track, slot):
+        self.requestOpenTrackPreFxGui.emit(track, slot)
+
+    @pyqtSlot(int, int)
+    def promptOpenTrackPreFxDialog(self, track, slot):
+        self.requestOpenTrackPreFxDialog.emit(track, slot)
+
+    def getTrackPreFxChainData(self, track):
+        res = []
+        max_fx = self.getMaxTrackFx()
+        for s in range(max_fx):
+            if self.isTrackPreFxLoaded(track, s):
+                res.append({
+                    "slot": s,
+                    "path": self.getTrackPreFxPath(track, s),
+                    "name": self.getTrackPreFxName(track, s),
+                    "format": self.getTrackPreFxFormatName(track, s),
+                    "params": [p["value"] for p in self.getTrackPreFxParams(track, s)]
+                })
+        return res
+
     @pyqtSlot(int, result='QVariantList')
     def getTrackFxList(self, track):
         res = []
@@ -1406,6 +1626,7 @@ class MymsEngine(QObject):
                     "space": self._macro_space,
                     "master_volume": self._master_volume
                 },
+                "master_fx": self.getTrackFxChainData(-1),
                 "tracks": [],
                 "patterns": []
             }
@@ -1436,6 +1657,7 @@ class MymsEngine(QObject):
                     "plugin_path": self.getTrackPluginPath(t) if self.isTrackPluginLoaded(t) else "",
                     "plugin_format": self.getTrackPluginFormatName(t) if self.isTrackPluginLoaded(t) else "",
                     "plugin_params": [param["value"] for param in self.getTrackPluginParams(t)] if self.isTrackPluginLoaded(t) else [],
+                    "pre_fx": self.getTrackPreFxChainData(t),
                     "fx_chain": self.getTrackFxChainData(t),
                     "synth": {
                         "osc1_wave": p.get("osc1", 0),
@@ -1529,6 +1751,19 @@ class MymsEngine(QObject):
             if "space" in macros: self.setMacroSpace(float(macros["space"]))
             if "master_volume" in macros: self.setMasterVolume(float(macros["master_volume"]))
 
+            # 2.1 Master FX
+            for s in range(self.getMaxTrackFx()):
+                self.unloadTrackFx(-1, s)
+            master_fx = data.get("master_fx", [])
+            for fx in master_fx:
+                slot = fx.get("slot", 0)
+                p_path = fx.get("path", "")
+                if p_path and os.path.exists(p_path):
+                    self.loadTrackFx(-1, slot, p_path)
+                    fx_vals = fx.get("params", [])
+                    for p_idx, val in enumerate(fx_vals):
+                        self.setTrackFxParamValue(-1, slot, p_idx, float(val))
+
             # 3. SoundFont
             sf2 = data.get("soundfont", {})
             if "path" in sf2 and sf2["path"] and os.path.exists(sf2["path"]):
@@ -1579,6 +1814,20 @@ class MymsEngine(QObject):
                     p_vals = trk.get("plugin_params", [])
                     for p_idx, val in enumerate(p_vals):
                         self.setTrackPluginParamValue(t, p_idx, float(val))
+
+                for s in range(self.getMaxTrackFx()):
+                    self.unloadTrackFx(t, s)
+                    self.unloadTrackPreFx(t, s)
+
+                pre_fx = trk.get("pre_fx", [])
+                for fx in pre_fx:
+                    slot = fx.get("slot", 0)
+                    p_path = fx.get("path", "")
+                    if p_path and os.path.exists(p_path):
+                        self.loadTrackPreFx(t, slot, p_path)
+                        fx_vals = fx.get("params", [])
+                        for p_idx, val in enumerate(fx_vals):
+                            self.setTrackPreFxParamValue(t, slot, p_idx, float(val))
 
                 fx_chain = trk.get("fx_chain", [])
                 for fx in fx_chain:
@@ -1663,8 +1912,11 @@ class MymsEngine(QObject):
         self.clearAllTracks()
         for t in range(self.numTracks):
             self.unloadTrackPlugin(t)
-            for s in range(2):
+            for s in range(self.getMaxTrackFx()):
                 self.unloadTrackFx(t, s)
+                self.unloadTrackPreFx(t, s)
+        for s in range(self.getMaxTrackFx()):
+            self.unloadTrackFx(-1, s)
         while self.numTracks > 1:
             self.removeTrack(self.numTracks - 1)
         while self.numPatterns > 1:

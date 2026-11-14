@@ -306,5 +306,117 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.engine.setInstrumentName(0, "   ")
         self.assertEqual(self.engine.getInstrumentName(0), "BeatPad 1")
 
+    def test_11_pre_instrument_fx_chain(self):
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        self.assertTrue(os.path.exists(filter_fx_path))
+
+        # Initially no pre-fx
+        self.assertEqual(self.engine.getTrackPreFxCount(0), 0)
+        self.assertFalse(self.engine.isTrackPreFxLoaded(0, 0))
+
+        # Add pre-fx
+        slot = self.engine.addTrackPreFx(0, filter_fx_path)
+        self.assertEqual(slot, 0)
+        self.assertTrue(self.engine.isTrackPreFxLoaded(0, 0))
+        self.assertEqual(self.engine.getTrackPreFxCount(0), 1)
+        self.assertEqual(self.engine.getTrackPreFxName(0, 0), "Demo Filter FX")
+        self.assertEqual(self.engine.getTrackPreFxFormatName(0, 0), "VST2")
+
+        # Check parameters
+        num_params = self.engine.getTrackPreFxNumParams(0, 0)
+        self.assertEqual(num_params, 4)
+        params = self.engine.getTrackPreFxParams(0, 0)
+        self.assertEqual(len(params), 4)
+
+        # Modulate parameter
+        self.engine.setTrackPreFxParamValue(0, 0, 0, 0.45)
+        self.assertAlmostEqual(self.engine.getTrackPreFxParamValue(0, 0, 0), 0.45, places=2)
+
+        # Remove pre-fx
+        self.engine.removeTrackPreFx(0, 0)
+        self.assertFalse(self.engine.isTrackPreFxLoaded(0, 0))
+        self.assertEqual(self.engine.getTrackPreFxCount(0), 0)
+
+    def test_12_master_track_fx_chain(self):
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        self.assertTrue(os.path.exists(filter_fx_path))
+
+        # Initially no master fx
+        self.assertEqual(self.engine.getTrackFxCount(-1), 0)
+        self.assertFalse(self.engine.isTrackFxLoaded(-1, 0))
+
+        # Load master fx in slot 0
+        ok = self.engine.loadTrackFx(-1, 0, filter_fx_path)
+        self.assertTrue(ok)
+        self.assertTrue(self.engine.isTrackFxLoaded(-1, 0))
+        self.assertEqual(self.engine.getTrackFxCount(-1), 1)
+        self.assertEqual(self.engine.getTrackFxName(-1, 0), "Demo Filter FX")
+
+        # Modulate master fx parameter
+        self.engine.setTrackFxParamValue(-1, 0, 1, 0.88)
+        self.assertAlmostEqual(self.engine.getTrackFxParamValue(-1, 0, 1), 0.88, places=2)
+
+        # Master fx list
+        master_list = self.engine.getTrackFxList(-1)
+        self.assertEqual(len(master_list), 1)
+        self.assertEqual(master_list[0]["slot"], 0)
+        self.assertEqual(master_list[0]["name"], "Demo Filter FX")
+
+        # Remove master fx
+        self.engine.removeTrackFx(-1, 0)
+        self.assertFalse(self.engine.isTrackFxLoaded(-1, 0))
+        self.assertEqual(self.engine.getTrackFxCount(-1), 0)
+
+    def test_13_project_persistence_pre_fx_and_master_fx(self):
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        self.assertTrue(os.path.exists(filter_fx_path))
+
+        # Setup track 0 pre-fx and post-fx
+        self.engine.loadTrackPreFx(0, 0, filter_fx_path)
+        self.engine.setTrackPreFxParamValue(0, 0, 0, 0.33)
+
+        self.engine.loadTrackFx(0, 0, filter_fx_path)
+        self.engine.setTrackFxParamValue(0, 0, 0, 0.66)
+
+        # Setup master fx
+        self.engine.loadTrackFx(-1, 0, filter_fx_path)
+        self.engine.setTrackFxParamValue(-1, 0, 0, 0.77)
+
+        # Save project
+        with tempfile.NamedTemporaryFile(suffix=".myms", delete=False) as f:
+            tmp_path = f.name
+
+        try:
+            saved = self.engine.saveProject(tmp_path)
+            self.assertTrue(saved)
+
+            # Reset project
+            self.engine.newProject()
+            self.assertFalse(self.engine.isTrackPreFxLoaded(0, 0))
+            self.assertFalse(self.engine.isTrackFxLoaded(0, 0))
+            self.assertFalse(self.engine.isTrackFxLoaded(-1, 0))
+
+            # Open project
+            opened = self.engine.openProject(tmp_path)
+            self.assertTrue(opened)
+
+            # Verify track 0 pre-fx
+            self.assertTrue(self.engine.isTrackPreFxLoaded(0, 0))
+            self.assertEqual(self.engine.getTrackPreFxName(0, 0), "Demo Filter FX")
+            self.assertAlmostEqual(self.engine.getTrackPreFxParamValue(0, 0, 0), 0.33, places=2)
+
+            # Verify track 0 post-fx
+            self.assertTrue(self.engine.isTrackFxLoaded(0, 0))
+            self.assertEqual(self.engine.getTrackFxName(0, 0), "Demo Filter FX")
+            self.assertAlmostEqual(self.engine.getTrackFxParamValue(0, 0, 0), 0.66, places=2)
+
+            # Verify master fx
+            self.assertTrue(self.engine.isTrackFxLoaded(-1, 0))
+            self.assertEqual(self.engine.getTrackFxName(-1, 0), "Demo Filter FX")
+            self.assertAlmostEqual(self.engine.getTrackFxParamValue(-1, 0, 0), 0.77, places=2)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
 if __name__ == "__main__":
     unittest.main()

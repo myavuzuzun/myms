@@ -21,20 +21,28 @@ class PluginNativeHostWindow(QMainWindow):
     Dedicated floating X11 native host window for Linux VST3, CLAP, and VST2 plugins.
     Embeds the plugin's native X11 window into an isolated WA_NativeWindow container.
     """
-    def __init__(self, parent, engine, track, slot=None, is_fx=False, on_close_cb=None):
+    def __init__(self, parent, engine, track, slot=None, is_fx=False, is_pre=False, on_close_cb=None):
         super().__init__(None, Qt.WindowType.Window)
         self.engine = engine
         self.track = track
         self.slot = slot
         self.is_fx = is_fx
+        self.is_pre = is_pre
         self.on_close_cb = on_close_cb
         self.setWindowFlags(Qt.WindowType.Window)
 
         # Set title reflecting plugin name, format, and track context
-        if is_fx:
+        if is_pre:
+            name = self.engine.getTrackPreFxName(track, slot)
+            fmt = self.engine.getTrackPreFxFormatName(track, slot)
+            self.setWindowTitle(f"myms — {name} [{fmt}] — Track #{track+1} Pre-FX {slot+1}")
+        elif is_fx:
             name = self.engine.getTrackFxName(track, slot)
             fmt = self.engine.getTrackFxFormatName(track, slot)
-            self.setWindowTitle(f"myms — {name} [{fmt}] — Track #{track+1} FX {slot+1}")
+            if track == -1:
+                self.setWindowTitle(f"myms — {name} [{fmt}] — Master Bus FX {slot+1}")
+            else:
+                self.setWindowTitle(f"myms — {name} [{fmt}] — Track #{track+1} FX {slot+1}")
         else:
             name = self.engine.getTrackPluginName(track)
             fmt = self.engine.getTrackPluginFormatName(track)
@@ -54,13 +62,17 @@ class PluginNativeHostWindow(QMainWindow):
         super().showEvent(event)
         # Retrieve the underlying X11 Window handle
         win_id = int(self.container.winId())
-        if self.is_fx:
+        if self.is_pre:
+            self.engine.openTrackPreFxNativeEditor(self.track, self.slot, win_id)
+        elif self.is_fx:
             self.engine.openTrackFxNativeEditor(self.track, self.slot, win_id)
         else:
             self.engine.openTrackPluginNativeEditor(self.track, win_id)
 
     def closeEvent(self, event):
-        if self.is_fx:
+        if self.is_pre:
+            self.engine.closeTrackPreFxNativeEditor(self.track, self.slot)
+        elif self.is_fx:
             self.engine.closeTrackFxNativeEditor(self.track, self.slot)
         else:
             self.engine.closeTrackPluginNativeEditor(self.track)
@@ -86,6 +98,8 @@ class AppWindow(QMainWindow):
         self.engine.requestOpenPluginGui.connect(self._on_open_plugin_gui)
         self.engine.requestOpenTrackFxDialog.connect(self._on_open_track_fx_dialog)
         self.engine.requestOpenTrackFxGui.connect(self._on_open_track_fx_gui)
+        self.engine.requestOpenTrackPreFxDialog.connect(self._on_open_track_pre_fx_dialog)
+        self.engine.requestOpenTrackPreFxGui.connect(self._on_open_track_pre_fx_gui)
 
         # Setup standard Qt native QMenuBar (100% KDE Global Menu compatible)
         self._setup_native_menu()
@@ -314,9 +328,10 @@ class AppWindow(QMainWindow):
         win.activateWindow()
 
     def _on_open_track_fx_dialog(self, track, slot):
+        target_name = "Master Bus" if track == -1 else f"Track #{track+1}"
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            f"Select Insert Effect Plugin for Track #{track+1}" + (f" (Slot {slot+1})" if slot >= 0 else ""),
+            f"Select Insert Effect Plugin for {target_name}" + (f" (Slot {slot+1})" if slot >= 0 else ""),
             os.path.abspath("plugins"),
             "Audio Plugins (*.vst3 *.clap *.so);;All Files (*)"
         )
@@ -344,6 +359,42 @@ class AppWindow(QMainWindow):
             self._plugin_gui_windows.pop(key, None)
 
         win = PluginNativeHostWindow(self, self.engine, track, slot=slot, is_fx=True, on_close_cb=_cleanup)
+        self._plugin_gui_windows[key] = win
+        win.show()
+        win.raise_()
+        win.activateWindow()
+
+    def _on_open_track_pre_fx_dialog(self, track, slot):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            f"Select Pre-Instrument Effect Plugin for Track #{track+1}" + (f" (Slot {slot+1})" if slot >= 0 else ""),
+            os.path.abspath("plugins"),
+            "Audio Plugins (*.vst3 *.clap *.so);;All Files (*)"
+        )
+        if file_path:
+            if slot < 0:
+                self.engine.addTrackPreFx(track, file_path)
+            else:
+                self.engine.loadTrackPreFx(track, slot, file_path)
+
+    def _on_open_track_pre_fx_gui(self, track, slot):
+        if not self.engine.isTrackPreFxLoaded(track, slot):
+            return
+        key = (track, f"pre_fx_{slot}")
+        win = self._plugin_gui_windows.get(key)
+        if win is not None:
+            try:
+                win.show()
+                win.raise_()
+                win.activateWindow()
+                return
+            except Exception:
+                pass
+
+        def _cleanup():
+            self._plugin_gui_windows.pop(key, None)
+
+        win = PluginNativeHostWindow(self, self.engine, track, slot=slot, is_fx=False, is_pre=True, on_close_cb=_cleanup)
         self._plugin_gui_windows[key] = win
         win.show()
         win.raise_()
