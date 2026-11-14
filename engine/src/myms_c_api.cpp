@@ -517,6 +517,10 @@ void myms_plugin_set_param_value(int track, int param_idx, float val) {
     myms::AudioEngine::instance().setTrackPluginParamValue(track, param_idx, val);
 }
 
+bool myms_plugin_is_params_dirty(int track) {
+    return myms::AudioEngine::instance().isTrackPluginParamsDirty(track);
+}
+
 bool myms_plugin_has_native_editor(int track) {
     return myms::AudioEngine::instance().hasTrackPluginNativeEditor(track);
 }
@@ -543,6 +547,14 @@ void myms_track_fx_unload(int track, int slot) {
 
 bool myms_track_fx_is_loaded(int track, int slot) {
     return myms::AudioEngine::instance().isTrackFxLoaded(track, slot);
+}
+
+int myms_track_fx_get_count(int track) {
+    return myms::AudioEngine::instance().getTrackFxCount(track);
+}
+
+int myms_get_max_track_fx() {
+    return myms::MAX_TRACK_FX;
 }
 
 void myms_track_fx_get_name(int track, int slot, char* out_name, int max_len) {
@@ -588,12 +600,23 @@ void myms_track_fx_get_param_name(int track, int slot, int param_idx, char* out_
     out_name[max_len - 1] = '\0';
 }
 
+void myms_track_fx_get_param_display(int track, int slot, int param_idx, char* out_display, int max_len) {
+    if (!out_display || max_len <= 0) return;
+    std::string disp = myms::AudioEngine::instance().getTrackFxParamDisplay(track, slot, param_idx);
+    std::strncpy(out_display, disp.c_str(), max_len - 1);
+    out_display[max_len - 1] = '\0';
+}
+
 float myms_track_fx_get_param_value(int track, int slot, int param_idx) {
     return myms::AudioEngine::instance().getTrackFxParamValue(track, slot, param_idx);
 }
 
 void myms_track_fx_set_param_value(int track, int slot, int param_idx, float val) {
     myms::AudioEngine::instance().setTrackFxParamValue(track, slot, param_idx, val);
+}
+
+bool myms_track_fx_is_params_dirty(int track, int slot) {
+    return myms::AudioEngine::instance().isTrackFxParamsDirty(track, slot);
 }
 
 bool myms_track_fx_has_native_editor(int track, int slot) {

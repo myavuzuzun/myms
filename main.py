@@ -305,12 +305,15 @@ class AppWindow(QMainWindow):
     def _on_open_track_fx_dialog(self, track, slot):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            f"Select Insert Effect Plugin for Track #{track+1} (Slot {slot+1})",
+            f"Select Insert Effect Plugin for Track #{track+1}" + (f" (Slot {slot+1})" if slot >= 0 else ""),
             os.path.abspath("plugins"),
             "Audio Plugins (*.vst3 *.clap *.so);;All Files (*)"
         )
         if file_path:
-            self.engine.loadTrackFx(track, slot, file_path)
+            if slot < 0:
+                self.engine.addTrackFx(track, file_path)
+            else:
+                self.engine.loadTrackFx(track, slot, file_path)
 
     def _on_open_track_fx_gui(self, track, slot):
         if not self.engine.isTrackFxLoaded(track, slot):

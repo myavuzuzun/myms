@@ -13,7 +13,24 @@ Item {
     property var engine
     property bool isOpen: false
     property int targetTrack: 0
-    property var fxSlots: []
+    property var fxList: []
+    property int selectedFxIndex: 0
+
+    property var currentFx: (fxList && fxList.length > 0 && selectedFxIndex >= 0 && selectedFxIndex < fxList.length) ? fxList[selectedFxIndex] : null
+    property int currentSlot: currentFx ? currentFx.slot : 0
+    property var paramList: []
+
+    function refreshParams() {
+        if (!engine || !currentFx) {
+            paramList = []
+            return
+        }
+        paramList = engine.getTrackFxParams(targetTrack, currentSlot)
+    }
+
+    onTargetTrackChanged: refreshParams()
+    onSelectedFxIndexChanged: refreshParams()
+    onFxListChanged: refreshParams()
 
     function open(track) {
         targetTrack = track
@@ -22,6 +39,10 @@ Item {
             fxTrackNameInput.text = engine.getInstrumentName(track)
         }
         refreshSlots()
+        if (fxList.length > 0 && selectedFxIndex >= fxList.length) {
+            selectedFxIndex = 0
+        }
+        refreshParams()
         isOpen = true
         root.forceActiveFocus()
     }
@@ -32,7 +53,11 @@ Item {
 
     function refreshSlots() {
         if (!engine) return
-        fxSlots = engine.getTrackFxSlots(targetTrack)
+        fxList = engine.getTrackFxList(targetTrack)
+        if (selectedFxIndex >= fxList.length) {
+            selectedFxIndex = Math.max(0, fxList.length - 1)
+        }
+        refreshParams()
     }
 
     Connections {
@@ -40,6 +65,11 @@ Item {
         function onTrackFxChanged(t, s) {
             if (t === root.targetTrack || t === -1) {
                 root.refreshSlots()
+            }
+        }
+        function onTrackFxParamsChanged(t, s) {
+            if (t === root.targetTrack && s === root.currentSlot) {
+                root.refreshParams()
             }
         }
         function onInstrumentNameChanged(inst, name) {
@@ -68,8 +98,8 @@ Item {
     Rectangle {
         id: modalDialog
         anchors.centerIn: parent
-        width: Math.min(parent.width - 40, 820)
-        height: Math.min(parent.height - 40, 560)
+        width: Math.min(parent.width - 30, 940)
+        height: Math.min(parent.height - 30, 580)
         color: theme.bgCard
         radius: 6
         border.color: theme.borderLight
@@ -141,27 +171,25 @@ Item {
                     }
 
                     Text {
-                        text: "— INSERT FX CHAIN"
-                        font.bold: true
+                        text: "— Track Insert Effects Chain"
                         font.pixelSize: 11
                         color: theme.textMuted
                     }
 
+                    // Active Count Badge
                     Rectangle {
-                        height: 18
-                        width: 70
-                        radius: 3
-                        color: theme.bgWell
+                        height: 20
+                        implicitWidth: countText.implicitWidth + 12
+                        radius: 10
+                        color: root.fxList.length > 0 ? theme.accent : theme.bgWell
                         border.color: theme.border
                         Text {
+                            id: countText
                             anchors.centerIn: parent
-                            text: {
-                                let c = engine ? engine.getTrackFxCount(root.targetTrack) : 0
-                                return c + " / 4 ACTIVE"
-                            }
+                            text: root.fxList.length + " ACTIVE"
                             font.bold: true
                             font.pixelSize: 9
-                            color: theme.accent
+                            color: root.fxList.length > 0 ? "#ffffff" : theme.textMuted
                         }
                     }
 
@@ -191,438 +219,598 @@ Item {
             }
 
             // ==========================================
-            // 2. SIGNAL FLOW DIAGRAM
+            // 2. MAIN TWO-PANE BODY
             // ==========================================
-            Rectangle {
+            RowLayout {
                 Layout.fillWidth: true
-                height: 38
-                color: theme.bgWell
-                border.color: theme.border
-                border.width: 1
+                Layout.fillHeight: true
+                spacing: 0
 
-                RowLayout {
-                    anchors.centerIn: parent
-                    spacing: 8
+                // ------------------------------------------
+                // LEFT PANE: SIGNAL CHAIN LIST
+                // ------------------------------------------
+                Rectangle {
+                    Layout.preferredWidth: 260
+                    Layout.fillHeight: true
+                    color: theme.bgWell
+                    border.color: theme.border
+                    border.width: 1
 
-                    Rectangle {
-                        height: 22
-                        width: 90
-                        radius: 3
-                        color: theme.bgCard
-                        border.color: theme.border
-                        Text {
-                            anchors.centerIn: parent
-                            text: "🎵 GENERATOR"
-                            font.bold: true
-                            font.pixelSize: 9
-                            color: theme.textMain
-                        }
-                    }
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        spacing: 8
 
-                    Repeater {
-                        model: 4
+                        // Section Header
                         RowLayout {
-                            spacing: 8
+                            Layout.fillWidth: true
                             Text {
-                                text: "➔"
+                                text: "SIGNAL CHAIN"
+                                font.bold: true
                                 font.pixelSize: 10
                                 color: theme.textMuted
                             }
-                            Rectangle {
-                                height: 22
-                                width: 85
-                                radius: 3
-                                property bool isLoaded: (root.fxSlots && index < root.fxSlots.length) ? root.fxSlots[index].loaded : false
-                                color: isLoaded ? theme.accent : theme.bgCard
-                                border.color: isLoaded ? theme.accent : theme.border
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: {
-                                        if (parent.isLoaded) {
-                                            let name = root.fxSlots[index].name
-                                            return name ? name : ("FX " + (index + 1))
+                            Item { Layout.fillWidth: true }
+                            Text {
+                                text: "TOP ➔ BOTTOM"
+                                font.pixelSize: 8
+                                color: theme.textDim
+                            }
+                        }
+
+                        // Scrollable List of Active Effects
+                        ScrollView {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            clip: true
+                            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                            ScrollBar.vertical.policy: ScrollBar.AsNeeded
+
+                            ListView {
+                                id: chainListView
+                                width: parent.width
+                                model: root.fxList
+                                spacing: 6
+
+                                delegate: Rectangle {
+                                    id: fxItemCard
+                                    width: chainListView.width
+                                    height: 52
+                                    radius: 4
+                                    color: (index === root.selectedFxIndex) ? theme.bgCard : theme.bgHeader
+                                    border.color: (index === root.selectedFxIndex) ? theme.accent : theme.border
+                                    border.width: (index === root.selectedFxIndex) ? 2 : 1
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            root.selectedFxIndex = index
                                         }
-                                        return "FX " + (index + 1) + " (EMPTY)"
                                     }
-                                    font.bold: true
-                                    font.pixelSize: 8
-                                    color: parent.isLoaded ? "#ffffff" : theme.textDim
-                                    elide: Text.ElideRight
-                                    width: parent.width - 8
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 6
+                                        spacing: 8
+
+                                        // Step Number
+                                        Rectangle {
+                                            width: 22
+                                            height: 22
+                                            radius: 11
+                                            color: (index === root.selectedFxIndex) ? theme.accent : theme.bgWell
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: (index + 1)
+                                                font.bold: true
+                                                font.pixelSize: 9
+                                                color: (index === root.selectedFxIndex) ? "#ffffff" : theme.textMuted
+                                            }
+                                        }
+
+                                        // Format Badge
+                                        Rectangle {
+                                            width: 38
+                                            height: 18
+                                            radius: 2
+                                            color: {
+                                                if (modelData.format === "VST3") return "#00b894"
+                                                if (modelData.format === "CLAP") return "#6c5ce7"
+                                                return "#e67e22"
+                                            }
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: modelData.format
+                                                font.bold: true
+                                                font.pixelSize: 8
+                                                color: "#ffffff"
+                                            }
+                                        }
+
+                                        // Effect Name & Params Count
+                                        ColumnLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 1
+                                            Text {
+                                                Layout.fillWidth: true
+                                                text: modelData.name
+                                                font.bold: true
+                                                font.pixelSize: 11
+                                                color: (index === root.selectedFxIndex) ? theme.textHeading : theme.textMain
+                                                elide: Text.ElideRight
+                                            }
+                                            Text {
+                                                text: modelData.numParams + " params"
+                                                font.pixelSize: 8
+                                                color: theme.textMuted
+                                            }
+                                        }
+
+                                        // Remove Button
+                                        Rectangle {
+                                            width: 22
+                                            height: 22
+                                            radius: 3
+                                            color: delMouse.containsMouse ? "#c0392b" : "transparent"
+                                            border.color: delMouse.containsMouse ? "#e74c3c" : theme.border
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "✕"
+                                                font.bold: true
+                                                font.pixelSize: 10
+                                                color: delMouse.containsMouse ? "#ffffff" : theme.textMuted
+                                            }
+
+                                            MouseArea {
+                                                id: delMouse
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: {
+                                                    if (root.engine) {
+                                                        root.engine.removeTrackFx(root.targetTrack, modelData.slot)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Add Effect Actions
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            Button {
+                                Layout.fillWidth: true
+                                implicitHeight: 30
+                                text: "➕ ADD INSERT EFFECT..."
+                                font.bold: true
+                                font.pixelSize: 10
+                                background: Rectangle {
+                                    color: parent.hovered ? theme.btnHover : theme.btnBg
+                                    border.color: theme.accent
+                                    radius: 3
+                                }
+                                contentItem: Text {
+                                    text: parent.text
+                                    font: parent.font
+                                    color: theme.accent
                                     horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                onClicked: {
+                                    if (root.engine) {
+                                        root.engine.promptOpenTrackFxDialog(root.targetTrack, -1)
+                                    }
+                                }
+                            }
+
+                            Button {
+                                Layout.fillWidth: true
+                                implicitHeight: 24
+                                text: "+ Add Demo Filter FX"
+                                font.pixelSize: 9
+                                background: Rectangle {
+                                    color: parent.hovered ? theme.btnHover : theme.bgHeader
+                                    border.color: theme.border
+                                    radius: 3
+                                }
+                                contentItem: Text {
+                                    text: parent.text
+                                    font: parent.font
+                                    color: theme.textMuted
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                onClicked: {
+                                    if (root.engine) {
+                                        root.engine.addTrackFx(root.targetTrack, "plugins/effects/demo_filter_fx.so")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ------------------------------------------
+                // RIGHT PANE: SPACIOUS PARAMETER INSPECTOR
+                // ------------------------------------------
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    color: theme.bgCard
+
+                    // Case A: Effect Selected & Loaded
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 12
+                        spacing: 10
+                        visible: root.fxList.length > 0 && root.selectedFxIndex >= 0 && root.selectedFxIndex < root.fxList.length
+
+                        // Inspector Header Card
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 48
+                            color: theme.bgHeader
+                            radius: 4
+                            border.color: theme.border
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 12
+                                anchors.rightMargin: 12
+                                spacing: 10
+
+                                // Format Badge
+                                Rectangle {
+                                    width: 48
+                                    height: 24
+                                    radius: 3
+                                    color: {
+                                        if (!root.currentFx) return theme.bgWell
+                                        let fmt = root.currentFx.format
+                                        if (fmt === "VST3") return "#00b894"
+                                        if (fmt === "CLAP") return "#6c5ce7"
+                                        return "#e67e22"
+                                    }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: root.currentFx ? root.currentFx.format : ""
+                                        font.bold: true
+                                        font.pixelSize: 10
+                                        color: "#ffffff"
+                                    }
+                                }
+
+                                // Name & Vendor
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 1
+                                    Text {
+                                        text: root.currentFx ? root.currentFx.name : ""
+                                        font.bold: true
+                                        font.pixelSize: 13
+                                        color: theme.textHeading
+                                    }
+                                    Text {
+                                        text: root.currentFx ? (root.currentFx.vendor + " · " + root.currentFx.path) : ""
+                                        font.pixelSize: 9
+                                        color: theme.textMuted
+                                        elide: Text.ElideMiddle
+                                        Layout.fillWidth: true
+                                    }
+                                }
+
+                                // Actions
+                                Row {
+                                    spacing: 6
+                                    Layout.alignment: Qt.AlignVCenter
+
+                                    Button {
+                                        text: "🗔 OPEN GUI"
+                                        font.bold: true
+                                        font.pixelSize: 9
+                                        implicitHeight: 28
+                                        visible: (root.engine && root.currentFx) ? root.engine.hasTrackFxNativeEditor(root.targetTrack, root.currentSlot) : false
+                                        background: Rectangle {
+                                            color: parent.hovered ? theme.btnHover : theme.accent
+                                            radius: 3
+                                        }
+                                        contentItem: Text {
+                                            text: parent.text
+                                            font: parent.font
+                                            color: "#ffffff"
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        onClicked: {
+                                            if (root.engine) root.engine.promptOpenTrackFxGui(root.targetTrack, root.currentSlot)
+                                        }
+                                    }
+
+                                    Button {
+                                        text: "📁 CHANGE..."
+                                        font.bold: true
+                                        font.pixelSize: 9
+                                        implicitHeight: 28
+                                        background: Rectangle {
+                                            color: parent.hovered ? theme.btnHover : theme.btnBg
+                                            border.color: theme.border
+                                            radius: 3
+                                        }
+                                        contentItem: Text {
+                                            text: parent.text
+                                            font: parent.font
+                                            color: theme.textMain
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        onClicked: {
+                                            if (root.engine) root.engine.promptOpenTrackFxDialog(root.targetTrack, root.currentSlot)
+                                        }
+                                    }
+
+                                    Button {
+                                        text: "✕ REMOVE"
+                                        font.bold: true
+                                        font.pixelSize: 9
+                                        implicitHeight: 28
+                                        background: Rectangle {
+                                            color: parent.hovered ? "#c0392b" : theme.btnBg
+                                            border.color: theme.border
+                                            radius: 3
+                                        }
+                                        contentItem: Text {
+                                            text: parent.text
+                                            font: parent.font
+                                            color: parent.parent.hovered ? "#ffffff" : theme.textMuted
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        onClicked: {
+                                            if (root.engine) root.engine.removeTrackFx(root.targetTrack, root.currentSlot)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Parameters Title
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Text {
+                                text: "PARAMETERS (" + root.paramList.length + ")"
+                                font.bold: true
+                                font.pixelSize: 10
+                                color: theme.textMuted
+                            }
+                            Item { Layout.fillWidth: true }
+                            Text {
+                                text: "Click or drag to adjust · Wheel to fine tune"
+                                font.pixelSize: 9
+                                color: theme.textDim
+                            }
+                        }
+
+                        // Spacious Parameters Grid
+                        ScrollView {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            clip: true
+                            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+                            ScrollBar.vertical.policy: ScrollBar.AsNeeded
+
+                            Flow {
+                                width: parent.width - 12
+                                spacing: 12
+
+                                Repeater {
+                                    model: root.paramList
+
+                                    Rectangle {
+                                        id: fxParamCard
+                                        width: Math.max(260, Math.floor((parent.width - 24) / 2))
+                                        height: 64
+                                        color: theme.bgWell
+                                        radius: 4
+                                        border.color: theme.border
+
+                                        property int paramId: modelData.id
+                                        property real paramVal: modelData.value
+                                        property string paramName: modelData.name
+                                        property string paramDisp: modelData.display
+
+                                        ColumnLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 8
+                                            spacing: 4
+
+                                            RowLayout {
+                                                Layout.fillWidth: true
+                                                Text {
+                                                    Layout.fillWidth: true
+                                                    text: fxParamCard.paramName
+                                                    font.bold: true
+                                                    font.pixelSize: 11
+                                                    color: theme.textHeading
+                                                    elide: Text.ElideRight
+                                                }
+                                                Text {
+                                                    text: {
+                                                        if (fxParamCard.paramDisp && fxParamCard.paramDisp.length > 0) {
+                                                            return fxParamCard.paramDisp
+                                                        }
+                                                        return Math.round(fxParamCard.paramVal * 100) + "%"
+                                                    }
+                                                    font.pixelSize: 11
+                                                    font.bold: true
+                                                    color: theme.accent
+                                                }
+                                            }
+
+                                            // Custom Rock-Solid DAW Slider
+                                            Item {
+                                                id: fxSliderArea
+                                                Layout.fillWidth: true
+                                                height: 22
+
+                                                // Groove
+                                                Rectangle {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    width: parent.width
+                                                    height: 6
+                                                    radius: 3
+                                                    color: theme.bgHeader
+                                                    border.color: theme.border
+
+                                                    // Active Fill
+                                                    Rectangle {
+                                                        width: Math.max(0, Math.min(parent.width, fxParamCard.paramVal * parent.width))
+                                                        height: parent.height
+                                                        radius: 3
+                                                        color: fxMouse.pressed ? "#ffffff" : theme.accent
+                                                    }
+                                                }
+
+                                                // Thumb Handle
+                                                Rectangle {
+                                                    width: 14
+                                                    height: 14
+                                                    radius: 7
+                                                    color: fxMouse.pressed ? "#ffffff" : (fxMouse.containsMouse ? "#55c0f5" : theme.accent)
+                                                    border.color: theme.border
+                                                    border.width: 1
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    x: Math.max(0, Math.min(parent.width - width, fxParamCard.paramVal * (parent.width - width)))
+                                                }
+
+                                                MouseArea {
+                                                    id: fxMouse
+                                                    anchors.fill: parent
+                                                    hoverEnabled: true
+                                                    preventStealing: true
+                                                    cursorShape: Qt.PointingHandCursor
+
+                                                    function updateVal(mouseX) {
+                                                        let newVal = Math.max(0.0, Math.min(1.0, mouseX / parent.width))
+                                                        fxParamCard.paramVal = newVal
+                                                        if (root.engine) {
+                                                            root.engine.setTrackFxParamValue(root.targetTrack, root.currentSlot, fxParamCard.paramId, newVal)
+                                                            let disp = root.engine.getTrackFxParamDisplay(root.targetTrack, root.currentSlot, fxParamCard.paramId)
+                                                            if (disp && disp.length > 0) {
+                                                                fxParamCard.paramDisp = disp
+                                                            } else {
+                                                                fxParamCard.paramDisp = Math.round(newVal * 100) + "%"
+                                                            }
+                                                        }
+                                                    }
+
+                                                    onPressed: (mouse) => updateVal(mouse.x)
+                                                    onPositionChanged: (mouse) => {
+                                                        if (pressed) updateVal(mouse.x)
+                                                    }
+                                                    onWheel: (wheel) => {
+                                                        let delta = wheel.angleDelta.y > 0 ? 0.02 : -0.02
+                                                        let newVal = Math.max(0.0, Math.min(1.0, fxParamCard.paramVal + delta))
+                                                        fxParamCard.paramVal = newVal
+                                                        if (root.engine) {
+                                                            root.engine.setTrackFxParamValue(root.targetTrack, root.currentSlot, fxParamCard.paramId, newVal)
+                                                            let disp = root.engine.getTrackFxParamDisplay(root.targetTrack, root.currentSlot, fxParamCard.paramId)
+                                                            if (disp && disp.length > 0) {
+                                                                fxParamCard.paramDisp = disp
+                                                            } else {
+                                                                fxParamCard.paramDisp = Math.round(newVal * 100) + "%"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
 
-                    Text {
-                        text: "➔"
-                        font.pixelSize: 10
-                        color: theme.textMuted
-                    }
+                    // Case B: Empty State (No Effects Loaded on Track)
+                    ColumnLayout {
+                        anchors.centerIn: parent
+                        spacing: 12
+                        visible: root.fxList.length === 0
 
-                    Rectangle {
-                        height: 22
-                        width: 80
-                        radius: 3
-                        color: theme.bgCard
-                        border.color: theme.border
                         Text {
-                            anchors.centerIn: parent
-                            text: "🎚️ MIXER"
-                            font.bold: true
-                            font.pixelSize: 9
-                            color: theme.textMain
+                            Layout.alignment: Qt.AlignHCenter
+                            text: "🎛️"
+                            font.pixelSize: 48
                         }
-                    }
-                }
-            }
 
-            // ==========================================
-            // 3. FX SLOTS LIST
-            // ==========================================
-            ScrollView {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                clip: true
-                contentWidth: availableWidth
+                        Text {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: "No Insert Effects Added to Track #" + (root.targetTrack + 1)
+                            font.bold: true
+                            font.pixelSize: 14
+                            color: theme.textHeading
+                        }
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 14
-                    spacing: 10
+                        Text {
+                            Layout.alignment: Qt.AlignHCenter
+                            text: "Add as many VST3, CLAP, or VST2 effects as you want to this track."
+                            font.pixelSize: 11
+                            color: theme.textMuted
+                        }
 
-                    Repeater {
-                        model: (root.fxSlots ? root.fxSlots.length : 4)
+                        RowLayout {
+                            Layout.alignment: Qt.AlignHCenter
+                            spacing: 8
 
-                        Rectangle {
-                            id: slotCard
-                            Layout.fillWidth: true
-                            property var slotData: (root.fxSlots && index < root.fxSlots.length) ? root.fxSlots[index] : null
-                            property bool isLoaded: slotData ? slotData.loaded : false
-                            property bool showParams: false
-                            property var paramList: []
-                            height: (isLoaded && showParams && paramList.length > 0) ? (84 + 10 + Math.min(220, Math.ceil(paramList.length / 2) * 54)) : 84
-                            radius: 4
-                            color: isLoaded ? theme.bgCard : theme.bgWell
-                            border.color: isLoaded ? theme.accent : theme.border
-                            border.width: isLoaded ? 1 : 1
-                            clip: true
-
-                            ColumnLayout {
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: 8
-
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 12
-
-                                    // Slot Index Number Badge
-                                    Rectangle {
-                                        width: 32
-                                        height: 32
-                                        radius: 3
-                                        color: slotCard.isLoaded ? theme.accent : theme.bgHeader
-                                        border.color: theme.border
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: "0" + (index + 1)
-                                            font.bold: true
-                                            font.pixelSize: 12
-                                            color: slotCard.isLoaded ? "#ffffff" : theme.textMuted
-                                        }
-                                    }
-
-                                    // Loaded View
-                                    ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 4
-                                        visible: slotCard.isLoaded
-
-                                        RowLayout {
-                                            spacing: 8
-                                            // Format Badge
-                                            Rectangle {
-                                                width: 44
-                                                height: 18
-                                                radius: 2
-                                                color: {
-                                                    let fmt = slotCard.slotData ? slotCard.slotData.format : ""
-                                                    if (fmt === "VST3") return "#00b894"
-                                                    if (fmt === "CLAP") return "#6c5ce7"
-                                                    return "#3daee9"
-                                                }
-                                                Text {
-                                                    anchors.centerIn: parent
-                                                    text: slotCard.slotData ? slotCard.slotData.format : "FX"
-                                                    font.bold: true
-                                                    font.pixelSize: 9
-                                                    color: "#ffffff"
-                                                }
-                                            }
-
-                                            Text {
-                                                text: slotCard.slotData ? slotCard.slotData.name : "Effect Plugin"
-                                                font.bold: true
-                                                font.pixelSize: 13
-                                                color: theme.textHeading
-                                            }
-                                        }
-
-                                        Text {
-                                            text: {
-                                                if (!slotCard.slotData) return ""
-                                                let v = slotCard.slotData.vendor
-                                                let p = slotCard.slotData.path
-                                                return (v ? v + " · " : "") + p
-                                            }
-                                            font.pixelSize: 9
-                                            color: theme.textMuted
-                                            elide: Text.ElideMiddle
-                                            Layout.fillWidth: true
-                                        }
-                                    }
-
-                                    // Loaded Action Buttons
-                                    RowLayout {
-                                        spacing: 6
-                                        visible: slotCard.isLoaded
-                                        Layout.alignment: Qt.AlignVCenter
-
-                                        Button {
-                                            implicitHeight: 28
-                                            text: slotCard.showParams ? "▲ PARAMS" : "🎛 PARAMS"
-                                            font.bold: true
-                                            font.pixelSize: 9
-                                            background: Rectangle {
-                                                color: slotCard.showParams ? theme.accent : (parent.hovered ? theme.btnHover : theme.btnBg)
-                                                border.color: theme.border
-                                                radius: 3
-                                            }
-                                            contentItem: Text {
-                                                text: parent.text
-                                                font: parent.font
-                                                color: slotCard.showParams ? "#ffffff" : theme.textMain
-                                                horizontalAlignment: Text.AlignHCenter
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
-                                            onClicked: {
-                                                slotCard.showParams = !slotCard.showParams
-                                                if (slotCard.showParams && engine) {
-                                                    slotCard.paramList = engine.getTrackFxParams(root.targetTrack, index)
-                                                }
-                                            }
-                                        }
-
-                                        Button {
-                                            implicitHeight: 28
-                                            text: "🗔 OPEN GUI"
-                                            font.bold: true
-                                            font.pixelSize: 9
-                                            visible: slotCard.slotData ? slotCard.slotData.has_gui : false
-                                            background: Rectangle {
-                                                color: parent.hovered ? theme.btnHover : theme.accent
-                                                radius: 3
-                                            }
-                                            contentItem: Text {
-                                                text: parent.text
-                                                font: parent.font
-                                                color: "#ffffff"
-                                                horizontalAlignment: Text.AlignHCenter
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
-                                            onClicked: {
-                                                if (engine) engine.promptOpenTrackFxGui(root.targetTrack, index)
-                                            }
-                                        }
-
-                                        Button {
-                                            implicitHeight: 28
-                                            text: "📁 CHANGE..."
-                                            font.bold: true
-                                            font.pixelSize: 9
-                                            background: Rectangle {
-                                                color: parent.hovered ? theme.btnHover : theme.btnBg
-                                                border.color: theme.border
-                                                radius: 3
-                                            }
-                                            contentItem: Text {
-                                                text: parent.text
-                                                font: parent.font
-                                                color: theme.textMain
-                                                horizontalAlignment: Text.AlignHCenter
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
-                                            onClicked: {
-                                                if (engine) engine.promptOpenTrackFxDialog(root.targetTrack, index)
-                                            }
-                                        }
-
-                                        Button {
-                                            implicitHeight: 28
-                                            text: "✕ REMOVE"
-                                            font.bold: true
-                                            font.pixelSize: 9
-                                            background: Rectangle {
-                                                color: parent.hovered ? "#c0392b" : theme.btnBg
-                                                border.color: theme.border
-                                                radius: 3
-                                            }
-                                            contentItem: Text {
-                                                text: parent.text
-                                                font: parent.font
-                                                color: parent.parent.hovered ? "#ffffff" : theme.stopAccent
-                                                horizontalAlignment: Text.AlignHCenter
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
-                                            onClicked: {
-                                                if (engine) engine.unloadTrackFx(root.targetTrack, index)
-                                            }
-                                        }
-                                    }
-
-                                    // Empty View
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 12
-                                        visible: !slotCard.isLoaded
-
-                                        ColumnLayout {
-                                            Layout.fillWidth: true
-                                            spacing: 2
-                                            Text {
-                                                text: "Empty Insert Effect Slot #" + (index + 1)
-                                                font.bold: true
-                                                font.pixelSize: 11
-                                                color: theme.textMuted
-                                            }
-                                            Text {
-                                                text: "Insert any 64-bit Linux VST3 (.vst3), CLAP (.clap), or VST2 (.so) audio effect plugin."
-                                                font.pixelSize: 9
-                                                color: theme.textDim
-                                            }
-                                        }
-
-                                        Button {
-                                            implicitHeight: 28
-                                            text: "Load Demo Filter FX"
-                                            font.bold: true
-                                            font.pixelSize: 9
-                                            background: Rectangle {
-                                                color: parent.hovered ? theme.btnHover : theme.btnBg
-                                                border.color: theme.accent
-                                                radius: 3
-                                            }
-                                            contentItem: Text {
-                                                text: parent.text
-                                                font: parent.font
-                                                color: theme.accent
-                                                horizontalAlignment: Text.AlignHCenter
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
-                                            onClicked: {
-                                                if (engine) engine.loadTrackFx(root.targetTrack, index, "plugins/effects/demo_filter_fx.so")
-                                            }
-                                        }
-
-                                        Button {
-                                            implicitHeight: 28
-                                            text: "📁 BROWSE PLUGIN..."
-                                            font.bold: true
-                                            font.pixelSize: 9
-                                            background: Rectangle {
-                                                color: parent.hovered ? theme.btnHover : theme.btnBg
-                                                border.color: theme.border
-                                                radius: 3
-                                            }
-                                            contentItem: Text {
-                                                text: parent.text
-                                                font: parent.font
-                                                color: theme.textMain
-                                                horizontalAlignment: Text.AlignHCenter
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
-                                            onClicked: {
-                                                if (engine) engine.promptOpenTrackFxDialog(root.targetTrack, index)
-                                            }
-                                        }
-                                    }
+                            Button {
+                                implicitHeight: 32
+                                implicitWidth: 160
+                                text: "➕ ADD EFFECT..."
+                                font.bold: true
+                                font.pixelSize: 10
+                                background: Rectangle {
+                                    color: parent.hovered ? theme.btnHover : theme.accent
+                                    radius: 3
                                 }
+                                contentItem: Text {
+                                    text: parent.text
+                                    font: parent.font
+                                    color: "#ffffff"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                onClicked: {
+                                    if (root.engine) root.engine.promptOpenTrackFxDialog(root.targetTrack, -1)
+                                }
+                            }
 
-                                // Expandable DAW Parameter Controls Section
-                                ScrollView {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    visible: slotCard.isLoaded && slotCard.showParams && slotCard.paramList.length > 0
-                                    clip: true
-                                    ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-
-                                    Flow {
-                                        width: parent.width - 8
-                                        spacing: 8
-
-                                        Repeater {
-                                            model: slotCard.paramList
-
-                                            Rectangle {
-                                                id: fxParamCard
-                                                width: Math.floor((parent.width - 8) / 2)
-                                                height: 48
-                                                color: theme.bgWell
-                                                radius: 3
-                                                border.color: theme.border
-
-                                                property int pId: modelData.id
-                                                property real pVal: modelData.value
-                                                property string pName: modelData.name
-
-                                                ColumnLayout {
-                                                    anchors.fill: parent
-                                                    anchors.margins: 4
-                                                    spacing: 1
-
-                                                    RowLayout {
-                                                        Layout.fillWidth: true
-                                                        Text {
-                                                            Layout.fillWidth: true
-                                                            text: fxParamCard.pName
-                                                            font.bold: true
-                                                            font.pixelSize: 9
-                                                            color: theme.textHeading
-                                                            elide: Text.ElideRight
-                                                        }
-                                                        Text {
-                                                            text: Math.round(fxParamCard.pVal * 100) + "%"
-                                                            font.pixelSize: 9
-                                                            color: theme.accent
-                                                            font.bold: true
-                                                        }
-                                                    }
-
-                                                    Slider {
-                                                        id: fxSlider
-                                                        Layout.fillWidth: true
-                                                        from: 0.0
-                                                        to: 1.0
-                                                        value: fxParamCard.pVal
-                                                        onMoved: {
-                                                            if (engine) {
-                                                                engine.setTrackFxParamValue(root.targetTrack, index, fxParamCard.pId, value)
-                                                                fxParamCard.pVal = value
-                                                            }
-                                                        }
-                                                        onValueChanged: {
-                                                            if (pressed && engine) {
-                                                                engine.setTrackFxParamValue(root.targetTrack, index, fxParamCard.pId, value)
-                                                                fxParamCard.pVal = value
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
+                            Button {
+                                implicitHeight: 32
+                                implicitWidth: 160
+                                text: "+ Add Demo Filter FX"
+                                font.bold: true
+                                font.pixelSize: 10
+                                background: Rectangle {
+                                    color: parent.hovered ? theme.btnHover : theme.btnBg
+                                    border.color: theme.border
+                                    radius: 3
+                                }
+                                contentItem: Text {
+                                    text: parent.text
+                                    font: parent.font
+                                    color: theme.textMain
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                onClicked: {
+                                    if (root.engine) root.engine.addTrackFx(root.targetTrack, "plugins/effects/demo_filter_fx.so")
                                 }
                             }
                         }
@@ -632,6 +820,7 @@ Item {
         }
     }
 
-    Keys.onEscapePressed: root.close()
+    Keys.onEscapePressed: {
+        root.close()
+    }
 }
-

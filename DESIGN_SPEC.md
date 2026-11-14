@@ -85,21 +85,24 @@
    - Hosts native Graphical User Interfaces (GUIs) in dedicated floating KDE Breeze windows (`[ 🗔 OPEN GUI ]`).
    - Integrated parameter editor with smooth sliders for quick parameter manipulation and sound design.
 
-### 4.2. Per-Track Plugin Insert Effects (FX Chain & Modal Window)
-- Every track features an Insert FX chain with up to 4 dedicated slots (`MAX_TRACK_FX = 4`).
+### 4.2. Per-Track Plugin Insert Effects (Dynamic FX Chain & Master-Detail Modal Window)
+- Every track features a dynamic, unlimited Insert FX chain architecture (`MAX_TRACK_FX = 32`).
+- Users can add as many VST3, CLAP, or VST2 effects as needed to any track (`addTrackFx`, `removeTrackFx`, `getTrackFxList`).
 - Works on **any** track type (AuraSynth, SoundFont2, BeatPad, or Plugin Instrument).
 - Signal path per track:
-  `[Instrument Sound Generator (Synth / SoundFont Ch / BeatPad / Plugin)] ➔ [Insert FX Slot 0..3] ➔ [Track Volume & Pan] ➔ [Master Bus]`.
+  `[Instrument Sound Generator (Synth / SoundFont Ch / BeatPad / Plugin)] ➔ [Insert FX Slot 0..N] ➔ [Track Volume & Pan] ➔ [Master Bus]`.
 - Per-Channel SoundFont Routing:
   - Custom zero-allocation `tsf_render_channel_float` filters voices per MIDI channel (0..31), routing each SoundFont track through its dedicated insert FX chain (`m_trackFx[t]`) and per-track volume, pan, mute, solo, and peak VU metering.
 - Mixer Channel Strip Integration:
   - Clean 3-button row: `[ MUTE ]`, `[ SOLO ]`, `[ FX ]` (or `[ FX (N) ]` glowing in KDE sky blue when effects are loaded).
+  - Dynamic plugin instrument names rendered cleanly on channel strip headers (`🔌 [Plugin Name]`) and reactive preset displays (`VST3: [Plugin Name]`).
   - Clicking `[ FX ]` opens the dedicated in-app `TrackFxModal` window.
-- In-App Track Insert FX Modal (`TrackFxModal`):
-  - Visual signal flow diagram from Generator through FX 1..4 to Mixer.
-  - Dedicated cards for all 4 slots showing loaded format badges (`VST3`, `CLAP`, `VST2`), plugin names, vendors, paths, and status.
-  - Action buttons: `[ 🗔 OPEN GUI ]`, `[ 🎛 PARAMS ]`, `[ 📁 CHANGE... ]`, `[ ✕ REMOVE ]`, and quick demo presets.
-  - Expandable DAW parameter slider panel allowing full real-time parameter tweaking directly inside the DAW without opening plugin native GUIs.
+- In-App Master-Detail Track Insert FX Modal (`TrackFxModal`):
+  - Spacious Two-Pane Master-Detail layout (940x580) compliant with KDE Plasma 6 Breeze design.
+  - **Left Pane (Signal Chain List)**: Displays top-to-bottom signal flow of all loaded effects with format badges (`VST3`, `CLAP`, `VST2`), effect names, parameter counts, instant delete buttons, and prominent `[ ➕ ADD INSERT EFFECT... ]` and demo preset buttons.
+  - **Right Pane (Dedicated Effect Inspector)**: Shows selected effect details (format badge, full name, vendor, filesystem path), action buttons (`[ 🗔 OPEN GUI ]`, `[ 📁 CHANGE... ]`, `[ ✕ REMOVE ]`), and a spacious 2-column parameter grid featuring custom rock-solid `DawSlider` controls (`preventStealing: true`) and real-time formatted text readouts with zero cramping.
+- Bi-directional Parameter Synchronization:
+  - VST2 `audioMasterAutomate` and VST3 `HostVst3ComponentHandler` continuously synchronize changes made inside native GUI windows back to DAW sliders and vice-versa at 60Hz without locks or audio glitches.
 
 ### 4.3. Native Plugin GUI Window Host (`PluginNativeHostWindow`)
 - Standalone top-level floating window wrapping an X11 container widget (`WA_NativeWindow`, `WA_PaintOnScreen`).
@@ -184,14 +187,15 @@
     - `plugins/clap/demo_synth_clap.clap`: Linux CLAP reference synthesizer.
     - `plugins/vst2/demo_synth_vst2.so`: Linux VST 2.4 reference synthesizer.
   - **Per-Track Plugin Insert Effects & SoundFont Routing**:
-    - 4-slot insert FX chain per track (`MAX_TRACK_FX = 4`) with real-time routing (`Instrument -> FX0..3 -> Vol/Pan -> Master`).
-    - Dedicated in-app `TrackFxModal` window with expandable DAW parameter controls (`[ 🎛 PARAMS ]`).
+    - Dynamic unlimited insert FX chain per track (`MAX_TRACK_FX = 32`) with real-time routing (`Instrument -> FX0..N -> Vol/Pan -> Master`).
+    - Dedicated in-app `TrackFxModal` master-detail window with two-pane signal chain and spacious parameter inspector with rock-solid `DawSlider` controls (`preventStealing: true`).
     - Full per-channel SoundFont (`TinySoundFont`) insert FX routing: zero-allocation channel splitting routes each SoundFont track through its insert FX chain and track volume/pan before summing to master.
   - **Tracker Voice Silencing & Audition Cutoff**:
     - Immediate silence of all sounding voices (`allNotesOff()`) upon stopping or pausing playback.
     - Stop-mode preview/audition notes automatically release after a safety window (~350ms) to prevent droning.
   - **Universal Track Renaming**:
     - Direct inline renaming in Mixer channel strip headers, Tracker matrix track headers, `InstrumentEditorModal` title bar, and `TrackFxModal` title bar.
+    - Removed redundant track name input field from `AuraSynthView` to prevent UI clutter and confusion.
     - Dynamic fallback naming based on instrument type (`SoundFont 1`, `BeatPad 2`, `Plugin 3`, `Synth 4`).
   - **Unified Studio Modal (`InstrumentEditorModal`)**: Refactored to 4 core tabs (`SYNTH`, `SOUNDFONT`, `BEATPAD`, `PLUGIN`) matching the 4 engine sound generator types.
   - **Project Format v3 Persistence**: Schema v3 serializing unified plugin paths, formats, parameter arrays, and per-track insert FX chains.

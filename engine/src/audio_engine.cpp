@@ -872,7 +872,8 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
                 
                 // Track Insert FX Chain
                 if (t < static_cast<int>(m_trackFx.size())) {
-                    for (int s = 0; s < MAX_TRACK_FX; ++s) {
+                    int maxSlot = (t < MAX_INSTRUMENTS) ? m_trackFxMaxSlot[t].load(std::memory_order_relaxed) : 0;
+                    for (int s = 0; s < maxSlot; ++s) {
                         if (m_trackFx[t][s] && m_trackFx[t][s]->isLoaded()) {
                             m_trackFx[t][s]->processEffectSample(instL, instR);
                         }
@@ -905,7 +906,8 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
 
                 // Track Insert FX Chain
                 if (t < static_cast<int>(m_trackFx.size())) {
-                    for (int s = 0; s < MAX_TRACK_FX; ++s) {
+                    int maxSlot = (t < MAX_INSTRUMENTS) ? m_trackFxMaxSlot[t].load(std::memory_order_relaxed) : 0;
+                    for (int s = 0; s < maxSlot; ++s) {
                         if (m_trackFx[t][s] && m_trackFx[t][s]->isLoaded()) {
                             m_trackFx[t][s]->processEffectSample(sfL, sfR);
                         }
@@ -940,7 +942,8 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
 
                 // Track Insert FX Chain
                 if (t < static_cast<int>(m_trackFx.size())) {
-                    for (int s = 0; s < MAX_TRACK_FX; ++s) {
+                    int maxSlot = (t < MAX_INSTRUMENTS) ? m_trackFxMaxSlot[t].load(std::memory_order_relaxed) : 0;
+                    for (int s = 0; s < maxSlot; ++s) {
                         if (m_trackFx[t][s] && m_trackFx[t][s]->isLoaded()) {
                             m_trackFx[t][s]->processEffectSample(dL, dR);
                         }
@@ -973,7 +976,8 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
 
                 // Track Insert FX Chain
                 if (t < static_cast<int>(m_trackFx.size())) {
-                    for (int s = 0; s < MAX_TRACK_FX; ++s) {
+                    int maxSlot = (t < MAX_INSTRUMENTS) ? m_trackFxMaxSlot[t].load(std::memory_order_relaxed) : 0;
+                    for (int s = 0; s < maxSlot; ++s) {
                         if (m_trackFx[t][s] && m_trackFx[t][s]->isLoaded()) {
                             m_trackFx[t][s]->processEffectSample(plgL, plgR);
                         }
@@ -1139,6 +1143,13 @@ void AudioEngine::setTrackPluginParamValue(int track, int paramIdx, float val) {
     }
 }
 
+bool AudioEngine::isTrackPluginParamsDirty(int track) {
+    if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
+        return m_plugins[track]->checkAndClearParamsDirty();
+    }
+    return false;
+}
+
 bool AudioEngine::hasTrackPluginNativeEditor(int track) const {
     if (track >= 0 && track < static_cast<int>(m_plugins.size())) {
         return m_plugins[track]->hasNativeEditor();
@@ -1170,6 +1181,12 @@ bool AudioEngine::loadTrackFx(int track, int slot, const std::string& path) {
     }
     bool ok = m_trackFx[track][slot]->load(path, m_sampleRate, 256);
     if (ok) {
+        if (track < MAX_INSTRUMENTS) {
+            int currentMax = m_trackFxMaxSlot[track].load(std::memory_order_relaxed);
+            if (slot + 1 > currentMax) {
+                m_trackFxMaxSlot[track].store(slot + 1, std::memory_order_release);
+            }
+        }
         std::cout << "[myms] Loaded FX on track " << track << " slot " << slot << ": "
                   << m_trackFx[track][slot]->getName() << " (" << m_trackFx[track][slot]->getFormatName() << ")" << std::endl;
     }
@@ -1179,7 +1196,25 @@ bool AudioEngine::loadTrackFx(int track, int slot, const std::string& path) {
 void AudioEngine::unloadTrackFx(int track, int slot) {
     if (track >= 0 && track < static_cast<int>(m_trackFx.size()) && slot >= 0 && slot < MAX_TRACK_FX) {
         if (m_trackFx[track][slot]) m_trackFx[track][slot]->unload();
+        if (track < MAX_INSTRUMENTS) {
+            int maxSlot = 0;
+            for (int s = 0; s < MAX_TRACK_FX; ++s) {
+                if (m_trackFx[track][s] && m_trackFx[track][s]->isLoaded()) {
+                    maxSlot = s + 1;
+                }
+            }
+            m_trackFxMaxSlot[track].store(maxSlot, std::memory_order_release);
+        }
     }
+}
+
+int AudioEngine::getTrackFxCount(int track) const {
+    if (track < 0 || track >= static_cast<int>(m_trackFx.size())) return 0;
+    int count = 0;
+    for (int s = 0; s < MAX_TRACK_FX; ++s) {
+        if (m_trackFx[track][s] && m_trackFx[track][s]->isLoaded()) count++;
+    }
+    return count;
 }
 
 bool AudioEngine::isTrackFxLoaded(int track, int slot) const {
@@ -1238,6 +1273,21 @@ void AudioEngine::setTrackFxParamValue(int track, int slot, int paramIdx, float 
     if (isTrackFxLoaded(track, slot)) {
         m_trackFx[track][slot]->setParamValue(paramIdx, val);
     }
+}
+
+std::string AudioEngine::getTrackFxParamDisplay(int track, int slot, int paramIdx) const {
+    if (isTrackFxLoaded(track, slot)) {
+        const PluginParamInfo* info = m_trackFx[track][slot]->getParamInfo(paramIdx);
+        if (info) return info->display;
+    }
+    return "";
+}
+
+bool AudioEngine::isTrackFxParamsDirty(int track, int slot) {
+    if (track >= 0 && track < static_cast<int>(m_trackFx.size()) && slot >= 0 && slot < MAX_TRACK_FX) {
+        if (m_trackFx[track][slot]) return m_trackFx[track][slot]->checkAndClearParamsDirty();
+    }
+    return false;
 }
 
 bool AudioEngine::hasTrackFxEditor(int track, int slot) const {

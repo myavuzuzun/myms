@@ -179,7 +179,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
     def test_06_track_fx_slots_and_count(self):
         filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
         self.assertEqual(self.engine.getTrackFxCount(0), 0)
-        self.assertEqual(self.engine.getMaxTrackFx(), 4)
+        self.assertEqual(self.engine.getMaxTrackFx(), 32)
 
         # Load slot 0 and slot 2
         self.engine.loadTrackFx(0, 0, filter_fx_path)
@@ -187,7 +187,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.assertEqual(self.engine.getTrackFxCount(0), 2)
 
         slots = self.engine.getTrackFxSlots(0)
-        self.assertEqual(len(slots), 4)
+        self.assertEqual(len(slots), 32)
         self.assertTrue(slots[0]["loaded"])
         self.assertFalse(slots[1]["loaded"])
         self.assertTrue(slots[2]["loaded"])
@@ -195,6 +195,42 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
 
         self.engine.unloadTrackFx(0, 0)
         self.engine.unloadTrackFx(0, 2)
+        self.assertEqual(self.engine.getTrackFxCount(0), 0)
+
+    def test_06b_unlimited_fx_chain_add_remove(self):
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        self.assertEqual(self.engine.getTrackFxCount(0), 0)
+
+        # Add 6 effects dynamically (exceeding old 4 FX limit)
+        added_slots = []
+        for i in range(6):
+            slot = self.engine.addTrackFx(0, filter_fx_path)
+            self.assertGreaterEqual(slot, 0)
+            added_slots.append(slot)
+
+        self.assertEqual(self.engine.getTrackFxCount(0), 6)
+        fx_list = self.engine.getTrackFxList(0)
+        self.assertEqual(len(fx_list), 6)
+        for i, item in enumerate(fx_list):
+            self.assertEqual(item["slot"], added_slots[i])
+            self.assertEqual(item["name"], "Demo Filter FX")
+
+        # Remove the second added effect
+        removed_slot = added_slots[1]
+        self.engine.removeTrackFx(0, removed_slot)
+        self.assertEqual(self.engine.getTrackFxCount(0), 5)
+        fx_list_after = self.engine.getTrackFxList(0)
+        self.assertEqual(len(fx_list_after), 5)
+        remaining_slots = [item["slot"] for item in fx_list_after]
+        self.assertNotIn(removed_slot, remaining_slots)
+
+        # Test FX parameter display
+        disp = self.engine.getTrackFxParamDisplay(0, added_slots[0], 0)
+        self.assertTrue(len(disp) > 0)
+
+        # Clean up
+        for slot in remaining_slots:
+            self.engine.removeTrackFx(0, slot)
         self.assertEqual(self.engine.getTrackFxCount(0), 0)
 
     def test_07_vst_daw_parameter_controls_and_display(self):

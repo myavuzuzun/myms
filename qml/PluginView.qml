@@ -147,7 +147,7 @@ Rectangle {
                     }
 
                     Button {
-                        text: "📁 LOAD PLUGIN..."
+                        text: root.isLoaded ? "📁 CHANGE PLUGIN..." : "📁 LOAD PLUGIN..."
                         font.bold: true
                         font.pixelSize: 9
                         implicitHeight: 28
@@ -362,54 +362,80 @@ Rectangle {
                                     }
                                 }
 
-                                Slider {
-                                    id: pSlider
+                                Item {
+                                    id: pSliderArea
                                     Layout.fillWidth: true
-                                    from: 0.0
-                                    to: 1.0
-                                    value: paramCard.paramVal
+                                    height: 24
 
-                                    function applyValue(newVal) {
-                                        if (root.engine) {
-                                            root.engine.setTrackPluginParamValue(root.currentTrack, paramCard.paramId, newVal)
+                                    // Track Background Groove
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width
+                                        height: 6
+                                        radius: 3
+                                        color: theme.bgHeader
+                                        border.color: theme.border
+
+                                        // Active fill
+                                        Rectangle {
+                                            width: Math.max(0, Math.min(parent.width, paramCard.paramVal * parent.width))
+                                            height: parent.height
+                                            radius: 3
+                                            color: pMouse.pressed ? "#ffffff" : theme.accent
+                                        }
+                                    }
+
+                                    // Handle Thumb
+                                    Rectangle {
+                                        width: 14
+                                        height: 14
+                                        radius: 7
+                                        color: pMouse.pressed ? "#ffffff" : (pMouse.containsMouse ? "#55c0f5" : theme.accent)
+                                        border.color: theme.border
+                                        border.width: 1
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        x: Math.max(0, Math.min(parent.width - width, paramCard.paramVal * (parent.width - width)))
+                                    }
+
+                                    MouseArea {
+                                        id: pMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        preventStealing: true
+                                        cursorShape: Qt.PointingHandCursor
+
+                                        function updateVal(mouseX) {
+                                            let newVal = Math.max(0.0, Math.min(1.0, mouseX / parent.width))
                                             paramCard.paramVal = newVal
-                                            let disp = root.engine.getTrackPluginParamDisplay(root.currentTrack, paramCard.paramId)
-                                            if (disp && disp.length > 0) {
-                                                paramCard.paramDisp = disp
-                                            } else {
-                                                paramCard.paramDisp = Math.round(newVal * 100) + "%"
+                                            if (root.engine) {
+                                                root.engine.setTrackPluginParamValue(root.currentTrack, paramCard.paramId, newVal)
+                                                let disp = root.engine.getTrackPluginParamDisplay(root.currentTrack, paramCard.paramId)
+                                                if (disp && disp.length > 0) {
+                                                    paramCard.paramDisp = disp
+                                                } else {
+                                                    paramCard.paramDisp = Math.round(newVal * 100) + "%"
+                                                }
                                             }
                                         }
-                                    }
 
-                                    onMoved: applyValue(value)
-                                    onValueChanged: {
-                                        if (pressed) applyValue(value)
-                                    }
-
-                                    background: Rectangle {
-                                        x: pSlider.leftPadding
-                                        y: pSlider.topPadding + pSlider.availableHeight / 2 - height / 2
-                                        width: pSlider.availableWidth
-                                        height: 4
-                                        radius: 2
-                                        color: theme.bgHeader
-                                        Rectangle {
-                                            width: pSlider.visualPosition * parent.width
-                                            height: parent.height
-                                            color: theme.accent
-                                            radius: 2
+                                        onPressed: (mouse) => updateVal(mouse.x)
+                                        onPositionChanged: (mouse) => {
+                                            if (pressed) updateVal(mouse.x)
                                         }
-                                    }
-
-                                    handle: Rectangle {
-                                        x: pSlider.leftPadding + pSlider.visualPosition * (pSlider.availableWidth - width)
-                                        y: pSlider.topPadding + pSlider.availableHeight / 2 - height / 2
-                                        width: 12
-                                        height: 12
-                                        radius: 6
-                                        color: pSlider.pressed ? "#ffffff" : theme.accent
-                                        border.color: theme.border
+                                        onWheel: (wheel) => {
+                                            let delta = wheel.angleDelta.y > 0 ? 0.02 : -0.02
+                                            let newVal = Math.max(0.0, Math.min(1.0, paramCard.paramVal + delta))
+                                            paramCard.paramVal = newVal
+                                            if (root.engine) {
+                                                root.engine.setTrackPluginParamValue(root.currentTrack, paramCard.paramId, newVal)
+                                                let disp = root.engine.getTrackPluginParamDisplay(root.currentTrack, paramCard.paramId)
+                                                if (disp && disp.length > 0) {
+                                                    paramCard.paramDisp = disp
+                                                } else {
+                                                    paramCard.paramDisp = Math.round(newVal * 100) + "%"
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

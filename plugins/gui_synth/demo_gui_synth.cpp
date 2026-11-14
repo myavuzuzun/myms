@@ -76,9 +76,6 @@ public:
         auto* self = static_cast<DemoGuiSynth*>(effect->user);
         if (self && index >= 0 && index < 4) {
             self->m_params[index] = std::clamp(value, 0.0f, 1.0f);
-            if (self->m_window && self->m_display) {
-                self->redrawGui();
-            }
         }
     }
 
@@ -334,6 +331,9 @@ private:
             int trackRight = 440;
             float val = static_cast<float>(x - trackLeft) / static_cast<float>(trackRight - trackLeft);
             m_params[m_draggedSlider] = std::clamp(val, 0.0f, 1.0f);
+            if (m_audioMaster) {
+                m_audioMaster(&m_effect, 0 /* audioMasterAutomate */, m_draggedSlider, 0, nullptr, m_params[m_draggedSlider]);
+            }
         }
     }
 

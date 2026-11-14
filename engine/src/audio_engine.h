@@ -17,7 +17,7 @@ struct ma_device;
 namespace myms {
 
 constexpr int MAX_INSTRUMENTS = 32;
-constexpr int MAX_TRACK_FX = 4;
+constexpr int MAX_TRACK_FX = 32;
 
 enum TrackType {
     TRACK_TYPE_SYNTH = 0,
@@ -173,6 +173,7 @@ public:
     std::string getTrackPluginParamLabel(int track, int paramIdx) const;
     float getTrackPluginParamValue(int track, int paramIdx) const;
     void setTrackPluginParamValue(int track, int paramIdx, float val);
+    bool isTrackPluginParamsDirty(int track);
     bool hasTrackPluginNativeEditor(int track) const;
     bool openTrackPluginNativeEditor(int track, void* parentWindow);
     void closeTrackPluginNativeEditor(int track);
@@ -181,6 +182,7 @@ public:
     bool loadTrackFx(int track, int slot, const std::string& path);
     void unloadTrackFx(int track, int slot);
     bool isTrackFxLoaded(int track, int slot) const;
+    int getTrackFxCount(int track) const;
     std::string getTrackFxName(int track, int slot) const;
     std::string getTrackFxVendor(int track, int slot) const;
     std::string getTrackFxPath(int track, int slot) const;
@@ -188,8 +190,10 @@ public:
     std::string getTrackFxFormatName(int track, int slot) const;
     int getTrackFxNumParams(int track, int slot) const;
     std::string getTrackFxParamName(int track, int slot, int paramIdx) const;
+    std::string getTrackFxParamDisplay(int track, int slot, int paramIdx) const;
     float getTrackFxParamValue(int track, int slot, int paramIdx) const;
     void setTrackFxParamValue(int track, int slot, int paramIdx, float val);
+    bool isTrackFxParamsDirty(int track, int slot);
     bool hasTrackFxEditor(int track, int slot) const;
     bool openTrackFxEditor(int track, int slot, void* parentWindow);
     void closeTrackFxEditor(int track, int slot);
@@ -261,6 +265,7 @@ private:
 
     bool m_wasPlaying = false;
     std::array<int, MAX_INSTRUMENTS> m_previewCountdowns{};
+    std::array<std::atomic<int>, MAX_INSTRUMENTS> m_trackFxMaxSlot{};
 };
 
 } // namespace myms

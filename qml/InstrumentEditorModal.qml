@@ -230,7 +230,12 @@ Item {
                                 anchors.fill: parent
                                 onClicked: {
                                     root.trackType = 3
-                                    if (engine) engine.setTrackType(root.targetTrack, 3)
+                                    if (engine) {
+                                        engine.setTrackType(root.targetTrack, 3)
+                                        if (!engine.isTrackPluginLoaded(root.targetTrack)) {
+                                            engine.promptOpenPlugin(root.targetTrack)
+                                        }
+                                    }
                                 }
                             }
                         }

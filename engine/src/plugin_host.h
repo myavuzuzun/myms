@@ -8,6 +8,7 @@
 #include <memory>
 #include <atomic>
 #include <mutex>
+#include <unordered_map>
 #include <cstring>
 #include <cstdio>
 #include <cmath>
@@ -196,6 +197,16 @@ struct HostVst3ParameterChanges {
     }
 };
 
+class PluginInstance;
+
+struct HostVst3ComponentHandler {
+    Steinberg_Vst_IComponentHandler iface;
+    Steinberg_Vst_IComponentHandlerVtbl vtbl;
+    PluginInstance* parent = nullptr;
+
+    HostVst3ComponentHandler();
+};
+
 class PluginInstance {
 public:
     PluginInstance() {
@@ -203,6 +214,7 @@ public:
         m_dummyInR.fill(0.0f);
         m_tempOutL.fill(0.0f);
         m_tempOutR.fill(0.0f);
+        m_componentHandler.parent = this;
     }
 
     ~PluginInstance() {
@@ -329,6 +341,10 @@ public:
             }
         } else if (m_format == PLUGIN_FORMAT_VST2) {
             if (m_vstEffect) {
+                {
+                    std::lock_guard<std::mutex> lock(s_vstMapMutex);
+                    s_vstInstanceMap.erase(m_vstEffect);
+                }
                 m_vstEffect->dispatcher(m_vstEffect, effMainsChanged, 0, 0, nullptr, 0.0f);
                 m_vstEffect->dispatcher(m_vstEffect, effClose, 0, 0, nullptr, 0.0f);
                 m_vstEffect = nullptr;
@@ -406,6 +422,36 @@ public:
             }
             queueEvent(QueuedMidiEvent{QueuedMidiEvent::PARAM_CHANGE, 0, 0.0f, paramId, val});
         }
+    }
+
+    void onPluginParamAutomated(int indexOrId, float val) {
+        int idx = -1;
+        if (indexOrId >= 0 && indexOrId < static_cast<int>(m_params.size()) && m_params[indexOrId].id == indexOrId) {
+            idx = indexOrId;
+        } else {
+            for (size_t i = 0; i < m_params.size(); ++i) {
+                if (m_params[i].id == indexOrId) {
+                    idx = static_cast<int>(i);
+                    break;
+                }
+            }
+        }
+        if (idx >= 0 && idx < static_cast<int>(m_params.size())) {
+            m_params[idx].value = std::clamp(val, 0.0f, 1.0f);
+            if (m_format == PLUGIN_FORMAT_VST2 && m_vstEffect && m_vstEffect->dispatcher) {
+                char buf[32] = {0};
+                m_vstEffect->dispatcher(m_vstEffect, effGetParamDisplay, idx, 0, buf, 0.0f);
+                if (buf[0] != '\0') {
+                    m_params[idx].display = buf;
+                }
+            }
+            queueEvent(QueuedMidiEvent{QueuedMidiEvent::PARAM_CHANGE, 0, 0.0f, m_params[idx].id, m_params[idx].value});
+            m_paramsDirty.store(true, std::memory_order_release);
+        }
+    }
+
+    bool checkAndClearParamsDirty() {
+        return m_paramsDirty.exchange(false, std::memory_order_acq_rel);
     }
 
     // Tracker Monophony: any new note cuts previous note
@@ -683,6 +729,11 @@ private:
 
         // Retrieve parameters
         if (m_vst3Controller) {
+            m_componentHandler.parent = this;
+            if (m_vst3Controller->lpVtbl->setComponentHandler) {
+                m_vst3Controller->lpVtbl->setComponentHandler(m_vst3Controller, reinterpret_cast<Steinberg_Vst_IComponentHandler*>(&m_componentHandler.iface));
+            }
+
             int pCount = m_vst3Controller->lpVtbl->getParameterCount(m_vst3Controller);
             m_params.resize(pCount);
             for (int i = 0; i < pCount; ++i) {
@@ -758,8 +809,28 @@ private:
     // ==========================================
     // VST 2.4 INITIALIZATION & PROCESSING
     // ==========================================
+    // Static VST instance tracking to safely map AEffect* to PluginInstance* without overwriting effect->user
+    static inline std::mutex s_vstMapMutex;
+    static inline std::unordered_map<AEffect*, PluginInstance*> s_vstInstanceMap;
+
     static intptr_t VST_CALL_CONV staticAudioMaster(AEffect* effect, int32_t opcode, int32_t index, intptr_t value, void* ptr, float opt) {
         switch (opcode) {
+            case 0: // audioMasterAutomate (setParameterAutomated)
+                if (effect) {
+                    PluginInstance* inst = nullptr;
+                    {
+                        std::lock_guard<std::mutex> lock(s_vstMapMutex);
+                        auto it = s_vstInstanceMap.find(effect);
+                        if (it != s_vstInstanceMap.end()) {
+                            inst = it->second;
+                        }
+                    }
+                    if (inst) {
+                        inst->onPluginParamAutomated(index, opt);
+                        return 1;
+                    }
+                }
+                return 0;
             case audioMasterVersion:
                 return 2400;
             case audioMasterGetSampleRate:
@@ -794,6 +865,10 @@ private:
         if (!m_vstEffect || m_vstEffect->magic != kEffectMagic) {
             std::cerr << "[myms PluginHost] Invalid VST2 magic" << std::endl;
             return false;
+        }
+        {
+            std::lock_guard<std::mutex> lock(s_vstMapMutex);
+            s_vstInstanceMap[m_vstEffect] = this;
         }
 
         m_vstEffect->dispatcher(m_vstEffect, effOpen, 0, 0, nullptr, 0.0f);
@@ -1167,7 +1242,39 @@ private:
     QueuedMidiEvent m_eventQueue[MAX_QUEUED_EVENTS];
     std::atomic<int> m_eventQueueHead{0};
     std::atomic<int> m_eventQueueTail{0};
+
+    // Parameter dirty flag for bi-directional UI sync
+    std::atomic<bool> m_paramsDirty{false};
+
+    // VST3 Component Handler
+    HostVst3ComponentHandler m_componentHandler;
 };
+
+inline HostVst3ComponentHandler::HostVst3ComponentHandler() {
+    vtbl.queryInterface = [](void* self, const Steinberg_TUID iid, void** obj) -> Steinberg_tresult {
+        if (!obj) return Steinberg_kInvalidArgument;
+        if (std::memcmp(iid, Steinberg_Vst_IComponentHandler_iid, sizeof(Steinberg_TUID)) == 0 ||
+            std::memcmp(iid, Steinberg_FUnknown_iid, sizeof(Steinberg_TUID)) == 0) {
+            *obj = self;
+            return Steinberg_kResultOk;
+        }
+        *obj = nullptr;
+        return Steinberg_kNoInterface;
+    };
+    vtbl.addRef = [](void*) -> Steinberg_uint32 { return 1; };
+    vtbl.release = [](void*) -> Steinberg_uint32 { return 1; };
+    vtbl.beginEdit = [](void*, Steinberg_Vst_ParamID) -> Steinberg_tresult { return Steinberg_kResultOk; };
+    vtbl.performEdit = [](void* self, Steinberg_Vst_ParamID id, Steinberg_Vst_ParamValue val) -> Steinberg_tresult {
+        auto* h = reinterpret_cast<HostVst3ComponentHandler*>(self);
+        if (h && h->parent) {
+            h->parent->onPluginParamAutomated(id, static_cast<float>(val));
+        }
+        return Steinberg_kResultOk;
+    };
+    vtbl.endEdit = [](void*, Steinberg_Vst_ParamID) -> Steinberg_tresult { return Steinberg_kResultOk; };
+    vtbl.restartComponent = [](void*, Steinberg_int32) -> Steinberg_tresult { return Steinberg_kResultOk; };
+    iface.lpVtbl = &vtbl;
+}
 
 } // namespace myms
 

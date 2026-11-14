@@ -46,7 +46,6 @@ Rectangle {
         root.ampD = p.ampD
         root.ampS = p.ampS
         root.ampR = p.ampR
-        nameInput.text = engine.getInstrumentName(currentInstrument)
         isSyncing = false
     }
 
@@ -117,32 +116,6 @@ Rectangle {
                                 engine.addTrack()
                                 engine.setSelectedInstrument(engine.numTracks - 1)
                             }
-                        }
-                    }
-                }
-            }
-
-            // Custom User Name Input Field
-            Rectangle {
-                Layout.fillWidth: true
-                height: 24
-                color: theme.bgWell
-                radius: 3
-                border.color: nameInput.activeFocus ? theme.accent : theme.border
-
-                TextInput {
-                    id: nameInput
-                    anchors.fill: parent
-                    anchors.leftMargin: 6
-                    anchors.rightMargin: 6
-                    verticalAlignment: TextInput.AlignVCenter
-                    font.pixelSize: 11
-                    font.bold: true
-                    color: theme.textMain
-                    selectByMouse: true
-                    onTextChanged: {
-                        if (!root.isSyncing && engine) {
-                            engine.setInstrumentName(root.currentInstrument, text)
                         }
                     }
                 }

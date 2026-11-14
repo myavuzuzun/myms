@@ -89,6 +89,9 @@ Rectangle {
                     property bool trackMute: engine ? engine.getTrackMute(trackIdx) : false
                     property bool trackSolo: engine ? engine.getTrackSolo(trackIdx) : false
                     property int trackSf2: engine ? engine.getTrackSf2Preset(trackIdx) : 0
+                    property bool trackPluginLoaded: engine ? engine.isTrackPluginLoaded(trackIdx) : false
+                    property string trackPluginName: engine ? engine.getTrackPluginName(trackIdx) : ""
+                    property string trackPluginFormat: engine ? engine.getTrackPluginFormatName(trackIdx) : ""
 
                     property real peakL: 0.0
                     property real peakR: 0.0
@@ -104,14 +107,25 @@ Rectangle {
                                 strip.trackSolo = engine.getTrackSolo(strip.trackIdx)
                                 strip.trackSf2 = engine.getTrackSf2Preset(strip.trackIdx)
                                 strip.trackName = engine.getInstrumentName(strip.trackIdx)
+                                strip.trackPluginLoaded = engine.isTrackPluginLoaded(strip.trackIdx)
+                                strip.trackPluginName = engine.getTrackPluginName(strip.trackIdx)
+                                strip.trackPluginFormat = engine.getTrackPluginFormatName(strip.trackIdx)
                             }
                         }
                         function onTrackTypeChanged(t, type) {
-                            if (t === strip.trackIdx) strip.trackType = type
+                            if (t === strip.trackIdx) {
+                                strip.trackType = type
+                                strip.trackPluginLoaded = engine.isTrackPluginLoaded(strip.trackIdx)
+                                strip.trackPluginName = engine.getTrackPluginName(strip.trackIdx)
+                                strip.trackPluginFormat = engine.getTrackPluginFormatName(strip.trackIdx)
+                            }
                         }
                         function onTrackPluginChanged(t) {
                             if (t === strip.trackIdx || t === -1) {
                                 strip.trackType = engine.getTrackType(strip.trackIdx)
+                                strip.trackPluginLoaded = engine.isTrackPluginLoaded(strip.trackIdx)
+                                strip.trackPluginName = engine.getTrackPluginName(strip.trackIdx)
+                                strip.trackPluginFormat = engine.getTrackPluginFormatName(strip.trackIdx)
                             }
                         }
                         function onInstrumentNameChanged(inst, name) {
@@ -127,6 +141,9 @@ Rectangle {
                             strip.trackSolo = engine ? engine.getTrackSolo(strip.trackIdx) : false
                             strip.trackSf2 = engine ? engine.getTrackSf2Preset(strip.trackIdx) : 0
                             strip.trackName = engine ? engine.getInstrumentName(strip.trackIdx) : "Track"
+                            strip.trackPluginLoaded = engine ? engine.isTrackPluginLoaded(strip.trackIdx) : false
+                            strip.trackPluginName = engine ? engine.getTrackPluginName(strip.trackIdx) : ""
+                            strip.trackPluginFormat = engine ? engine.getTrackPluginFormatName(strip.trackIdx) : ""
                         }
                     }
 
@@ -198,7 +215,9 @@ Rectangle {
                                     text: {
                                         if (strip.trackType === 1) return "🎻 SOUNDFONT"
                                         if (strip.trackType === 2) return "🥁 BEATPAD"
-                                        if (strip.trackType === 3) return "🔌 PLUGIN INST"
+                                        if (strip.trackType === 3) {
+                                            return strip.trackPluginLoaded ? ("🔌 " + (strip.trackPluginName ? strip.trackPluginName : "PLUGIN")) : "🔌 PLUGIN INST"
+                                        }
                                         return "🎹 AURASYNTH"
                                     }
                                     font.bold: true
@@ -209,6 +228,7 @@ Rectangle {
                                         if (strip.trackType === 3) return "#3daee9"
                                         return theme.accent
                                     }
+                                    elide: Text.ElideRight
                                 }
 
                                 Text {
@@ -256,6 +276,13 @@ Rectangle {
                                                 engine.promptOpenPlugin(strip.trackIdx)
                                             }
                                         }
+                                    }
+                                }
+                                MenuItem {
+                                    text: "📁 Change Plugin..."
+                                    visible: strip.trackType === 3
+                                    onTriggered: {
+                                        if (engine) engine.promptOpenPlugin(strip.trackIdx)
                                     }
                                 }
                             }
@@ -307,7 +334,7 @@ Rectangle {
                             height: 20
                             color: plgMouse.containsMouse ? theme.btnHover : theme.bgCard
                             radius: 2
-                            border.color: (engine && engine.isTrackPluginLoaded(strip.trackIdx)) ? theme.accent : theme.border
+                            border.color: strip.trackPluginLoaded ? theme.accent : theme.border
                             visible: (strip.trackType === 3)
 
                             Text {
@@ -315,14 +342,12 @@ Rectangle {
                                 anchors.leftMargin: 4
                                 anchors.rightMargin: 4
                                 text: {
-                                    if (!engine || !engine.isTrackPluginLoaded(strip.trackIdx)) return "+ LOAD PLUGIN..."
-                                    let name = engine.getTrackPluginName(strip.trackIdx)
-                                    let fmt = engine.getTrackPluginFormatName(strip.trackIdx)
-                                    return fmt + ": " + (name ? name : "Plugin")
+                                    if (!strip.trackPluginLoaded) return "+ LOAD PLUGIN..."
+                                    return strip.trackPluginFormat + ": " + (strip.trackPluginName ? strip.trackPluginName : "Plugin")
                                 }
                                 font.pixelSize: 9
                                 font.bold: true
-                                color: (engine && engine.isTrackPluginLoaded(strip.trackIdx)) ? theme.textHeading : theme.accent
+                                color: strip.trackPluginLoaded ? theme.textHeading : theme.accent
                                 elide: Text.ElideRight
                                 verticalAlignment: Text.AlignVCenter
                                 horizontalAlignment: Text.AlignHCenter
