@@ -81,6 +81,7 @@ Rectangle {
                     radius: 4
                     border.color: (engine && engine.selectedInstrument === index) ? theme.accent : theme.border
                     border.width: (engine && engine.selectedInstrument === index) ? 2 : 1
+                    z: (dragGripMouse && dragGripMouse.drag.active) ? 9999 : 1
 
                     property int trackIdx: index
                     property string trackName: engine ? engine.getInstrumentName(trackIdx) : "Track"
@@ -148,6 +149,73 @@ Rectangle {
                         }
                     }
 
+                    // Drag Proxy Floating Visual
+                    Rectangle {
+                        id: dragProxy
+                        width: 140
+                        height: 24
+                        radius: 3
+                        color: theme.accent
+                        opacity: 0.92
+                        border.color: "#ffffff"
+                        border.width: 1
+                        visible: dragGripMouse.drag.active
+                        z: 99999
+                        x: 10
+                        y: 0
+                        Drag.active: dragGripMouse.drag.active
+                        Drag.source: strip
+                        Drag.hotSpot.x: 70
+                        Drag.hotSpot.y: 12
+                        Drag.keys: ["trackStrip"]
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 4
+                            Text { text: "⇄"; font.pixelSize: 10; color: "#ffffff"; font.bold: true }
+                            Text {
+                                text: "#" + (strip.trackIdx + 1) + ": " + strip.trackName
+                                font.bold: true
+                                font.pixelSize: 10
+                                color: "#ffffff"
+                            }
+                        }
+                    }
+
+                    // DropArea for Track Reordering
+                    DropArea {
+                        id: stripDropArea
+                        anchors.fill: parent
+                        keys: ["trackStrip"]
+                        z: 10
+                        onDropped: (drop) => {
+                            if (drop.source && drop.source.trackIdx !== undefined) {
+                                let fromIdx = drop.source.trackIdx
+                                let toIdx = strip.trackIdx
+                                if (fromIdx !== toIdx && engine) {
+                                    engine.moveTrack(fromIdx, toIdx)
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            color: theme.accent
+                            opacity: 0.25
+                            radius: 4
+                            border.color: "#3daee9"
+                            border.width: 2
+                            visible: stripDropArea.containsDrag
+                            Text {
+                                anchors.centerIn: parent
+                                text: "MOVE HERE"
+                                font.bold: true
+                                font.pixelSize: 11
+                                color: "#ffffff"
+                            }
+                        }
+                    }
+
                     ColumnLayout {
                         anchors.fill: parent
                         anchors.margins: 6
@@ -165,6 +233,33 @@ Rectangle {
                                 anchors.leftMargin: 6
                                 anchors.rightMargin: 6
                                 spacing: 4
+
+                                // Drag Grip Handle
+                                Rectangle {
+                                    id: dragGripBox
+                                    width: 14
+                                    height: 14
+                                    radius: 2
+                                    color: dragGripMouse.containsMouse ? theme.btnHover : "transparent"
+                                    Layout.alignment: Qt.AlignVCenter
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "⠿"
+                                        font.pixelSize: 10
+                                        color: dragGripMouse.containsMouse ? "#ffffff" : theme.textMuted
+                                    }
+                                    MouseArea {
+                                        id: dragGripMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.SizeAllCursor
+                                        drag.target: dragProxy
+                                        drag.axis: Drag.XAxis
+                                        ToolTip.visible: containsMouse && !drag.active
+                                        ToolTip.text: "Drag & Drop to Reorder Track"
+                                        ToolTip.delay: 300
+                                    }
+                                }
 
                                 Text {
                                     text: "#" + (strip.trackIdx + 1)

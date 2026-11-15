@@ -62,9 +62,9 @@
   - Creating a new pattern (via `+` on the top toolbar PAT selector) or duplicating a pattern creates the pattern in the project without automatically appending it to the song arrangement structure (`m_songOrder`).
   - Removed duplicate toolbar toggle and redundant arranger buttons: the Song Arranger bar features a dedicated `[ PAT LOOP ]` / `[ SONG MODE ]` pill button and `[ + STEP ]` append action, keeping the interface uncluttered and distraction-free.
   - The song structure remains strictly author-controlled.
-- **Track & Plugin Effect Reordering & Bypass**:
-  - **Track Order Rearranging**: Tracks can be moved left and right via `◀` and `▶` buttons on Mixer channel strips and Tracker matrix headers (`moveTrack(from, to)`). Reorders synth state, plugins, mixer controls, Pre/Post FX chains, and sequencer cells atomically.
-  - **Plugin Effect Reordering**: Insert and Pre-effects can be reordered up and down in the chain via `▲` and `▼` buttons (`swapTrackFx`, `swapTrackPreFx`).
+- **Track & Plugin Effect Reordering (Dual Mode: Drag & Drop + Arrow Buttons)**:
+  - **Track Order Rearranging**: Tracks can be reordered via tactile **Drag & Drop** using the `⠿` grip handle in the Mixer channel strip header (dragging a ghost badge `⇄ #N: Name` over another strip with glowing drop indicators), or via the precision `◀` and `▶` step buttons (`moveTrack(from, to)`). Reorders synth state, plugins, mixer controls, Pre/Post FX chains, and sequencer cells atomically.
+  - **Plugin Effect Reordering**: Pre-FX and Post-FX in `TrackFxModal` can be reordered via **Drag & Drop** using the `⠿` grip handle on each effect card, or via the `▲` and `▼` step buttons (`swapTrackFx`, `swapTrackPreFx`).
   - **Plugin Effect Power Bypass Toggle**: Each effect has a dedicated zero-allocation `[ ⏻ ]` bypass button. When bypassed, the real-time audio thread passes audio dry with zero CPU overhead. Bypass state is fully persisted in `.myms` project files.
 - **2-Octave Piano Keyboard Entry**:
   - Native auto-detected **Turkish Q layout** (`A..Ğ` lower octave, `Q..I` upper octave, `ı`/`i` separation, `<`/`>` octave shifts) with live toggle to standard **US QWERTY**.

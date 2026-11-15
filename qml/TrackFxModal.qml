@@ -386,12 +386,83 @@ Item {
                                         model: root.preFxList
 
                                         Rectangle {
+                                            id: preItemCard
                                             Layout.fillWidth: true
                                             height: 46
                                             radius: 4
                                             color: (root.selectedType === "pre" && index === root.selectedPreFxIndex) ? theme.bgCard : theme.bgHeader
                                             border.color: (root.selectedType === "pre" && index === root.selectedPreFxIndex) ? "#a855f7" : theme.border
                                             border.width: (root.selectedType === "pre" && index === root.selectedPreFxIndex) ? 2 : 1
+                                            z: (preDragGripMouse && preDragGripMouse.drag.active) ? 9999 : 1
+
+                                            // Drag Proxy
+                                            Rectangle {
+                                                id: preDragProxy
+                                                width: 180
+                                                height: 24
+                                                radius: 3
+                                                color: "#6b21a8"
+                                                opacity: 0.92
+                                                border.color: "#ffffff"
+                                                border.width: 1
+                                                visible: preDragGripMouse.drag.active
+                                                z: 99999
+                                                x: 10
+                                                y: 0
+                                                property int preSlot: modelData.slot
+                                                Drag.active: preDragGripMouse.drag.active
+                                                Drag.source: preDragProxy
+                                                Drag.hotSpot.x: 90
+                                                Drag.hotSpot.y: 12
+                                                Drag.keys: ["preFxMove"]
+
+                                                Row {
+                                                    anchors.centerIn: parent
+                                                    spacing: 4
+                                                    Text { text: "↕"; font.pixelSize: 10; color: "#ffffff"; font.bold: true }
+                                                    Text {
+                                                        text: "PRE" + (index + 1) + ": " + modelData.name
+                                                        font.bold: true
+                                                        font.pixelSize: 9
+                                                        color: "#ffffff"
+                                                    }
+                                                }
+                                            }
+
+                                            // DropArea for Pre-FX reordering
+                                            DropArea {
+                                                id: preDropArea
+                                                anchors.fill: parent
+                                                keys: ["preFxMove"]
+                                                z: 10
+                                                onDropped: (drop) => {
+                                                    if (drop.source && drop.source.preSlot !== undefined) {
+                                                        let fromSlot = drop.source.preSlot
+                                                        let toSlot = modelData.slot
+                                                        if (fromSlot !== toSlot && root.engine) {
+                                                            root.engine.swapTrackPreFx(root.targetTrack, fromSlot, toSlot)
+                                                            root.refreshSlots()
+                                                        }
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    anchors.fill: parent
+                                                    color: "#a855f7"
+                                                    opacity: 0.3
+                                                    radius: 4
+                                                    border.color: "#d8b4fe"
+                                                    border.width: 2
+                                                    visible: preDropArea.containsDrag
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: "SWAP POSITION"
+                                                        font.bold: true
+                                                        font.pixelSize: 9
+                                                        color: "#ffffff"
+                                                    }
+                                                }
+                                            }
 
                                             MouseArea {
                                                 anchors.fill: parent
@@ -408,6 +479,32 @@ Item {
                                                 anchors.fill: parent
                                                 anchors.margins: 5
                                                 spacing: 6
+
+                                                // Drag Grip Handle
+                                                Rectangle {
+                                                    width: 12
+                                                    height: 18
+                                                    color: preDragGripMouse.containsMouse ? theme.btnHover : "transparent"
+                                                    radius: 2
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: "⠿"
+                                                        font.pixelSize: 9
+                                                        color: preDragGripMouse.containsMouse ? "#ffffff" : theme.textMuted
+                                                    }
+                                                    MouseArea {
+                                                        id: preDragGripMouse
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.SizeAllCursor
+                                                        drag.target: preDragProxy
+                                                        drag.axis: Drag.YAxis
+                                                        ToolTip.visible: containsMouse && !drag.active
+                                                        ToolTip.text: "Drag & Drop to Reorder Pre-Effect"
+                                                        ToolTip.delay: 300
+                                                    }
+                                                }
 
                                                 // Badge
                                                 Rectangle {
@@ -790,12 +887,83 @@ Item {
                                         model: root.fxList
 
                                         Rectangle {
+                                            id: postItemCard
                                             Layout.fillWidth: true
                                             height: 46
                                             radius: 4
                                             color: (root.selectedType === "post" && index === root.selectedFxIndex) ? theme.bgCard : theme.bgHeader
                                             border.color: (root.selectedType === "post" && index === root.selectedFxIndex) ? theme.accent : theme.border
                                             border.width: (root.selectedType === "post" && index === root.selectedFxIndex) ? 2 : 1
+                                            z: (postDragGripMouse && postDragGripMouse.drag.active) ? 9999 : 1
+
+                                            // Drag Proxy
+                                            Rectangle {
+                                                id: postDragProxy
+                                                width: 180
+                                                height: 24
+                                                radius: 3
+                                                color: theme.accent
+                                                opacity: 0.92
+                                                border.color: "#ffffff"
+                                                border.width: 1
+                                                visible: postDragGripMouse.drag.active
+                                                z: 99999
+                                                x: 10
+                                                y: 0
+                                                property int postSlot: modelData.slot
+                                                Drag.active: postDragGripMouse.drag.active
+                                                Drag.source: postDragProxy
+                                                Drag.hotSpot.x: 90
+                                                Drag.hotSpot.y: 12
+                                                Drag.keys: ["postFxMove"]
+
+                                                Row {
+                                                    anchors.centerIn: parent
+                                                    spacing: 4
+                                                    Text { text: "↕"; font.pixelSize: 10; color: "#ffffff"; font.bold: true }
+                                                    Text {
+                                                        text: (root.targetTrack === -1 ? "M" : "FX") + (index + 1) + ": " + modelData.name
+                                                        font.bold: true
+                                                        font.pixelSize: 9
+                                                        color: "#ffffff"
+                                                    }
+                                                }
+                                            }
+
+                                            // DropArea for Post-FX reordering
+                                            DropArea {
+                                                id: postDropArea
+                                                anchors.fill: parent
+                                                keys: ["postFxMove"]
+                                                z: 10
+                                                onDropped: (drop) => {
+                                                    if (drop.source && drop.source.postSlot !== undefined) {
+                                                        let fromSlot = drop.source.postSlot
+                                                        let toSlot = modelData.slot
+                                                        if (fromSlot !== toSlot && root.engine) {
+                                                            root.engine.swapTrackFx(root.targetTrack, fromSlot, toSlot)
+                                                            root.refreshSlots()
+                                                        }
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    anchors.fill: parent
+                                                    color: theme.accent
+                                                    opacity: 0.3
+                                                    radius: 4
+                                                    border.color: "#3daee9"
+                                                    border.width: 2
+                                                    visible: postDropArea.containsDrag
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: "SWAP POSITION"
+                                                        font.bold: true
+                                                        font.pixelSize: 9
+                                                        color: "#ffffff"
+                                                    }
+                                                }
+                                            }
 
                                             MouseArea {
                                                 anchors.fill: parent
@@ -812,6 +980,32 @@ Item {
                                                 anchors.fill: parent
                                                 anchors.margins: 5
                                                 spacing: 6
+
+                                                // Drag Grip Handle
+                                                Rectangle {
+                                                    width: 12
+                                                    height: 18
+                                                    color: postDragGripMouse.containsMouse ? theme.btnHover : "transparent"
+                                                    radius: 2
+                                                    Layout.alignment: Qt.AlignVCenter
+                                                    Text {
+                                                        anchors.centerIn: parent
+                                                        text: "⠿"
+                                                        font.pixelSize: 9
+                                                        color: postDragGripMouse.containsMouse ? "#ffffff" : theme.textMuted
+                                                    }
+                                                    MouseArea {
+                                                        id: postDragGripMouse
+                                                        anchors.fill: parent
+                                                        hoverEnabled: true
+                                                        cursorShape: Qt.SizeAllCursor
+                                                        drag.target: postDragProxy
+                                                        drag.axis: Drag.YAxis
+                                                        ToolTip.visible: containsMouse && !drag.active
+                                                        ToolTip.text: "Drag & Drop to Reorder Effect"
+                                                        ToolTip.delay: 300
+                                                    }
+                                                }
 
                                                 // Badge
                                                 Rectangle {
