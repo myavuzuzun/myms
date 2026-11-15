@@ -262,13 +262,14 @@ class TestPhase4CellEffects(unittest.TestCase):
         self.assertAlmostEqual(self.engine.bpm, 90.0, places=1)
 
     def test_07_in_window_menu_bar_and_toggle(self):
+        from PyQt6.QtCore import QSettings
+        QSettings("myms", "myms").setValue("use_global_menu", False)
         window = AppWindow(self.engine)
         window.show()
-        self.assertTrue(hasattr(window, "in_window_mb"))
-        self.assertFalse(window.in_window_mb.isNativeMenuBar())
-        self.assertTrue(window.in_window_mb.isVisible())
+        self.assertTrue(hasattr(window, "mb"))
+        self.assertFalse(window.mb.isNativeMenuBar())
 
-        titles = [action.text().replace("&", "") for action in window.in_window_mb.actions()]
+        titles = [action.text().replace("&", "") for action in window.mb.actions()]
         self.assertIn("File", titles)
         self.assertIn("Edit", titles)
         self.assertIn("Playback", titles)
@@ -276,30 +277,21 @@ class TestPhase4CellEffects(unittest.TestCase):
         self.assertIn("Tracks", titles)
         self.assertIn("Settings", titles)
 
-        # Test toggle action
-        view_menu = None
-        for act in window.in_window_mb.actions():
-            if "View" in act.text():
-                view_menu = act.menu()
-                break
-        self.assertIsNotNone(view_menu)
+        # Test toggle global menu action
+        self.assertTrue(hasattr(window, "act_global_menu"))
+        self.assertTrue(window.act_global_menu.isCheckable())
+        self.assertFalse(window.act_global_menu.isChecked())
 
-        toggle_act = None
-        for a in view_menu.actions():
-            if "Menu Bar" in a.text():
-                toggle_act = a
-                break
-        self.assertIsNotNone(toggle_act)
-        self.assertTrue(toggle_act.isCheckable())
-        self.assertTrue(toggle_act.isChecked())
+        # Toggle to global menu
+        window.act_global_menu.setChecked(True)
+        from PyQt6.QtCore import QSettings
+        s = QSettings("myms", "myms")
+        self.assertTrue(s.value("use_global_menu", False, type=bool))
 
-        # Toggle hidden
-        toggle_act.setChecked(False)
-        self.assertFalse(window.in_window_mb.isVisible())
-
-        # Toggle visible
-        toggle_act.setChecked(True)
-        self.assertTrue(window.in_window_mb.isVisible())
+        # Toggle back to in-window menu
+        window.act_global_menu.setChecked(False)
+        self.assertFalse(s.value("use_global_menu", True, type=bool))
+        self.assertFalse(window.mb.isNativeMenuBar())
 
         window.close()
 
