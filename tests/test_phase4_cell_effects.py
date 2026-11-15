@@ -261,36 +261,25 @@ class TestPhase4CellEffects(unittest.TestCase):
         self.engine.newProject()
         self.assertAlmostEqual(self.engine.bpm, 90.0, places=1)
 
-    def test_07_in_window_menu_bar_and_toggle(self):
+    def test_07_adaptive_menu_bar(self):
         window = AppWindow(self.engine)
         window.show()
         self.assertTrue(hasattr(window, "mb"))
+        # In offscreen test environment, QMainWindow menu bar is non-native in-window menu bar
         self.assertFalse(window.mb.isNativeMenuBar())
-        self.assertTrue(hasattr(window, "in_window_mb"))
-        self.assertTrue(window.in_window_mb.isVisible())
-        # Verify no custom stylesheet applied (not stylized into the app)
-        self.assertEqual(window.in_window_mb.styleSheet(), "")
+        self.assertTrue(window.mb.isVisible())
+        # Verify no custom stylesheet applied (not stylized into the app, uses native theme)
+        self.assertEqual(window.mb.styleSheet(), "")
 
         titles = [action.text().replace("&", "") for action in window.mb.actions()]
         self.assertIn("File", titles)
         self.assertIn("Edit", titles)
         self.assertIn("Playback", titles)
-        self.assertIn("View", titles)
         self.assertIn("Tracks", titles)
         self.assertIn("Settings", titles)
 
-        # Test toggle in-window menubar action (Ctrl+M)
-        self.assertTrue(hasattr(window, "act_toggle_mb"))
-        self.assertTrue(window.act_toggle_mb.isCheckable())
-        self.assertTrue(window.act_toggle_mb.isChecked())
-
-        # Toggle hidden
-        window.act_toggle_mb.setChecked(False)
-        self.assertFalse(window.in_window_mb.isVisible())
-
-        # Toggle visible
-        window.act_toggle_mb.setChecked(True)
-        self.assertTrue(window.in_window_mb.isVisible())
+        # Verify quick_widget is the direct central widget (no wrapper containers)
+        self.assertEqual(window.centralWidget(), window.quick_widget)
 
         window.close()
 
