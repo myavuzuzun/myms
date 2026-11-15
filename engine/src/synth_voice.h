@@ -81,7 +81,7 @@ public:
         return m_note;
     }
 
-    inline float renderSample(const SynthParams& params) {
+    inline float renderSample(const SynthParams& params, float pitchBendSemi = 0.0f) {
         if (!isActive()) {
             m_active = false;
             return 0.0f;
@@ -95,9 +95,10 @@ public:
             return 0.0f;
         }
 
-        float freq1 = m_baseFreq;
+        float pitchModFactor = (pitchBendSemi != 0.0f) ? std::pow(2.0f, pitchBendSemi / 12.0f) : 1.0f;
+        float freq1 = m_baseFreq * pitchModFactor;
         float detuneFactor = std::pow(2.0f, (params.osc2DetuneSemi + params.osc2FineCents / 100.0f) / 12.0f);
-        float freq2 = m_baseFreq * detuneFactor;
+        float freq2 = m_baseFreq * detuneFactor * pitchModFactor;
 
         float inc1 = freq1 / m_sampleRate;
         float inc2 = freq2 / m_sampleRate;

@@ -75,13 +75,21 @@ public:
         }
     }
 
+    void setPitchBendSemi(float semi) {
+        m_pitchBendSemi = semi;
+    }
+
+    float getPitchBendSemi() const {
+        return m_pitchBendSemi;
+    }
+
     // Process a block of stereo frames (L, R interleaved or separate)
     inline void processBlock(float* outL, float* outR, int numFrames) {
         for (int f = 0; f < numFrames; ++f) {
             float sum = 0.0f;
             for (int v = 0; v < MAX_VOICES; ++v) {
                 if (m_voices[v].isActive()) {
-                    sum += m_voices[v].renderSample(m_params);
+                    sum += m_voices[v].renderSample(m_params, m_pitchBendSemi);
                 }
             }
             // Scale gain slightly to leave headroom for polyphony
@@ -96,6 +104,7 @@ private:
     std::array<SynthVoice, MAX_VOICES> m_voices;
     SynthParams m_params;
     int m_voiceStealIndex = 0;
+    float m_pitchBendSemi = 0.0f;
 };
 
 } // namespace myms

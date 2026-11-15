@@ -240,6 +240,13 @@ public:
         }
     }
 
+    inline void setChannelPitchWheel(int channel, int pitchWheel) {
+        tsf* f = m_tsf.load(std::memory_order_acquire);
+        if (!f || channel < 0 || channel >= MAX_SF2_CHANNELS) return;
+        tsf_channel_set_pitchrange(f, channel, 12.0f);
+        tsf_channel_set_pitchwheel(f, channel, pitchWheel);
+    }
+
     // Render a single SoundFont channel into buffer (sample-by-sample for per-track FX and mixer)
     inline void processChannelSample(int channel, float& outL, float& outR) {
         tsf* f = m_tsf.load(std::memory_order_acquire);

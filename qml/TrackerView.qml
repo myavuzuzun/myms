@@ -1276,9 +1276,11 @@ Rectangle {
                                     anchors.fill: parent
                                     z: 10
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
+                                    preventStealing: false
 
                                     property real pressX: 0
                                     property real pressY: 0
+                                    property bool isCtrlSelect: false
                                     property bool dragStarted: false
 
                                     onPressed: (mouse) => {
@@ -1302,33 +1304,51 @@ Rectangle {
                                         pressY = mouse.y
                                         dragStarted = false
 
-                                        if (mouse.modifiers & Qt.ShiftModifier) {
-                                            if (!root.hasSelection) {
-                                                root.selStartTrack = root.selectedTrack
-                                                root.selStartRow = root.selectedRow
-                                            }
-                                            root.selEndTrack = cellItem.trackIdx
-                                            root.selEndRow = rowIndex
+                                        let hasCtrl = Boolean(mouse.modifiers & Qt.ControlModifier)
+                                        let hasShift = Boolean(mouse.modifiers & Qt.ShiftModifier)
+                                        isCtrlSelect = hasCtrl || hasShift
+
+                                        if (isCtrlSelect) {
+                                            cellMouseArea.preventStealing = true
+                                            matrixListView.interactive = false
+                                            root.isSelecting = true
                                             root.hasSelection = true
-                                            root.selectedTrack = cellItem.trackIdx
-                                            root.selectedRow = rowIndex
+
+                                            if (hasShift) {
+                                                if (!root.hasSelection) {
+                                                    root.selStartTrack = root.selectedTrack
+                                                    root.selStartRow = root.selectedRow
+                                                }
+                                                root.selEndTrack = cellItem.trackIdx
+                                                root.selEndRow = rowIndex
+                                                root.selectedTrack = cellItem.trackIdx
+                                                root.selectedRow = rowIndex
+                                            } else {
+                                                root.selStartTrack = cellItem.trackIdx
+                                                root.selStartRow = rowIndex
+                                                root.selEndTrack = cellItem.trackIdx
+                                                root.selEndRow = rowIndex
+                                                root.selectedTrack = cellItem.trackIdx
+                                                root.selectedRow = rowIndex
+                                            }
                                         } else {
-                                            root.selStartTrack = cellItem.trackIdx
-                                            root.selStartRow = rowIndex
-                                            root.selEndTrack = cellItem.trackIdx
-                                            root.selEndRow = rowIndex
+                                            cellMouseArea.preventStealing = false
+                                            matrixListView.interactive = true
                                         }
                                     }
 
                                     onPositionChanged: (mouse) => {
                                         if (!(mouse.buttons & Qt.LeftButton)) return
+                                        if (!isCtrlSelect) return // Without Ctrl: let Flickable scroll the rows smoothly!
+
                                         let dx = mouse.x - pressX
                                         let dy = mouse.y - pressY
-                                        if (!dragStarted && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+                                        if (!dragStarted && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
                                             dragStarted = true
                                             root.isSelecting = true
                                             root.hasSelection = true
                                         }
+
                                         if (dragStarted) {
                                             let ptToContent = cellItem.mapToItem(matrixListView.contentItem, mouse.x, mouse.y)
                                             let nTracks = engine ? engine.numTracks : 1
@@ -1340,26 +1360,17 @@ Rectangle {
                                             root.selEndRow = curRow
                                             root.selectedTrack = curTrack
                                             root.selectedRow = curRow
-
-                                            let ptToLv = cellItem.mapToItem(matrixListView, mouse.x, mouse.y)
-                                            if (ptToLv.y < 25) {
-                                                matrixListView.contentY = Math.max(0, matrixListView.contentY - 20)
-                                            } else if (ptToLv.y > matrixListView.height - 25) {
-                                                matrixListView.contentY = Math.min(matrixListView.contentHeight - matrixListView.height, matrixListView.contentY + 20)
-                                            }
-                                            if (ptToLv.x < 30) {
-                                                matrixListView.contentX = Math.max(0, matrixListView.contentX - 25)
-                                            } else if (ptToLv.x > matrixListView.width - 30) {
-                                                matrixListView.contentX = Math.min(matrixListView.contentWidth - matrixListView.width, matrixListView.contentX + 25)
-                                            }
                                         }
                                     }
 
                                     onReleased: (mouse) => {
                                         if (mouse.button !== Qt.LeftButton) return
-                                        if (dragStarted) {
+                                        if (isCtrlSelect) {
                                             root.isSelecting = false
-                                        } else if (!(mouse.modifiers & Qt.ShiftModifier)) {
+                                            isCtrlSelect = false
+                                            cellMouseArea.preventStealing = false
+                                            matrixListView.interactive = true
+                                        } else {
                                             root.hasSelection = false
                                             root.selectedTrack = cellItem.trackIdx
                                             root.selectedRow = rowIndex
@@ -1391,6 +1402,14 @@ Rectangle {
                                             if (root.cellEditorModal) root.cellEditorModal.open(cellItem.trackIdx, rowIndex)
                                             else root.requestEditCell(cellItem.trackIdx, rowIndex)
                                         }
+                                    }
+
+                                    onCanceled: () => {
+                                        dragStarted = false
+                                        root.isSelecting = false
+                                        isCtrlSelect = false
+                                        cellMouseArea.preventStealing = false
+                                        matrixListView.interactive = true
                                     }
                                 }
 

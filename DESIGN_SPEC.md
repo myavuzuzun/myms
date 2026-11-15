@@ -341,8 +341,19 @@
     - **QML UI Binding Updates**:
       - Top toolbar `rowsInput` text field responds immediately to both `numRowsChanged` and `currentPatternChanged`, updating displayed row count without needing manual edits.
       - `TrackerView.qml` clamps `selectedRow` safely if switching from a longer pattern to a shorter pattern, preventing out-of-bounds selection errors.
+  - **Rock-Solid Mouse Interaction & Audible Cell Effects Engine (`TrackerView.qml`, `audio_engine.cpp`, `synth_engine.h`, `soundfont_player.h`)**:
+    - **Separation of Mouse Navigation & Chunk Selection**:
+      - **Normal Dragging (Without Ctrl)**: Moves rows up and down smoothly via `ListView` flickable scrolling without initiating unwanted cell selection. Single click sets cursor and sub-column; double click opens `StepCellEditorModal`.
+      - **Chunk Selection (With Ctrl / Shift)**: Pressing and dragging with <kbd>Ctrl</kbd> locks the viewport (`interactive: false`, `preventStealing: true`) keeping the UI completely stationary and jitter-free while drawing rectangular cell selection boxes.
+    - **Audible Tracker Cell Effects Engine (All Instruments)**:
+      - Evaluated on note triggers AND on empty-note steps (`cell.note == 255`), allowing automation sweeps across sustained notes.
+      - **`10 XX` Filter Cutoff**: Exponential resonant lowpass filter (70 Hz to 18,000 Hz) applied to AuraSynth, SoundFont, BeatPad Drums, and Plugin tracks.
+      - **`01 XX` / `02 XX` Pitch Slide**: Real-time pitch slide up / down across step duration for AuraSynth and SoundFont.
+      - **`0C XX` Retrigger / Note Cut**: Precision staccato note cut (param <= 16) or ratcheting rolls (param > 16).
+      - **`0E XX` Delay / Echo Send**: Tempo-synced ping-pong stereo echo send on that step.
   - **Comprehensive Verification Suite**:
     - 7 dedicated unit and integration tests in `tests/test_phase4_chunk_selection.py` validating single-cell and multi-track copy/paste, cut, delete, boundary clipping, QML selection helper methods, Escape handling, and Edit menu actions.
     - 4 dedicated unit and integration tests in `tests/test_phase4_pattern_rows.py` validating per-pattern row switching, cell preservation, project save/load serialization, backward compatibility, and QML UI input synchronization.
-    - Full DAW test suite passing across all phases (45/45 unit tests OK).
+    - 4 dedicated unit and integration tests in `tests/test_phase4_cell_effects.py` validating audible filter cutoff frequency variance, delay echo tail generation, note cut energy reduction, and QML Ctrl-selection bindings.
+    - Full DAW test suite passing across all phases (49/49 unit tests OK).
   - Git checkpoint commit and `phase-4` branch.

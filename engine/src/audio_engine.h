@@ -317,6 +317,53 @@ private:
     std::array<int, MAX_INSTRUMENTS> m_previewCountdowns{};
     std::array<std::atomic<int>, MAX_INSTRUMENTS> m_trackFxMaxSlot{};
     std::array<std::atomic<int>, MAX_INSTRUMENTS> m_trackPreFxMaxSlot{};
+
+    // Track Cell Effects (Per-Track Modulation & DSP)
+    StateVariableFilter m_trackCellFilterL[MAX_INSTRUMENTS];
+    StateVariableFilter m_trackCellFilterR[MAX_INSTRUMENTS];
+    bool m_trackCellFilterActive[MAX_INSTRUMENTS]{};
+
+    float m_trackPitchBendSemi[MAX_INSTRUMENTS]{};
+    float m_trackPitchSlidePerSample[MAX_INSTRUMENTS]{};
+
+    int m_trackNoteCutCountdown[MAX_INSTRUMENTS]{};
+    int m_trackRetrigInterval[MAX_INSTRUMENTS]{};
+    int m_trackRetrigCountdown[MAX_INSTRUMENTS]{};
+    int m_trackLastNote[MAX_INSTRUMENTS]{};
+    float m_trackLastVel[MAX_INSTRUMENTS]{};
+
+    static constexpr int TRACK_DELAY_SIZE = 24000;
+    std::vector<std::vector<float>> m_trackDelayBufL;
+    std::vector<std::vector<float>> m_trackDelayBufR;
+    int m_trackDelayWritePos[MAX_INSTRUMENTS]{};
+    float m_trackDelaySend[MAX_INSTRUMENTS]{};
+
+    inline void applyTrackCellEffects(int t, float& l, float& r) {
+        if (t >= 0 && t < MAX_INSTRUMENTS) {
+            if (m_trackCellFilterActive[t]) {
+                l = m_trackCellFilterL[t].process(l, StateVariableFilter::LOWPASS);
+                r = m_trackCellFilterR[t].process(r, StateVariableFilter::LOWPASS);
+            }
+            if (m_trackDelaySend[t] > 0.01f) {
+                float curBpm = m_sequencer.getBpm();
+                if (curBpm < 30.0f) curBpm = 120.0f;
+                int delaySamples = static_cast<int>(m_sampleRate * (60.0f / curBpm) * 0.75f);
+                if (delaySamples <= 0 || delaySamples >= TRACK_DELAY_SIZE) {
+                    delaySamples = static_cast<int>(m_sampleRate * 0.25f);
+                }
+                int readPos = (m_trackDelayWritePos[t] - delaySamples + TRACK_DELAY_SIZE) % TRACK_DELAY_SIZE;
+                float wetL = m_trackDelayBufL[t][readPos];
+                float wetR = m_trackDelayBufR[t][readPos];
+                float feedback = 0.40f;
+                m_trackDelayBufL[t][m_trackDelayWritePos[t]] = l + wetR * feedback;
+                m_trackDelayBufR[t][m_trackDelayWritePos[t]] = r + wetL * feedback;
+                m_trackDelayWritePos[t] = (m_trackDelayWritePos[t] + 1) % TRACK_DELAY_SIZE;
+
+                l += wetL * m_trackDelaySend[t];
+                r += wetR * m_trackDelaySend[t];
+            }
+        }
+    }
 };
 
 } // namespace myms
