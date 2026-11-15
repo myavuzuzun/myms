@@ -15,6 +15,24 @@ Rectangle {
     property var cellEditorModal: null
     property int currentPlayingRow: engine ? engine.currentRow : 0
 
+    property int trackColumnWidth: 160
+    property int rowHeaderWidth: 38
+    property int trackHeaderHeight: 28
+
+    function ensureTrackVisible(trackIdx) {
+        if (typeof matrixListView === "undefined" || !matrixListView) return
+        let trackX = trackIdx * root.trackColumnWidth
+        let trackRight = trackX + root.trackColumnWidth
+        let viewLeft = matrixListView.contentX
+        let viewRight = viewLeft + matrixListView.width
+
+        if (trackX < viewLeft) {
+            matrixListView.contentX = Math.max(0, trackX)
+        } else if (trackRight > viewRight) {
+            matrixListView.contentX = Math.min(Math.max(0, matrixListView.contentWidth - matrixListView.width), trackRight - matrixListView.width)
+        }
+    }
+
     property int nameRefreshCounter: 0
 
     function getTrackTitle(idx) {
@@ -30,6 +48,7 @@ Rectangle {
         target: engine
         function onInstrumentChanged(inst) {
             root.selectedTrack = inst
+            root.ensureTrackVisible(inst)
         }
         function onInstrumentNameChanged(inst, name) {
             root.nameRefreshCounter++
@@ -37,9 +56,14 @@ Rectangle {
         function onProjectLoaded() {
             root.selectedTrack = 0
             root.gridModified()
+            root.ensureTrackVisible(0)
         }
         function onNumTracksChanged() {
             root.gridModified()
+            if (engine && root.selectedTrack >= engine.numTracks) {
+                root.selectedTrack = Math.max(0, engine.numTracks - 1)
+            }
+            root.ensureTrackVisible(root.selectedTrack)
         }
         function onNumRowsChanged() {
             root.gridModified()
@@ -254,6 +278,9 @@ Rectangle {
             if (engine && !engine.isPlaying) {
                 engine.setCurrentRow(root.selectedRow)
             }
+            if (typeof matrixListView !== "undefined" && matrixListView) {
+                matrixListView.positionViewAtIndex(root.selectedRow, ListView.Contain)
+            }
             event.accepted = true
             return
         }
@@ -261,6 +288,9 @@ Rectangle {
             root.selectedRow = (root.selectedRow + 1) % nRows
             if (engine && !engine.isPlaying) {
                 engine.setCurrentRow(root.selectedRow)
+            }
+            if (typeof matrixListView !== "undefined" && matrixListView) {
+                matrixListView.positionViewAtIndex(root.selectedRow, ListView.Contain)
             }
             event.accepted = true
             return
@@ -272,6 +302,7 @@ Rectangle {
                 root.selectedColumn = 3
                 root.selectedTrack = (root.selectedTrack - 1 + nTracks) % nTracks
                 if (engine) engine.setSelectedInstrument(root.selectedTrack)
+                root.ensureTrackVisible(root.selectedTrack)
             }
             event.accepted = true
             return
@@ -283,6 +314,7 @@ Rectangle {
                 root.selectedColumn = 0
                 root.selectedTrack = (root.selectedTrack + 1) % nTracks
                 if (engine) engine.setSelectedInstrument(root.selectedTrack)
+                root.ensureTrackVisible(root.selectedTrack)
             }
             event.accepted = true
             return
@@ -414,6 +446,9 @@ Rectangle {
                     engine.setCell(root.selectedTrack, root.selectedRow, note, instId, vol, fxT, fxP)
                     root.gridModified()
                     root.selectedRow = (root.selectedRow + 1) % nRows
+                    if (typeof matrixListView !== "undefined" && matrixListView) {
+                        matrixListView.positionViewAtIndex(root.selectedRow, ListView.Contain)
+                    }
                 }
                 event.accepted = true
                 return
@@ -429,263 +464,299 @@ Rectangle {
         }
     }
 
-    ColumnLayout {
+    Item {
+        id: mainTrackerArea
         anchors.fill: parent
-        spacing: 0
 
-        // --- TRACK HEADER ROW ---
+        // 1. Pinned Top-Left Corner: Pattern Badge "P00"
         Rectangle {
-            Layout.fillWidth: true
-            height: 28
+            id: cornerBox
+            x: 0
+            y: 0
+            width: root.rowHeaderWidth
+            height: root.trackHeaderHeight
             color: theme.bgTrackHeader
             border.color: theme.border
             border.width: 1
+            z: 20
 
-            RowLayout {
+            Text {
+                anchors.centerIn: parent
+                text: "P" + (engine ? (engine.currentPattern < 10 ? "0" + engine.currentPattern : "" + engine.currentPattern) : "00")
+                font.pixelSize: 10
+                font.bold: true
+                font.family: "Monospace"
+                color: theme.accent
+            }
+        }
+
+        // 2. Pinned Top Bar: Track Headers Viewport (scrolls horizontally with matrixListView.contentX)
+        Item {
+            id: headerViewport
+            x: root.rowHeaderWidth
+            y: 0
+            width: parent.width - root.rowHeaderWidth
+            height: root.trackHeaderHeight
+            clip: true
+            z: 15
+
+            WheelHandler {
+                target: null
+                onWheel: (event) => {
+                    let delta = event.angleDelta.x !== 0 ? event.angleDelta.x : event.angleDelta.y
+                    let newX = matrixListView.contentX - delta
+                    matrixListView.contentX = Math.max(0, Math.min(matrixListView.contentWidth - matrixListView.width, newX))
+                }
+            }
+
+            Rectangle {
                 anchors.fill: parent
-                spacing: 0
+                color: theme.bgTrackHeader
+                border.color: theme.border
+                border.width: 1
+            }
 
-                Item {
-                    width: 38
+            Item {
+                id: headerContent
+                x: -matrixListView.contentX
+                y: 0
+                width: matrixListView.contentWidth
+                height: parent.height
+
+                Row {
+                    spacing: 0
                     height: parent.height
-                    Text {
-                        anchors.centerIn: parent
-                        text: "P" + (engine ? (engine.currentPattern < 10 ? "0" + engine.currentPattern : "" + engine.currentPattern) : "00")
-                        font.pixelSize: 10
-                        font.bold: true
-                        font.family: "Monospace"
-                        color: theme.accent
-                    }
-                }
 
-                Rectangle { width: 1; height: parent.height; color: theme.border }
-
-                Repeater {
-                    model: engine ? engine.numTracks : 1
-                    Rectangle {
-                        Layout.fillWidth: true
-                        height: parent.height
-                        color: (root.selectedTrack === index) ? theme.accent : theme.bgTrackHeader
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 6
-                            anchors.rightMargin: 4
-                            spacing: 4
-
-                            // Move track left
-                            Rectangle {
-                                width: 14
-                                height: 14
-                                radius: 2
-                                Layout.alignment: Qt.AlignVCenter
-                                color: moveLeftMouse.containsMouse ? "rgba(255,255,255,0.2)" : "transparent"
-                                visible: index > 0
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "◀"
-                                    font.pixelSize: 8
-                                    color: (root.selectedTrack === index) ? "#ffffff" : theme.textMuted
-                                }
-                                MouseArea {
-                                    id: moveLeftMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        if (engine) {
-                                            engine.moveTrack(index, index - 1)
-                                            root.selectedTrack = index - 1
-                                            root.gridModified()
-                                        }
-                                    }
-                                    ToolTip.visible: containsMouse
-                                    ToolTip.text: "Move Track Left"
-                                    ToolTip.delay: 300
-                                }
-                            }
-
-                            // Move track right
-                            Rectangle {
-                                width: 14
-                                height: 14
-                                radius: 2
-                                Layout.alignment: Qt.AlignVCenter
-                                color: moveRightMouse.containsMouse ? "rgba(255,255,255,0.2)" : "transparent"
-                                visible: engine && (index < engine.numTracks - 1)
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "▶"
-                                    font.pixelSize: 8
-                                    color: (root.selectedTrack === index) ? "#ffffff" : theme.textMuted
-                                }
-                                MouseArea {
-                                    id: moveRightMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        if (engine) {
-                                            engine.moveTrack(index, index + 1)
-                                            root.selectedTrack = index + 1
-                                            root.gridModified()
-                                        }
-                                    }
-                                    ToolTip.visible: containsMouse
-                                    ToolTip.text: "Move Track Right"
-                                    ToolTip.delay: 300
-                                }
-                            }
-
-                            TextInput {
-                                id: trkHeaderInput
-                                text: root.getTrackTitle(index)
-                                font.pixelSize: 10
-                                font.bold: true
-                                color: (root.selectedTrack === index) ? "#ffffff" : theme.textMain
-                                clip: true
-                                selectByMouse: true
-                                Layout.fillWidth: true
-                                Layout.alignment: Qt.AlignVCenter
-                                onActiveFocusChanged: {
-                                    if (activeFocus) root.selectedTrack = index
-                                }
-                                onEditingFinished: {
-                                    if (engine && text.trim().length > 0) {
-                                        let cleanName = text.trim()
-                                        if (cleanName.startsWith("T" + (index + 1) + ": ")) {
-                                            cleanName = cleanName.substring(("T" + (index + 1) + ": ").length)
-                                        }
-                                        engine.setInstrumentName(index, cleanName)
-                                    }
-                                }
-                            }
-
-                            // Track Engine Badge (SYNTH / SF2 / DRUMS)
-                            // Track Engine Badge (SYNTH / SF2 / DRUM / PLUGIN)
-                            Rectangle {
-                                width: 34
-                                height: 16
-                                radius: 2
-                                Layout.alignment: Qt.AlignVCenter
-                                property int trkType: engine ? engine.getTrackType(index) : 0
-                                color: (root.selectedTrack === index) ? "rgba(0,0,0,0.3)" : theme.bgWell
-                                border.color: (root.selectedTrack === index) ? "#ffffff" : theme.border
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: {
-                                        let t = parent.trkType
-                                        if (t === 1) return "SF2"
-                                        if (t === 2) return "DRUM"
-                                        if (t === 3) return "PLG"
-                                        return "SYN"
-                                    }
-                                    font.bold: true
-                                    font.pixelSize: 8
-                                    color: {
-                                        let t = parent.trkType
-                                        if (t === 1) return "#92ebb5"
-                                        if (t === 2) return "#f7b731"
-                                        if (t === 3) return "#3daee9"
-                                        return "#5cd6e8"
-                                    }
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (engine) {
-                                            let nextType = (parent.trkType + 1) % 4
-                                            engine.setTrackType(index, nextType)
-                                            root.gridModified()
-                                        }
-                                    }
-                                    ToolTip.visible: containsMouse
-                                    ToolTip.text: "Track Engine: Click to cycle (SYNTH / SF2 / DRUM / PLUGIN)"
-                                    ToolTip.delay: 400
-                                }
-                            }
-
-                            // Delete track button
-                            Rectangle {
-                                width: 14
-                                height: 14
-                                radius: 2
-                                Layout.alignment: Qt.AlignVCenter
-                                color: delMouse.containsMouse ? theme.stopAccent : "transparent"
-                                visible: (engine && engine.numTracks > 1)
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "×"
-                                    font.bold: true
-                                    font.pixelSize: 11
-                                    color: (root.selectedTrack === index) ? "#ffffff" : theme.textMuted
-                                }
-                                MouseArea {
-                                    id: delMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    onClicked: {
-                                        let target = index
-                                        if (root.selectedTrack >= engine.numTracks - 1) {
-                                            root.selectedTrack = Math.max(0, engine.numTracks - 2)
-                                        }
-                                        engine.removeTrack(target)
-                                        root.gridModified()
-                                    }
-                                }
-                            }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            z: -1
-                            onClicked: {
-                                root.selectedTrack = index
-                                if (engine) engine.setSelectedInstrument(index)
-                                root.forceActiveFocus()
-                            }
-                            onDoubleClicked: {
-                                root.selectedTrack = index
-                                if (engine) {
-                                    engine.setSelectedInstrument(index)
-                                    let trkType = engine.getTrackType(index)
-                                    root.requestEditInstrument(index, trkType)
-                                }
-                            }
-                        }
-
+                    Repeater {
+                        model: engine ? engine.numTracks : 1
                         Rectangle {
-                            anchors.right: parent.right
-                            width: 1
-                            height: parent.height
-                            color: theme.border
+                            width: root.trackColumnWidth
+                            height: root.trackHeaderHeight
+                            color: (root.selectedTrack === index) ? theme.accent : theme.bgTrackHeader
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 4
+                                anchors.rightMargin: 4
+                                spacing: 3
+
+                                // Move track left
+                                Rectangle {
+                                    width: 14
+                                    height: 14
+                                    radius: 2
+                                    Layout.alignment: Qt.AlignVCenter
+                                    color: moveLeftMouse.containsMouse ? "rgba(255,255,255,0.2)" : "transparent"
+                                    visible: index > 0
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "◀"
+                                        font.pixelSize: 8
+                                        color: (root.selectedTrack === index) ? "#ffffff" : theme.textMuted
+                                    }
+                                    MouseArea {
+                                        id: moveLeftMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            if (engine) {
+                                                engine.moveTrack(index, index - 1)
+                                                root.selectedTrack = index - 1
+                                                root.gridModified()
+                                            }
+                                        }
+                                        ToolTip.visible: containsMouse
+                                        ToolTip.text: "Move Track Left"
+                                        ToolTip.delay: 300
+                                    }
+                                }
+
+                                // Move track right
+                                Rectangle {
+                                    width: 14
+                                    height: 14
+                                    radius: 2
+                                    Layout.alignment: Qt.AlignVCenter
+                                    color: moveRightMouse.containsMouse ? "rgba(255,255,255,0.2)" : "transparent"
+                                    visible: engine && (index < engine.numTracks - 1)
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "▶"
+                                        font.pixelSize: 8
+                                        color: (root.selectedTrack === index) ? "#ffffff" : theme.textMuted
+                                    }
+                                    MouseArea {
+                                        id: moveRightMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            if (engine) {
+                                                engine.moveTrack(index, index + 1)
+                                                root.selectedTrack = index + 1
+                                                root.gridModified()
+                                            }
+                                        }
+                                        ToolTip.visible: containsMouse
+                                        ToolTip.text: "Move Track Right"
+                                        ToolTip.delay: 300
+                                    }
+                                }
+
+                                TextInput {
+                                    id: trkHeaderInput
+                                    text: root.getTrackTitle(index)
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    color: (root.selectedTrack === index) ? "#ffffff" : theme.textMain
+                                    clip: true
+                                    selectByMouse: true
+                                    Layout.fillWidth: true
+                                    Layout.alignment: Qt.AlignVCenter
+                                    onActiveFocusChanged: {
+                                        if (activeFocus) root.selectedTrack = index
+                                    }
+                                    onEditingFinished: {
+                                        if (engine && text.trim().length > 0) {
+                                            let cleanName = text.trim()
+                                            if (cleanName.startsWith("T" + (index + 1) + ": ")) {
+                                                cleanName = cleanName.substring(("T" + (index + 1) + ": ").length)
+                                            }
+                                            engine.setInstrumentName(index, cleanName)
+                                        }
+                                    }
+                                }
+
+                                // Track Engine Badge (SYNTH / SF2 / DRUM / PLUGIN)
+                                Rectangle {
+                                    width: 32
+                                    height: 16
+                                    radius: 2
+                                    Layout.alignment: Qt.AlignVCenter
+                                    property int trkType: engine ? engine.getTrackType(index) : 0
+                                    color: (root.selectedTrack === index) ? "rgba(0,0,0,0.3)" : theme.bgWell
+                                    border.color: (root.selectedTrack === index) ? "#ffffff" : theme.border
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: {
+                                            let t = parent.trkType
+                                            if (t === 1) return "SF2"
+                                            if (t === 2) return "DRUM"
+                                            if (t === 3) return "PLG"
+                                            return "SYN"
+                                        }
+                                        font.bold: true
+                                        font.pixelSize: 8
+                                        color: {
+                                            let t = parent.trkType
+                                            if (t === 1) return "#92ebb5"
+                                            if (t === 2) return "#f7b731"
+                                            if (t === 3) return "#3daee9"
+                                            return "#5cd6e8"
+                                        }
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (engine) {
+                                                let nextType = (parent.trkType + 1) % 4
+                                                engine.setTrackType(index, nextType)
+                                                root.gridModified()
+                                            }
+                                        }
+                                        ToolTip.visible: containsMouse
+                                        ToolTip.text: "Track Engine: Click to cycle (SYNTH / SF2 / DRUM / PLUGIN)"
+                                        ToolTip.delay: 400
+                                    }
+                                }
+
+                                // Delete track button
+                                Rectangle {
+                                    width: 14
+                                    height: 14
+                                    radius: 2
+                                    Layout.alignment: Qt.AlignVCenter
+                                    color: delMouse.containsMouse ? theme.stopAccent : "transparent"
+                                    visible: (engine && engine.numTracks > 1)
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "×"
+                                        font.bold: true
+                                        font.pixelSize: 11
+                                        color: (root.selectedTrack === index) ? "#ffffff" : theme.textMuted
+                                    }
+                                    MouseArea {
+                                        id: delMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        onClicked: {
+                                            let target = index
+                                            if (root.selectedTrack >= engine.numTracks - 1) {
+                                                root.selectedTrack = Math.max(0, engine.numTracks - 2)
+                                            }
+                                            engine.removeTrack(target)
+                                            root.gridModified()
+                                        }
+                                    }
+                                }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                z: -1
+                                onClicked: {
+                                    root.selectedTrack = index
+                                    if (engine) engine.setSelectedInstrument(index)
+                                    root.ensureTrackVisible(index)
+                                    root.forceActiveFocus()
+                                }
+                                onDoubleClicked: {
+                                    root.selectedTrack = index
+                                    if (engine) {
+                                        engine.setSelectedInstrument(index)
+                                        let trkType = engine.getTrackType(index)
+                                        root.requestEditInstrument(index, trkType)
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                anchors.right: parent.right
+                                width: 1
+                                height: parent.height
+                                color: theme.border
+                            }
                         }
                     }
-                }
 
-                // Add Track Button
-                Rectangle {
-                    width: 28
-                    height: parent.height
-                    color: addTrackMouse.containsMouse ? theme.btnHover : theme.btnBg
-                    Text {
-                        anchors.centerIn: parent
-                        text: "+"
-                        font.bold: true
-                        font.pixelSize: 14
-                        color: theme.accent
-                    }
-                    MouseArea {
-                        id: addTrackMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onClicked: {
-                            if (engine) {
-                                engine.addTrack()
-                                root.selectedTrack = engine.numTracks - 1
-                                engine.setSelectedInstrument(root.selectedTrack)
-                                root.gridModified()
+                    // Add Track Button
+                    Rectangle {
+                        width: 28
+                        height: root.trackHeaderHeight
+                        color: addTrackMouse.containsMouse ? theme.btnHover : theme.btnBg
+                        border.color: theme.border
+                        border.width: 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: "+"
+                            font.bold: true
+                            font.pixelSize: 14
+                            color: theme.accent
+                        }
+                        MouseArea {
+                            id: addTrackMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: {
+                                if (engine) {
+                                    engine.addTrack()
+                                    root.selectedTrack = engine.numTracks - 1
+                                    engine.setSelectedInstrument(root.selectedTrack)
+                                    root.gridModified()
+                                    root.ensureTrackVisible(root.selectedTrack)
+                                }
                             }
                         }
                     }
@@ -693,36 +764,168 @@ Rectangle {
             }
         }
 
-        // --- TRACKER PATTERN MATRIX (Compact 20px rows) ---
-        ScrollView {
-            id: scrollView
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+        // 3. Pinned Left Column: Row Numbers Viewport (scrolls vertically with matrixListView.contentY)
+        Item {
+            id: rowNumViewport
+            x: 0
+            y: root.trackHeaderHeight
+            width: root.rowHeaderWidth
+            height: parent.height - root.trackHeaderHeight
+            clip: true
+            z: 10
+
+            WheelHandler {
+                target: null
+                onWheel: (event) => {
+                    let newY = matrixListView.contentY - event.angleDelta.y
+                    matrixListView.contentY = Math.max(0, Math.min(matrixListView.contentHeight - matrixListView.height, newY))
+                }
+            }
+
+            Item {
+                id: rowNumContent
+                x: 0
+                y: -matrixListView.contentY
+                width: parent.width
+                height: matrixListView.contentHeight
+
+                Column {
+                    spacing: 0
+                    width: parent.width
+
+                    Repeater {
+                        model: engine ? engine.numRows : 32
+                        Rectangle {
+                            width: root.rowHeaderWidth
+                            height: 20
+                            property int rowIndex: index
+
+                            color: {
+                                if (root.engine && root.engine.isPlaying && root.engine.currentRow === index) {
+                                    return theme.playRow
+                                }
+                                if (root.engine && root.engine.isPaused && root.engine.currentRow === index) {
+                                    return theme.pauseRow
+                                }
+                                if (index === root.selectedRow) {
+                                    return theme.cursorRow
+                                }
+                                if (index % 16 === 0) {
+                                    return theme.bgRowBar
+                                }
+                                if (index % 4 === 0) {
+                                    return theme.bgRowBeat
+                                }
+                                return (index % 2 === 0) ? theme.bgWindow : theme.bgRowAlt
+                            }
+
+                            // Paused Row Border Highlight
+                            Rectangle {
+                                anchors.fill: parent
+                                color: "transparent"
+                                border.color: theme.pauseAccent
+                                border.width: 1
+                                visible: Boolean(root.engine && root.engine.isPaused && root.engine.currentRow === index)
+                                z: 10
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: {
+                                    if (root.engine && root.engine.isPaused && root.engine.currentRow === rowIndex) {
+                                        return "❚❚" + (rowIndex < 10 ? "0" + rowIndex : "" + rowIndex)
+                                    }
+                                    return (rowIndex < 10 ? "0" + rowIndex : "" + rowIndex)
+                                }
+                                font.pixelSize: (root.engine && root.engine.isPaused && root.engine.currentRow === rowIndex) ? 9 : 10
+                                font.bold: (rowIndex % 4 === 0 || (root.engine && root.engine.isPaused && root.engine.currentRow === rowIndex))
+                                font.family: "Monospace, JetBrains Mono, Hack, Noto Sans Mono"
+                                color: {
+                                    if (root.engine && root.engine.isPlaying && root.engine.currentRow === rowIndex) {
+                                        return "#ffffff"
+                                    }
+                                    if (root.engine && root.engine.isPaused && root.engine.currentRow === rowIndex) {
+                                        return theme.pauseAccent
+                                    }
+                                    return (rowIndex % 4 === 0) ? theme.textMain : theme.textDim
+                                }
+                            }
+
+                            Rectangle {
+                                anchors.right: parent.right
+                                width: 1
+                                height: parent.height
+                                color: theme.border
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
+                                    root.selectedRow = rowIndex
+                                    if (engine) engine.setCurrentRow(rowIndex)
+                                    root.forceActiveFocus()
+                                }
+                                onDoubleClicked: {
+                                    root.selectedRow = rowIndex
+                                    if (engine) {
+                                        engine.setCurrentRow(rowIndex)
+                                        engine.play()
+                                    }
+                                    root.forceActiveFocus()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Main Pattern Matrix Grid (scrolls both horizontally and vertically)
+        Item {
+            id: matrixArea
+            x: root.rowHeaderWidth
+            y: root.trackHeaderHeight
+            width: parent.width - root.rowHeaderWidth
+            height: parent.height - root.trackHeaderHeight
             clip: true
 
             ListView {
-                id: listView
-                width: scrollView.width
-                model: engine ? engine.numRows : 32
+                id: matrixListView
+                anchors.fill: parent
+                contentWidth: (engine ? engine.numTracks : 1) * root.trackColumnWidth + 28
+                flickableDirection: Flickable.HorizontalAndVerticalFlick
                 boundsBehavior: Flickable.StopAtBounds
+                clip: true
+
+                ScrollBar.horizontal: ScrollBar {
+                    id: hScrollBar
+                    policy: ScrollBar.AsNeeded
+                }
+                ScrollBar.vertical: ScrollBar {
+                    id: vScrollBar
+                    policy: ScrollBar.AsNeeded
+                }
 
                 Connections {
                     target: engine
                     function onCurrentRowChanged() {
                         if (engine.isPlaying || engine.isPaused) {
-                            listView.positionViewAtIndex(engine.currentRow, ListView.Center)
+                            matrixListView.positionViewAtIndex(engine.currentRow, ListView.Center)
                         }
                     }
                     function onPausedChanged() {
                         if (engine.isPaused) {
-                            listView.positionViewAtIndex(engine.currentRow, ListView.Center)
+                            matrixListView.positionViewAtIndex(engine.currentRow, ListView.Center)
                         }
                     }
                 }
 
+                model: engine ? engine.numRows : 32
+
                 delegate: Rectangle {
                     id: rowDelegate
-                    width: listView.width
+                    width: matrixListView.contentWidth
                     height: 20
                     property int rowIndex: index
 
@@ -751,67 +954,20 @@ Rectangle {
                         color: "transparent"
                         border.color: theme.pauseAccent
                         border.width: 1
-                        visible: (root.engine && root.engine.isPaused && root.engine.currentRow === index)
+                        visible: Boolean(root.engine && root.engine.isPaused && root.engine.currentRow === index)
                         z: 10
                     }
 
-                    RowLayout {
-                        anchors.fill: parent
+                    Row {
                         spacing: 0
-
-                        Item {
-                            width: 38
-                            height: parent.height
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: {
-                                    if (root.engine && root.engine.isPaused && root.engine.currentRow === rowIndex) {
-                                        return "❚❚" + (rowIndex < 10 ? "0" + rowIndex : "" + rowIndex)
-                                    }
-                                    return (rowIndex < 10 ? "0" + rowIndex : "" + rowIndex)
-                                }
-                                font.pixelSize: (root.engine && root.engine.isPaused && root.engine.currentRow === rowIndex) ? 9 : 10
-                                font.bold: (rowIndex % 4 === 0 || (root.engine && root.engine.isPaused && root.engine.currentRow === rowIndex))
-                                font.family: "Monospace, JetBrains Mono, Hack, Noto Sans Mono"
-                                color: {
-                                    if (root.engine && root.engine.isPlaying && root.engine.currentRow === rowIndex) {
-                                        return "#ffffff"
-                                    }
-                                    if (root.engine && root.engine.isPaused && root.engine.currentRow === rowIndex) {
-                                        return theme.pauseAccent
-                                    }
-                                    return (rowIndex % 4 === 0) ? theme.textMain : theme.textDim
-                                }
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    root.selectedRow = rowIndex
-                                    if (engine) engine.setCurrentRow(rowIndex)
-                                    root.forceActiveFocus()
-                                }
-                                onDoubleClicked: {
-                                    root.selectedRow = rowIndex
-                                    if (engine) {
-                                        engine.setCurrentRow(rowIndex)
-                                        engine.play()
-                                    }
-                                    root.forceActiveFocus()
-                                }
-                            }
-                        }
-
-                        Rectangle { width: 1; height: parent.height; color: theme.border }
+                        height: parent.height
 
                         Repeater {
                             model: engine ? engine.numTracks : 1
                             Item {
                                 id: cellItem
-                                Layout.fillWidth: true
-                                height: parent.height
+                                width: root.trackColumnWidth
+                                height: 20
                                 property int trackIdx: index
                                 property int activePattern: engine ? engine.currentPattern : 0
                                 property var cellData: (engine && activePattern >= 0) ? engine.getCell(trackIdx, rowIndex) : null
@@ -872,6 +1028,7 @@ Rectangle {
                                                     engine.setSelectedInstrument(cellItem.trackIdx)
                                                     if (!engine.isPlaying) engine.setCurrentRow(rowIndex)
                                                 }
+                                                root.ensureTrackVisible(cellItem.trackIdx)
                                                 root.forceActiveFocus()
                                             }
                                             onDoubleClicked: {
@@ -911,6 +1068,7 @@ Rectangle {
                                                     engine.setSelectedInstrument(cellItem.trackIdx)
                                                     if (!engine.isPlaying) engine.setCurrentRow(rowIndex)
                                                 }
+                                                root.ensureTrackVisible(cellItem.trackIdx)
                                                 root.forceActiveFocus()
                                             }
                                             onDoubleClicked: {
@@ -950,6 +1108,7 @@ Rectangle {
                                                     engine.setSelectedInstrument(cellItem.trackIdx)
                                                     if (!engine.isPlaying) engine.setCurrentRow(rowIndex)
                                                 }
+                                                root.ensureTrackVisible(cellItem.trackIdx)
                                                 root.forceActiveFocus()
                                             }
                                             onDoubleClicked: {
@@ -989,6 +1148,7 @@ Rectangle {
                                                     engine.setSelectedInstrument(cellItem.trackIdx)
                                                     if (!engine.isPlaying) engine.setCurrentRow(rowIndex)
                                                 }
+                                                root.ensureTrackVisible(cellItem.trackIdx)
                                                 root.forceActiveFocus()
                                             }
                                             onDoubleClicked: {
@@ -1011,6 +1171,7 @@ Rectangle {
                                                 engine.setCurrentRow(rowIndex)
                                             }
                                         }
+                                        root.ensureTrackVisible(cellItem.trackIdx)
                                         root.forceActiveFocus()
                                     }
                                     onDoubleClicked: {

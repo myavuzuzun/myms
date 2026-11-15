@@ -605,5 +605,54 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
 
+    def test_21_option_c_cross_track_instrument_routing(self):
+        # Create a fresh 2-track project
+        self.engine.newProject()
+        self.assertEqual(self.engine.numTracks, 1)
+        self.engine.addTrack()
+        self.assertEqual(self.engine.numTracks, 2)
+
+        # Set Track 0 as Synth (type 0), Track 1 as Synth (type 0)
+        self.engine.setTrackType(0, 0)
+        self.engine.setTrackType(1, 0)
+        self.engine.setInstrumentName(0, "Lead Synth")
+        self.engine.setInstrumentName(1, "Bass Synth")
+
+        # Cell on Track 0, Row 0 with Instrument 2 (targets Bass Synth on Track 1)
+        self.engine.setCell(0, 0, 60, 2, 200, 0, 0)
+        cell_t0_r0 = self.engine.getCell(0, 0)
+        self.assertEqual(cell_t0_r0["note"], 60)
+        self.assertEqual(cell_t0_r0["instrument"], 2)
+        self.assertEqual(cell_t0_r0["volume"], 200)
+
+        # Cell on Track 1, Row 0 with Instrument 1 (targets Lead Synth on Track 0)
+        self.engine.setCell(1, 0, 72, 1, 220, 0, 0)
+        cell_t1_r0 = self.engine.getCell(1, 0)
+        self.assertEqual(cell_t1_r0["note"], 72)
+        self.assertEqual(cell_t1_r0["instrument"], 1)
+
+        # Save and reload project to ensure cross-track instrument numbers persist accurately
+        with tempfile.NamedTemporaryFile(suffix=".myms", delete=False) as f:
+            tmp_path = f.name
+
+        try:
+            saved = self.engine.saveProject(tmp_path)
+            self.assertTrue(saved)
+
+            self.engine.newProject()
+            self.assertTrue(self.engine.openProject(tmp_path))
+            self.assertEqual(self.engine.numTracks, 2)
+
+            loaded_c0 = self.engine.getCell(0, 0)
+            self.assertEqual(loaded_c0["note"], 60)
+            self.assertEqual(loaded_c0["instrument"], 2)
+
+            loaded_c1 = self.engine.getCell(1, 0)
+            self.assertEqual(loaded_c1["note"], 72)
+            self.assertEqual(loaded_c1["instrument"], 1)
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+
 if __name__ == "__main__":
     unittest.main()

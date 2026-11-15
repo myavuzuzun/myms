@@ -907,56 +907,59 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
 
             for (int t = 0; t < numTracks; ++t) {
                 TrackerCell cell = m_sequencer.getPatternCell(triggeredPat, t, triggeredRow);
-                int type = getTrackType(t);
+                // Option C: Cross-Track Instrument Routing / Multiplexing
+                // If cell.instrument is specified (1-based, e.g. 01 for Track 1/Inst 0), route to that instrument; otherwise default to current track t.
+                int targetInst = (cell.instrument > 0 && cell.instrument <= numTracks) ? (cell.instrument - 1) : t;
+                int type = getTrackType(targetInst);
 
                 if (cell.note == NOTE_OFF) {
-                    if (t < static_cast<int>(m_trackPreFx.size())) {
-                        int maxPre = (t < MAX_INSTRUMENTS) ? m_trackPreFxMaxSlot[t].load(std::memory_order_relaxed) : 0;
+                    if (targetInst < static_cast<int>(m_trackPreFx.size())) {
+                        int maxPre = (targetInst < MAX_INSTRUMENTS) ? m_trackPreFxMaxSlot[targetInst].load(std::memory_order_relaxed) : 0;
                         for (int s = 0; s < maxPre; ++s) {
-                            if (m_trackPreFx[t][s] && m_trackPreFx[t][s]->isLoaded()) {
-                                m_trackPreFx[t][s]->noteOff(cell.note);
+                            if (m_trackPreFx[targetInst][s] && m_trackPreFx[targetInst][s]->isLoaded()) {
+                                m_trackPreFx[targetInst][s]->noteOff(cell.note);
                             }
                         }
                     }
                     if (type == TRACK_TYPE_SOUNDFONT) {
-                        m_soundfont.noteOff(t, cell.note);
+                        m_soundfont.noteOff(targetInst, cell.note);
                     } else if (type == TRACK_TYPE_PLUGIN) {
-                        if (t < static_cast<int>(m_plugins.size()) && m_plugins[t]) {
-                            m_plugins[t]->noteOff(cell.note);
+                        if (targetInst < static_cast<int>(m_plugins.size()) && m_plugins[targetInst]) {
+                            m_plugins[targetInst]->noteOff(cell.note);
                         }
-                    } else if (type == TRACK_TYPE_SYNTH && t < static_cast<int>(m_instruments.size())) {
-                        m_instruments[t].noteOff(cell.note);
+                    } else if (type == TRACK_TYPE_SYNTH && targetInst < static_cast<int>(m_instruments.size())) {
+                        m_instruments[targetInst].noteOff(cell.note);
                     }
                 } else if (cell.note <= 127) {
                     float vel = (cell.volume == 255) ? 1.0f : (cell.volume / 128.0f);
                     
-                    if (t < static_cast<int>(m_trackPreFx.size())) {
-                        int maxPre = (t < MAX_INSTRUMENTS) ? m_trackPreFxMaxSlot[t].load(std::memory_order_relaxed) : 0;
+                    if (targetInst < static_cast<int>(m_trackPreFx.size())) {
+                        int maxPre = (targetInst < MAX_INSTRUMENTS) ? m_trackPreFxMaxSlot[targetInst].load(std::memory_order_relaxed) : 0;
                         for (int s = 0; s < maxPre; ++s) {
-                            if (m_trackPreFx[t][s] && m_trackPreFx[t][s]->isLoaded()) {
-                                m_trackPreFx[t][s]->noteOn(cell.note, vel);
+                            if (m_trackPreFx[targetInst][s] && m_trackPreFx[targetInst][s]->isLoaded()) {
+                                m_trackPreFx[targetInst][s]->noteOn(cell.note, vel);
                             }
                         }
                     }
 
                     if (type == TRACK_TYPE_SOUNDFONT) {
-                        int preset = getTrackSf2Preset(t);
-                        m_soundfont.setChannelPreset(t, preset);
-                        m_soundfont.noteOn(t, cell.note, vel);
+                        int preset = getTrackSf2Preset(targetInst);
+                        m_soundfont.setChannelPreset(targetInst, preset);
+                        m_soundfont.noteOn(targetInst, cell.note, vel);
                     } else if (type == TRACK_TYPE_DRUMS) {
                         int pad = (cell.note >= 36 && cell.note <= 43) ? (cell.note - 36) : (cell.note % NUM_DRUM_PADS);
                         m_drumSampler.triggerPad(pad, vel);
                     } else if (type == TRACK_TYPE_PLUGIN) {
-                        if (t < static_cast<int>(m_plugins.size()) && m_plugins[t]) {
-                            m_plugins[t]->noteOn(cell.note, vel);
+                        if (targetInst < static_cast<int>(m_plugins.size()) && m_plugins[targetInst]) {
+                            m_plugins[targetInst]->noteOn(cell.note, vel);
                         }
                     } else {
-                        if (cell.effectType == 0x10 && t < static_cast<int>(m_instruments.size())) {
+                        if (cell.effectType == 0x10 && targetInst < static_cast<int>(m_instruments.size())) {
                             float cutoff = 150.0f + (cell.effectParam / 255.0f) * 10000.0f;
-                            m_instruments[t].getParams().filterCutoff = cutoff;
+                            m_instruments[targetInst].getParams().filterCutoff = cutoff;
                         }
-                        if (t < static_cast<int>(m_instruments.size())) {
-                            m_instruments[t].noteOn(cell.note, vel);
+                        if (targetInst < static_cast<int>(m_instruments.size())) {
+                            m_instruments[targetInst].noteOn(cell.note, vel);
                         }
                     }
                 }

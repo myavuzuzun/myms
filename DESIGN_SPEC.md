@@ -41,6 +41,7 @@
 - **Tracker Columns per Track**:
   - `NOTE`: Musical note and octave (e.g. `C-4`, `F#3`, `OFF`, `---`).
   - `INST`: Instrument ID (`01`, `02`, `03`... corresponding in hex to Track 1, Track 2, Track 3...).
+    - **Option C Cross-Track Instrument Routing / Multiplexing**: A cell's `INST` column targets that specific instrument engine (`01` = Instrument 1, `02` = Instrument 2, etc.) even when placed on another track. If `cell.instrument == 0`, it defaults to the current track's own instrument. Enables classic tracker polyphony (e.g. playing chords of Instrument 1 across multiple tracks) and cross-track multiplexing with zero CPU overhead on the real-time audio thread.
   - `VOL`: Step volume / velocity (`00`–`FF` in hex, `--` = 255 default max).
   - `FX`: Parameter locks & effects commands + value in hex (e.g. `102A` = Command `10` Filter Cutoff with value `2A` / 42; `01` Pitch Up, `02` Pitch Down, `0C` Retrigger/Roll, `0E` Delay).
 - **Sub-Column Navigation & Hex Editing**:
@@ -48,6 +49,13 @@
   - Active sub-column is visibly highlighted with an elegant KDE Breeze highlight box.
   - Direct typing on sub-columns: `0-9` and `+`/`-` for Inst; `0-9, A-F` for Vol and FX.
   - Column-specific Delete key clears only the selected sub-column without erasing the entire cell (`Shift+Del` clears whole cell).
+- **Consistent Fixed Track Width & 2D Synchronized Scrolling (Renoise / Polyend Style)**:
+  - Tracks in the pattern matrix maintain a fixed, consistent width (160px) regardless of how many tracks exist. Tracks no longer squish or expand uncontrollably with screen dimensions.
+  - **Pinned Left Column**: Pinned 38px row numbers column (`00`..`NN`) on the left with lockstep vertical scrolling (`y: -matrixListView.contentY`).
+  - **Pinned Top Header**: Pinned 28px track headers bar at the top with lockstep horizontal scrolling (`x: -matrixListView.contentX`).
+  - **Pinned Top-Left Corner**: Dedicated `P00` pattern badge anchored at (0, 0), staying frozen in place.
+  - **Smooth Horizontal & Vertical Scrolling**: Full 2D scrolling (`Flickable.HorizontalAndVerticalFlick`) with `ScrollBar.horizontal` and `ScrollBar.vertical` appearing automatically when tracks exceed viewport width.
+  - **Cursor Auto-Scroll**: Navigating across tracks with Left/Right keys or selecting instruments smoothly auto-scrolls horizontally (`ensureTrackVisible`) so the active track is always in view; Up/Down keys auto-scroll vertically.
 - **Step Cell Inspector & Editor Modal (`StepCellEditorModal`)**:
   - Double-clicking any cell opens a full-featured in-app editor modal.
   - Interactive semitone buttons (`C`..`B`, `OFF`, `---`) with octave stepper and MIDI note number readout.
@@ -62,9 +70,9 @@
   - Creating a new pattern (via `+` on the top toolbar PAT selector) or duplicating a pattern creates the pattern in the project without automatically appending it to the song arrangement structure (`m_songOrder`).
   - Removed duplicate toolbar toggle and redundant arranger buttons: the Song Arranger bar features a dedicated `[ PAT LOOP ]` / `[ SONG MODE ]` pill button and `[ + STEP ]` append action, keeping the interface uncluttered and distraction-free.
   - The song structure remains strictly author-controlled.
-- **Track & Plugin Effect Reordering (Dual Mode: Drag & Drop + Arrow Buttons)**:
-  - **Track Order Rearranging**: Tracks can be reordered via tactile **Drag & Drop** using the `⠿` grip handle in the Mixer channel strip header (dragging a ghost badge `⇄ #N: Name` over another strip with glowing drop indicators), or via the precision `◀` and `▶` step buttons (`moveTrack(from, to)`). Reorders synth state, plugins, mixer controls, Pre/Post FX chains, and sequencer cells atomically.
-  - **Plugin Effect Reordering**: Pre-FX and Post-FX in `TrackFxModal` can be reordered via **Drag & Drop** using the `⠿` grip handle on each effect card, or via the `▲` and `▼` step buttons (`swapTrackFx`, `swapTrackPreFx`).
+- **Track & Plugin Effect Reordering (Precision Step Buttons)**:
+  - **Track Order Rearranging**: Tracks can be reordered via precision `◀` and `▶` step buttons (`moveTrack(from, to)`) in both the Tracker View column headers and Mixer channel strip headers. Reorders synth state, plugins, mixer controls, Pre/Post FX chains, and sequencer cells atomically.
+  - **Plugin Effect Reordering**: Pre-FX and Post-FX in `TrackFxModal` can be reordered via precision `▲` and `▼` step buttons (`swapTrackFx`, `swapTrackPreFx`).
   - **Plugin Effect Power Bypass Toggle**: Each effect has a dedicated zero-allocation `[ ⏻ ]` bypass button. When bypassed, the real-time audio thread passes audio dry with zero CPU overhead. Bypass state is fully persisted in `.myms` project files.
 - **2-Octave Piano Keyboard Entry**:
   - Native auto-detected **Turkish Q layout** (`A..Ğ` lower octave, `Q..I` upper octave, `ı`/`i` separation, `<`/`>` octave shifts) with live toggle to standard **US QWERTY**.
