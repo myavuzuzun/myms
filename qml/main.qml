@@ -386,7 +386,7 @@ Item {
                                         onClicked: {
                                             if (mymsEngine) {
                                                 let cur = mymsEngine.numRows
-                                                let nextVal = Math.max(1, (cur > 16 && cur % 16 === 0) ? cur - 16 : cur - 1)
+                                                let nextVal = Math.max(1, cur - 1)
                                                 mymsEngine.setNumRows(nextVal)
                                             }
                                         }
@@ -455,7 +455,7 @@ Item {
                                         onClicked: {
                                             if (mymsEngine) {
                                                 let cur = mymsEngine.numRows
-                                                let nextVal = Math.min(512, (cur % 16 === 0) ? cur + 16 : cur + 1)
+                                                let nextVal = Math.min(512, cur + 1)
                                                 mymsEngine.setNumRows(nextVal)
                                             }
                                         }
@@ -524,31 +524,6 @@ Item {
                                     }
                                 }
                             }
-                        }
-                    }
-
-                    // Song Mode Toggle
-                    Button {
-                        id: songModeBtn
-                        implicitWidth: 46
-                        implicitHeight: 24
-                        Layout.alignment: Qt.AlignVCenter
-                        checkable: true
-                        checked: mymsEngine ? mymsEngine.isSongMode : false
-                        onClicked: if (mymsEngine) mymsEngine.toggleSongMode()
-
-                        background: Rectangle {
-                            color: songModeBtn.checked ? theme.accent : (songModeBtn.hovered ? theme.btnHover : theme.btnBg)
-                            radius: 2
-                            border.color: songModeBtn.checked ? theme.accent : theme.border
-                        }
-
-                        contentItem: Text {
-                            anchors.centerIn: parent
-                            text: (mymsEngine && mymsEngine.isSongMode) ? "SONG" : "PAT"
-                            font.bold: true
-                            font.pixelSize: 9
-                            color: songModeBtn.checked ? "#ffffff" : theme.textMuted
                         }
                     }
 

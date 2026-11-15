@@ -272,38 +272,6 @@ Rectangle {
                     ToolTip.text: "Append duplicate step into song"
                     ToolTip.delay: 400
                 }
-
-                // Add Fresh Blank Pattern Button
-                Button {
-                    implicitWidth: 82
-                    implicitHeight: 26
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "+ NEW PAT"
-                    font.bold: true
-                    font.pixelSize: 10
-                    background: Rectangle {
-                        color: parent.hovered ? theme.playAccent : theme.btnBg
-                        border.color: theme.border
-                        radius: 3
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        font: parent.font
-                        color: parent.parent.hovered ? "#ffffff" : theme.playAccent
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    onClicked: {
-                        if (engine) {
-                            let newPat = engine.addPattern()
-                            engine.setSongOrderIndex(engine.songOrderLength - 1)
-                            engine.setCurrentPattern(newPat)
-                        }
-                    }
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Create fresh blank pattern and add to song"
-                    ToolTip.delay: 400
-                }
             }
         }
 

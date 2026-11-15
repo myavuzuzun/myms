@@ -57,9 +57,10 @@
 - **Arbitrary Pattern Row Length (1..512 Rows)**:
   - Eliminated hardcoded row presets (`16`, `32`, `64`).
   - Replaced with an interactive arbitrary row control `[ − ] [ 32 ] [ + ]` in the top transport toolbar.
-  - Supports direct numeric typing of any row count between 1 and 512, plus step increment/decrement buttons.
-- **Pattern Creation Isolation**:
-  - Creating a new pattern (`+ NEW PAT`) or duplicating a pattern (`DUPLICATE`) creates the pattern in the project without automatically appending it to the song arrangement structure (`m_songOrder`).
+  - Supports direct numeric typing of any row count between 1 and 512, plus single-step increment/decrement buttons (`−1` / `+1`).
+- **Pattern Creation Isolation & Streamlined Arranger**:
+  - Creating a new pattern (via `+` on the top toolbar PAT selector) or duplicating a pattern creates the pattern in the project without automatically appending it to the song arrangement structure (`m_songOrder`).
+  - Removed duplicate toolbar toggle and redundant arranger buttons: the Song Arranger bar features a dedicated `[ PAT LOOP ]` / `[ SONG MODE ]` pill button and `[ + STEP ]` append action, keeping the interface uncluttered and distraction-free.
   - The song structure remains strictly author-controlled.
 - **Track & Plugin Effect Reordering & Bypass**:
   - **Track Order Rearranging**: Tracks can be moved left and right via `◀` and `▶` buttons on Mixer channel strips and Tracker matrix headers (`moveTrack(from, to)`). Reorders synth state, plugins, mixer controls, Pre/Post FX chains, and sequencer cells atomically.
