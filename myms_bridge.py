@@ -487,6 +487,10 @@ class MymsEngine(QObject):
         self.lib.myms_get_num_patterns.restype = ctypes.c_int
         self.lib.myms_get_current_pattern.restype = ctypes.c_int
         self.lib.myms_set_current_pattern.argtypes = [ctypes.c_int]
+        self.lib.myms_get_pattern_num_rows.argtypes = [ctypes.c_int]
+        self.lib.myms_get_pattern_num_rows.restype = ctypes.c_int
+        self.lib.myms_set_pattern_num_rows.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_set_pattern_num_rows.restype = None
         self.lib.myms_add_pattern.restype = ctypes.c_int
         self.lib.myms_duplicate_pattern.argtypes = [ctypes.c_int]
         self.lib.myms_duplicate_pattern.restype = ctypes.c_int
@@ -554,6 +558,11 @@ class MymsEngine(QObject):
         if pat != self._current_pattern:
             self._current_pattern = pat
             self.currentPatternChanged.emit(self._current_pattern)
+
+        rows = self.lib.myms_get_num_rows()
+        if rows != self._num_rows:
+            self._num_rows = rows
+            self.numRowsChanged.emit(self._num_rows)
 
         so_idx = self.lib.myms_get_song_order_index()
         if so_idx != self._song_order_index:
@@ -895,11 +904,34 @@ class MymsEngine(QObject):
         self.drumPadsChanged.emit()
 
     # Pattern & Song Sequencer Slots
+    @pyqtSlot(int, result=int)
+    def getPatternNumRows(self, pat):
+        return self.lib.myms_get_pattern_num_rows(pat)
+
+    @pyqtSlot(int, int)
+    def setPatternNumRows(self, pat, rows):
+        self.lib.myms_set_pattern_num_rows(pat, rows)
+        if pat == self._current_pattern:
+            new_rows = self.lib.myms_get_num_rows()
+            if new_rows != self._num_rows:
+                self._num_rows = new_rows
+                self.numRowsChanged.emit(self._num_rows)
+            if self._current_row >= self._num_rows:
+                self.setCurrentRow(0)
+
     @pyqtSlot(int)
     def setCurrentPattern(self, pat):
         self.lib.myms_set_current_pattern(pat)
         self._current_pattern = self.lib.myms_get_current_pattern()
         self.currentPatternChanged.emit(self._current_pattern)
+        new_rows = self.lib.myms_get_num_rows()
+        if new_rows != self._num_rows:
+            self._num_rows = new_rows
+            self.numRowsChanged.emit(self._num_rows)
+        cur_row = self.lib.myms_get_current_row()
+        if cur_row != self._current_row:
+            self._current_row = cur_row
+            self.currentRowChanged.emit(self._current_row)
         self.gridCellChanged.emit(0, 0)
 
     @pyqtSlot(result=int)
@@ -909,6 +941,10 @@ class MymsEngine(QObject):
         self._current_pattern = idx
         self.numPatternsChanged.emit(self._num_patterns)
         self.currentPatternChanged.emit(self._current_pattern)
+        new_rows = self.lib.myms_get_num_rows()
+        if new_rows != self._num_rows:
+            self._num_rows = new_rows
+            self.numRowsChanged.emit(self._num_rows)
         self.songOrderChanged.emit()
         so_idx = self.lib.myms_get_song_order_index()
         self._song_order_index = so_idx
@@ -923,6 +959,10 @@ class MymsEngine(QObject):
         self._current_pattern = idx
         self.numPatternsChanged.emit(self._num_patterns)
         self.currentPatternChanged.emit(self._current_pattern)
+        new_rows = self.lib.myms_get_num_rows()
+        if new_rows != self._num_rows:
+            self._num_rows = new_rows
+            self.numRowsChanged.emit(self._num_rows)
         self.songOrderChanged.emit()
         so_idx = self.lib.myms_get_song_order_index()
         self._song_order_index = so_idx
@@ -938,6 +978,10 @@ class MymsEngine(QObject):
             self._current_pattern = self.lib.myms_get_current_pattern()
             self.numPatternsChanged.emit(self._num_patterns)
             self.currentPatternChanged.emit(self._current_pattern)
+            new_rows = self.lib.myms_get_num_rows()
+            if new_rows != self._num_rows:
+                self._num_rows = new_rows
+                self.numRowsChanged.emit(self._num_rows)
             self.songOrderChanged.emit()
             so_idx = self.lib.myms_get_song_order_index()
             self._song_order_index = so_idx
@@ -2087,9 +2131,10 @@ class MymsEngine(QObject):
             # Save all patterns
             cur_pat = self.currentPattern
             for pat_idx in range(self.numPatterns):
+                pat_num_rows = self.getPatternNumRows(pat_idx)
                 pat_cells = []
                 for t in range(self.numTracks):
-                    for r in range(self.numRows):
+                    for r in range(pat_num_rows):
                         n = ctypes.c_uint8(0)
                         inst = ctypes.c_uint8(0)
                         vol = ctypes.c_uint8(0)
@@ -2110,7 +2155,10 @@ class MymsEngine(QObject):
                                 "effect_type": fxT.value,
                                 "effect_param": fxP.value
                             })
-                data["patterns"].append(pat_cells)
+                data["patterns"].append({
+                    "num_rows": pat_num_rows,
+                    "cells": pat_cells
+                })
 
             with open(target_path, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2)
@@ -2282,7 +2330,15 @@ class MymsEngine(QObject):
                 while self.numPatterns > len(patterns_data):
                     self.removePattern(self.numPatterns - 1)
 
-                for p_idx, p_cells in enumerate(patterns_data):
+                for p_idx, p_data in enumerate(patterns_data):
+                    if isinstance(p_data, dict):
+                        p_rows = p_data.get("num_rows", self.numRows)
+                        p_cells = p_data.get("cells", [])
+                    else:
+                        p_rows = self.numRows
+                        p_cells = p_data
+
+                    self.setPatternNumRows(p_idx, p_rows)
                     for cell in p_cells:
                         t = cell.get("track", 0)
                         r = cell.get("row", 0)

@@ -235,6 +235,15 @@ public:
         return DEFAULT_NUM_ROWS;
     }
 
+    void setPatternNumRows(int pat, int rows) {
+        if (pat >= 0 && pat < static_cast<int>(m_patterns.size())) {
+            m_patterns[pat].setRowsCount(rows);
+            if (pat == m_currentPattern && m_currentRow >= m_patterns[pat].numRows) {
+                m_currentRow = 0;
+            }
+        }
+    }
+
     int getCurrentPattern() const {
         return std::clamp(m_currentPattern, 0, std::max(0, static_cast<int>(m_patterns.size()) - 1));
     }

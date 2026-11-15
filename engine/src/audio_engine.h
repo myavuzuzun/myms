@@ -235,6 +235,8 @@ public:
     int getNumPatterns() const;
     int getCurrentPattern() const;
     void setCurrentPattern(int pat);
+    int getPatternNumRows(int pat) const;
+    void setPatternNumRows(int pat, int rows);
     int addPattern();
     int duplicatePattern(int sourcePat);
     bool removePattern(int pat);

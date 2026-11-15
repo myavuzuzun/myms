@@ -173,6 +173,8 @@ bool myms_move_track(int from_idx, int to_idx);
 int myms_get_num_patterns();
 int myms_get_current_pattern();
 void myms_set_current_pattern(int pat);
+int myms_get_pattern_num_rows(int pat);
+void myms_set_pattern_num_rows(int pat, int rows);
 int myms_add_pattern();
 int myms_duplicate_pattern(int source_pat);
 bool myms_remove_pattern(int pat);

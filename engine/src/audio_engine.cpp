@@ -270,11 +270,13 @@ bool AudioEngine::isLooping() const {
 }
 
 int AudioEngine::getNumRows() const {
-    return m_sequencer.getNumRows();
+    int curPat = getCurrentPattern();
+    return m_sequencer.getPatternNumRows(curPat);
 }
 
 void AudioEngine::setNumRows(int rows) {
-    m_sequencer.setNumRows(rows);
+    int curPat = getCurrentPattern();
+    m_sequencer.setPatternNumRows(curPat, rows);
 }
 
 int AudioEngine::getNumTracks() const {
@@ -737,6 +739,14 @@ int AudioEngine::getCurrentPattern() const {
 void AudioEngine::setCurrentPattern(int pat) {
     m_sequencer.setCurrentPattern(pat);
     m_uiCurrentPattern.store(m_sequencer.getCurrentPattern(), std::memory_order_relaxed);
+}
+
+int AudioEngine::getPatternNumRows(int pat) const {
+    return m_sequencer.getPatternNumRows(pat);
+}
+
+void AudioEngine::setPatternNumRows(int pat, int rows) {
+    m_sequencer.setPatternNumRows(pat, rows);
 }
 
 int AudioEngine::addPattern() {

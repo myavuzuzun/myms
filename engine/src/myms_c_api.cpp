@@ -320,6 +320,14 @@ void myms_set_current_pattern(int pat) {
     myms::AudioEngine::instance().setCurrentPattern(pat);
 }
 
+int myms_get_pattern_num_rows(int pat) {
+    return myms::AudioEngine::instance().getPatternNumRows(pat);
+}
+
+void myms_set_pattern_num_rows(int pat, int rows) {
+    myms::AudioEngine::instance().setPatternNumRows(pat, rows);
+}
+
 int myms_add_pattern() {
     return myms::AudioEngine::instance().addPattern();
 }

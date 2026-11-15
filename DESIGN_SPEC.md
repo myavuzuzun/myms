@@ -329,7 +329,20 @@
     - **Menus & Context Integration**:
       - Main window **Edit** menu: `Cu&t Chunk` (<kbd>Ctrl+X</kbd>), `&Copy Chunk` (<kbd>Ctrl+C</kbd>), `&Paste Chunk` (<kbd>Ctrl+V</kbd>), `&Delete Chunk` (<kbd>Del</kbd>), `Select &All Pattern` (<kbd>Ctrl+A</kbd>).
       - Tracker grid right-click context menu: quick one-click Cut, Copy, Paste, Delete, Select All, Deselect, Edit Cell Details, and Edit Instrument.
+  - **Dynamic Per-Pattern Row Counts & Project Persistence (`tracker_sequencer.h`, `audio_engine.cpp`, `myms_bridge.py`, `qml/main.qml`, `qml/TrackerView.qml`)**:
+    - **C++ DSP Engine**:
+      - Added `setPatternNumRows(int pat, int rows)` to `myms::TrackerSequencer` and `AudioEngine`.
+      - Updated `AudioEngine::getNumRows()` and `setNumRows(int rows)` to operate dynamically on the active pattern index (`getCurrentPattern()`).
+      - Exported C API functions `myms_get_pattern_num_rows(int pat)` and `myms_set_pattern_num_rows(int pat, int rows)`.
+    - **Python Bridge Reactive Synchronization**:
+      - Updated `setCurrentPattern()` in `myms_bridge.py` to query the new pattern's row length via `myms_get_num_rows()` and emit `numRowsChanged` whenever pattern row counts differ.
+      - Synchronized `_on_ui_tick()`, `addPattern()`, `duplicatePattern()`, and `removePattern()` to keep Python `_num_rows` and QML models strictly aligned.
+      - Enhanced `.myms` project file format to serialize `num_rows` per pattern dictionary while maintaining complete backward compatibility with older flat cell-array project files.
+    - **QML UI Binding Updates**:
+      - Top toolbar `rowsInput` text field responds immediately to both `numRowsChanged` and `currentPatternChanged`, updating displayed row count without needing manual edits.
+      - `TrackerView.qml` clamps `selectedRow` safely if switching from a longer pattern to a shorter pattern, preventing out-of-bounds selection errors.
   - **Comprehensive Verification Suite**:
     - 7 dedicated unit and integration tests in `tests/test_phase4_chunk_selection.py` validating single-cell and multi-track copy/paste, cut, delete, boundary clipping, QML selection helper methods, Escape handling, and Edit menu actions.
-    - Full DAW test suite passing across all phases (41/41 unit tests OK).
+    - 4 dedicated unit and integration tests in `tests/test_phase4_pattern_rows.py` validating per-pattern row switching, cell preservation, project save/load serialization, backward compatibility, and QML UI input synchronization.
+    - Full DAW test suite passing across all phases (45/45 unit tests OK).
   - Git checkpoint commit and `phase-4` branch.

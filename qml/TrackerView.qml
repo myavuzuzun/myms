@@ -165,6 +165,9 @@ Rectangle {
         }
         function onNumRowsChanged() {
             root.clearSelection()
+            if (engine && root.selectedRow >= engine.numRows) {
+                root.selectedRow = Math.max(0, engine.numRows - 1)
+            }
             root.gridModified()
         }
         function onGridCellChanged(track, row) {
@@ -175,6 +178,9 @@ Rectangle {
         }
         function onCurrentPatternChanged() {
             root.clearSelection()
+            if (engine && root.selectedRow >= engine.numRows) {
+                root.selectedRow = Math.max(0, engine.numRows - 1)
+            }
             root.gridModified()
         }
         function onNumPatternsChanged() {

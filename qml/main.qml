@@ -449,6 +449,11 @@ Item {
                                                 rowsInput.text = "" + newRows
                                             }
                                         }
+                                        function onCurrentPatternChanged() {
+                                            if (!rowsInput.isEditing && mymsEngine) {
+                                                rowsInput.text = "" + mymsEngine.numRows
+                                            }
+                                        }
                                     }
                                 }
 
