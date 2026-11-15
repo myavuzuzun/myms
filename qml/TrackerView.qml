@@ -4,6 +4,7 @@ import QtQuick.Layouts
 
 Rectangle {
     id: root
+    objectName: "trackerView"
     StudioTheme { id: theme }
 
     color: theme.bgWindow
@@ -18,6 +19,101 @@ Rectangle {
     property int trackColumnWidth: 160
     property int rowHeaderWidth: 38
     property int trackHeaderHeight: 28
+
+    // ==========================================
+    // Chunk Selection State & Helpers
+    // ==========================================
+    property bool hasSelection: false
+    property int selStartTrack: -1
+    property int selStartRow: -1
+    property int selEndTrack: -1
+    property int selEndRow: -1
+    property bool isSelecting: false
+
+    function minSelectedTrack() {
+        return Math.min(selStartTrack, selEndTrack)
+    }
+    function maxSelectedTrack() {
+        return Math.max(selStartTrack, selEndTrack)
+    }
+    function minSelectedRow() {
+        return Math.min(selStartRow, selEndRow)
+    }
+    function maxSelectedRow() {
+        return Math.max(selStartRow, selEndRow)
+    }
+    function isCellSelected(track, row) {
+        if (!hasSelection) return false
+        return (track >= minSelectedTrack() && track <= maxSelectedTrack() &&
+                row >= minSelectedRow() && row <= maxSelectedRow())
+    }
+    function clearSelection() {
+        hasSelection = false
+        selStartTrack = -1
+        selStartRow = -1
+        selEndTrack = -1
+        selEndRow = -1
+        isSelecting = false
+    }
+    function selectAll() {
+        let nTracks = engine ? engine.numTracks : 1
+        let nRows = engine ? engine.numRows : 32
+        selStartTrack = 0
+        selStartRow = 0
+        selEndTrack = nTracks - 1
+        selEndRow = nRows - 1
+        hasSelection = true
+    }
+
+    function copySelection() {
+        if (!engine) return
+        if (hasSelection) {
+            engine.copyRange(minSelectedTrack(), minSelectedRow(), maxSelectedTrack(), maxSelectedRow())
+        } else {
+            engine.copyRange(selectedTrack, selectedRow, selectedTrack, selectedRow)
+        }
+    }
+
+    function cutSelection() {
+        if (!engine) return
+        if (hasSelection) {
+            engine.cutRange(minSelectedTrack(), minSelectedRow(), maxSelectedTrack(), maxSelectedRow())
+            hasSelection = false
+            gridModified()
+        } else {
+            engine.cutRange(selectedTrack, selectedRow, selectedTrack, selectedRow)
+            gridModified()
+        }
+    }
+
+    function pasteClipboard() {
+        if (!engine) return
+        engine.pasteClipboard(selectedTrack, selectedRow)
+        gridModified()
+    }
+
+    function deleteSelection() {
+        if (!engine) return
+        if (hasSelection) {
+            engine.deleteRange(minSelectedTrack(), minSelectedRow(), maxSelectedTrack(), maxSelectedRow())
+            hasSelection = false
+            gridModified()
+        } else {
+            let cell = engine.getCell(selectedTrack, selectedRow)
+            if (cell) {
+                if (selectedColumn === 0) {
+                    engine.setCell(selectedTrack, selectedRow, 255, cell.instrument, cell.volume, cell.effectType, cell.effectParam)
+                } else if (selectedColumn === 1) {
+                    engine.setCell(selectedTrack, selectedRow, cell.note, selectedTrack + 1, cell.volume, cell.effectType, cell.effectParam)
+                } else if (selectedColumn === 2) {
+                    engine.setCell(selectedTrack, selectedRow, cell.note, cell.instrument, 255, cell.effectType, cell.effectParam)
+                } else if (selectedColumn === 3) {
+                    engine.setCell(selectedTrack, selectedRow, cell.note, cell.instrument, cell.volume, 0, 0)
+                }
+                gridModified()
+            }
+        }
+    }
 
     function ensureTrackVisible(trackIdx) {
         if (typeof matrixListView === "undefined" || !matrixListView) return
@@ -54,11 +150,13 @@ Rectangle {
             root.nameRefreshCounter++
         }
         function onProjectLoaded() {
+            root.clearSelection()
             root.selectedTrack = 0
             root.gridModified()
             root.ensureTrackVisible(0)
         }
         function onNumTracksChanged() {
+            root.clearSelection()
             root.gridModified()
             if (engine && root.selectedTrack >= engine.numTracks) {
                 root.selectedTrack = Math.max(0, engine.numTracks - 1)
@@ -66,6 +164,7 @@ Rectangle {
             root.ensureTrackVisible(root.selectedTrack)
         }
         function onNumRowsChanged() {
+            root.clearSelection()
             root.gridModified()
         }
         function onGridCellChanged(track, row) {
@@ -75,6 +174,7 @@ Rectangle {
             root.gridModified()
         }
         function onCurrentPatternChanged() {
+            root.clearSelection()
             root.gridModified()
         }
         function onNumPatternsChanged() {
@@ -242,8 +342,22 @@ Rectangle {
             return
         }
 
-        // Escape: Stop and rewind to Row 0
+        if (cellEditorModal && cellEditorModal.isOpen) {
+            if (event.key === Qt.Key_Escape) {
+                cellEditorModal.close()
+                event.accepted = true
+                return
+            }
+            return
+        }
+
+        // Escape: If chunk selection active, clear selection; else stop & rewind
         if (event.key === Qt.Key_Escape) {
+            if (root.hasSelection) {
+                root.clearSelection()
+                event.accepted = true
+                return
+            }
             if (engine) {
                 engine.stop()
                 root.selectedRow = 0
@@ -264,16 +378,67 @@ Rectangle {
             return
         }
 
-        if (cellEditorModal && cellEditorModal.isOpen) {
-            if (event.key === Qt.Key_Escape) {
-                cellEditorModal.close()
-                event.accepted = true
-                return
-            }
+        // Chunk Selection & Clipboard shortcuts (Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+A)
+        if ((event.modifiers & Qt.ControlModifier) && (event.key === Qt.Key_C)) {
+            root.copySelection()
+            event.accepted = true
+            return
+        }
+        if ((event.modifiers & Qt.ControlModifier) && (event.key === Qt.Key_X)) {
+            root.cutSelection()
+            event.accepted = true
+            return
+        }
+        if ((event.modifiers & Qt.ControlModifier) && (event.key === Qt.Key_V)) {
+            root.pasteClipboard()
+            event.accepted = true
+            return
+        }
+        if ((event.modifiers & Qt.ControlModifier) && (event.key === Qt.Key_A)) {
+            root.selectAll()
+            event.accepted = true
             return
         }
 
+        // Shift + Arrow Keys: Expand rectangular chunk selection
+        if (event.modifiers & Qt.ShiftModifier) {
+            if (event.key === Qt.Key_Up || event.key === Qt.Key_Down ||
+                event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+                if (!root.hasSelection) {
+                    root.selStartTrack = root.selectedTrack
+                    root.selStartRow = root.selectedRow
+                    root.selEndTrack = root.selectedTrack
+                    root.selEndRow = root.selectedRow
+                    root.hasSelection = true
+                }
+                if (event.key === Qt.Key_Up) {
+                    root.selEndRow = Math.max(0, root.selEndRow - 1)
+                    root.selectedRow = root.selEndRow
+                    if (typeof matrixListView !== "undefined" && matrixListView) {
+                        matrixListView.positionViewAtIndex(root.selectedRow, ListView.Contain)
+                    }
+                } else if (event.key === Qt.Key_Down) {
+                    root.selEndRow = Math.min(nRows - 1, root.selEndRow + 1)
+                    root.selectedRow = root.selEndRow
+                    if (typeof matrixListView !== "undefined" && matrixListView) {
+                        matrixListView.positionViewAtIndex(root.selectedRow, ListView.Contain)
+                    }
+                } else if (event.key === Qt.Key_Left) {
+                    root.selEndTrack = Math.max(0, root.selEndTrack - 1)
+                    root.selectedTrack = root.selEndTrack
+                    root.ensureTrackVisible(root.selectedTrack)
+                } else if (event.key === Qt.Key_Right) {
+                    root.selEndTrack = Math.min(nTracks - 1, root.selEndTrack + 1)
+                    root.selectedTrack = root.selEndTrack
+                    root.ensureTrackVisible(root.selectedTrack)
+                }
+                event.accepted = true
+                return
+            }
+        }
+
         if (event.key === Qt.Key_Up) {
+            if (root.hasSelection) root.hasSelection = false
             root.selectedRow = (root.selectedRow - 1 + nRows) % nRows
             if (engine && !engine.isPlaying) {
                 engine.setCurrentRow(root.selectedRow)
@@ -285,6 +450,7 @@ Rectangle {
             return
         }
         if (event.key === Qt.Key_Down) {
+            if (root.hasSelection) root.hasSelection = false
             root.selectedRow = (root.selectedRow + 1) % nRows
             if (engine && !engine.isPlaying) {
                 engine.setCurrentRow(root.selectedRow)
@@ -296,6 +462,7 @@ Rectangle {
             return
         }
         if (event.key === Qt.Key_Left) {
+            if (root.hasSelection) root.hasSelection = false
             if (root.selectedColumn > 0) {
                 root.selectedColumn--
             } else {
@@ -308,6 +475,7 @@ Rectangle {
             return
         }
         if (event.key === Qt.Key_Right || event.key === Qt.Key_Tab) {
+            if (root.hasSelection) root.hasSelection = false
             if (root.selectedColumn < 3) {
                 root.selectedColumn++
             } else {
@@ -321,11 +489,16 @@ Rectangle {
         }
 
         if (event.key === Qt.Key_Delete || event.key === Qt.Key_Backspace) {
+            if (root.hasSelection) {
+                root.deleteSelection()
+                event.accepted = true
+                return
+            }
             if (engine) {
                 let cell = engine.getCell(root.selectedTrack, root.selectedRow)
                 if (cell) {
                     if (event.modifiers & Qt.ShiftModifier) {
-                        engine.setCell(root.selectedTrack, root.selectedRow, 255, 0, 255, 0, 0)
+                        engine.setCell(root.selectedTrack, root.selectedRow, 255, root.selectedTrack + 1, 255, 0, 0)
                     } else if (root.selectedColumn === 0) {
                         engine.setCell(root.selectedTrack, root.selectedRow, 255, cell.instrument, cell.volume, cell.effectType, cell.effectParam)
                     } else if (root.selectedColumn === 1) {
@@ -661,12 +834,14 @@ Rectangle {
                                 anchors.fill: parent
                                 z: -1
                                 onClicked: {
+                                    root.clearSelection()
                                     root.selectedTrack = index
                                     if (engine) engine.setSelectedInstrument(index)
                                     root.ensureTrackVisible(index)
                                     root.forceActiveFocus()
                                 }
                                 onDoubleClicked: {
+                                    root.clearSelection()
                                     root.selectedTrack = index
                                     if (engine) {
                                         engine.setSelectedInstrument(index)
@@ -816,11 +991,13 @@ Rectangle {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
+                                    root.clearSelection()
                                     root.selectedRow = rowIndex
                                     if (engine) engine.setCurrentRow(rowIndex)
                                     root.forceActiveFocus()
                                 }
                                 onDoubleClicked: {
+                                    root.clearSelection()
                                     root.selectedRow = rowIndex
                                     if (engine) {
                                         engine.setCurrentRow(rowIndex)
@@ -939,13 +1116,64 @@ Rectangle {
 
                                 Rectangle {
                                     anchors.fill: parent
-                                    color: (root.selectedTrack === cellItem.trackIdx && root.selectedRow === rowIndex) ? theme.accent : "transparent"
+                                    visible: (!root.hasSelection && root.selectedTrack === cellItem.trackIdx && root.selectedRow === rowIndex)
+                                    color: theme.accent
                                     opacity: 0.25
+                                    z: 1
+                                }
+
+                                // Selection Chunk Highlight
+                                Rectangle {
+                                    anchors.fill: parent
+                                    visible: root.isCellSelected(cellItem.trackIdx, rowIndex)
+                                    color: theme.accent
+                                    opacity: 0.35
+                                    z: 3
+
+                                    // Selection border outlines
+                                    Rectangle {
+                                        anchors.top: parent.top
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        height: 1
+                                        color: "#ffffff"
+                                        opacity: 0.85
+                                        visible: rowIndex === root.minSelectedRow()
+                                    }
+                                    Rectangle {
+                                        anchors.bottom: parent.bottom
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        height: 1
+                                        color: "#ffffff"
+                                        opacity: 0.85
+                                        visible: rowIndex === root.maxSelectedRow()
+                                    }
+                                    Rectangle {
+                                        anchors.top: parent.top
+                                        anchors.bottom: parent.bottom
+                                        anchors.left: parent.left
+                                        width: 1
+                                        color: "#ffffff"
+                                        opacity: 0.85
+                                        visible: cellItem.trackIdx === root.minSelectedTrack()
+                                    }
+                                    Rectangle {
+                                        anchors.top: parent.top
+                                        anchors.bottom: parent.bottom
+                                        anchors.right: parent.right
+                                        width: 1
+                                        color: "#ffffff"
+                                        opacity: 0.85
+                                        visible: cellItem.trackIdx === root.maxSelectedTrack()
+                                    }
                                 }
 
                                 Row {
+                                    id: colsRow
                                     anchors.centerIn: parent
                                     spacing: 4
+                                    z: 5
 
                                     // Col 0: Note
                                     Rectangle {
@@ -954,7 +1182,7 @@ Rectangle {
                                         height: 16
                                         anchors.verticalCenter: parent.verticalCenter
                                         radius: 2
-                                        property bool isColActive: (root.selectedTrack === cellItem.trackIdx && root.selectedRow === rowIndex && root.selectedColumn === 0)
+                                        property bool isColActive: (!root.hasSelection && root.selectedTrack === cellItem.trackIdx && root.selectedRow === rowIndex && root.selectedColumn === 0)
                                         color: isColActive ? "#3daee9" : "transparent"
                                         opacity: isColActive ? 0.35 : 1.0
 
@@ -971,25 +1199,6 @@ Rectangle {
                                                 return theme.colNote
                                             }
                                         }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            onClicked: {
-                                                root.selectedTrack = cellItem.trackIdx
-                                                root.selectedRow = rowIndex
-                                                root.selectedColumn = 0
-                                                if (engine) {
-                                                    engine.setSelectedInstrument(cellItem.trackIdx)
-                                                    if (!engine.isPlaying) engine.setCurrentRow(rowIndex)
-                                                }
-                                                root.ensureTrackVisible(cellItem.trackIdx)
-                                                root.forceActiveFocus()
-                                            }
-                                            onDoubleClicked: {
-                                                if (root.cellEditorModal) root.cellEditorModal.open(cellItem.trackIdx, rowIndex)
-                                                else root.requestEditCell(cellItem.trackIdx, rowIndex)
-                                            }
-                                        }
                                     }
 
                                     // Col 1: Inst
@@ -999,7 +1208,7 @@ Rectangle {
                                         height: 16
                                         anchors.verticalCenter: parent.verticalCenter
                                         radius: 2
-                                        property bool isColActive: (root.selectedTrack === cellItem.trackIdx && root.selectedRow === rowIndex && root.selectedColumn === 1)
+                                        property bool isColActive: (!root.hasSelection && root.selectedTrack === cellItem.trackIdx && root.selectedRow === rowIndex && root.selectedColumn === 1)
                                         color: isColActive ? "#3daee9" : "transparent"
                                         opacity: isColActive ? 0.35 : 1.0
 
@@ -1011,25 +1220,6 @@ Rectangle {
                                             font.family: "Monospace, JetBrains Mono, Hack, Noto Sans Mono"
                                             color: (cellItem.cellData && cellItem.cellData.note <= 127) ? theme.colInst : theme.textDim
                                         }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            onClicked: {
-                                                root.selectedTrack = cellItem.trackIdx
-                                                root.selectedRow = rowIndex
-                                                root.selectedColumn = 1
-                                                if (engine) {
-                                                    engine.setSelectedInstrument(cellItem.trackIdx)
-                                                    if (!engine.isPlaying) engine.setCurrentRow(rowIndex)
-                                                }
-                                                root.ensureTrackVisible(cellItem.trackIdx)
-                                                root.forceActiveFocus()
-                                            }
-                                            onDoubleClicked: {
-                                                if (root.cellEditorModal) root.cellEditorModal.open(cellItem.trackIdx, rowIndex)
-                                                else root.requestEditCell(cellItem.trackIdx, rowIndex)
-                                            }
-                                        }
                                     }
 
                                     // Col 2: Vol
@@ -1039,7 +1229,7 @@ Rectangle {
                                         height: 16
                                         anchors.verticalCenter: parent.verticalCenter
                                         radius: 2
-                                        property bool isColActive: (root.selectedTrack === cellItem.trackIdx && root.selectedRow === rowIndex && root.selectedColumn === 2)
+                                        property bool isColActive: (!root.hasSelection && root.selectedTrack === cellItem.trackIdx && root.selectedRow === rowIndex && root.selectedColumn === 2)
                                         color: isColActive ? "#3daee9" : "transparent"
                                         opacity: isColActive ? 0.35 : 1.0
 
@@ -1051,25 +1241,6 @@ Rectangle {
                                             font.family: "Monospace, JetBrains Mono, Hack, Noto Sans Mono"
                                             color: (cellItem.cellData && cellItem.cellData.note <= 127 && cellItem.cellData.volume !== 255) ? theme.colVol : theme.textDim
                                         }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            onClicked: {
-                                                root.selectedTrack = cellItem.trackIdx
-                                                root.selectedRow = rowIndex
-                                                root.selectedColumn = 2
-                                                if (engine) {
-                                                    engine.setSelectedInstrument(cellItem.trackIdx)
-                                                    if (!engine.isPlaying) engine.setCurrentRow(rowIndex)
-                                                }
-                                                root.ensureTrackVisible(cellItem.trackIdx)
-                                                root.forceActiveFocus()
-                                            }
-                                            onDoubleClicked: {
-                                                if (root.cellEditorModal) root.cellEditorModal.open(cellItem.trackIdx, rowIndex)
-                                                else root.requestEditCell(cellItem.trackIdx, rowIndex)
-                                            }
-                                        }
                                     }
 
                                     // Col 3: FX
@@ -1079,7 +1250,7 @@ Rectangle {
                                         height: 16
                                         anchors.verticalCenter: parent.verticalCenter
                                         radius: 2
-                                        property bool isColActive: (root.selectedTrack === cellItem.trackIdx && root.selectedRow === rowIndex && root.selectedColumn === 3)
+                                        property bool isColActive: (!root.hasSelection && root.selectedTrack === cellItem.trackIdx && root.selectedRow === rowIndex && root.selectedColumn === 3)
                                         color: isColActive ? "#3daee9" : "transparent"
                                         opacity: isColActive ? 0.35 : 1.0
 
@@ -1091,46 +1262,129 @@ Rectangle {
                                             font.family: "Monospace, JetBrains Mono, Hack, Noto Sans Mono"
                                             color: (cellItem.cellData && cellItem.cellData.effectType !== 0) ? theme.colFx : theme.textDim
                                         }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            onClicked: {
-                                                root.selectedTrack = cellItem.trackIdx
-                                                root.selectedRow = rowIndex
-                                                root.selectedColumn = 3
-                                                if (engine) {
-                                                    engine.setSelectedInstrument(cellItem.trackIdx)
-                                                    if (!engine.isPlaying) engine.setCurrentRow(rowIndex)
-                                                }
-                                                root.ensureTrackVisible(cellItem.trackIdx)
-                                                root.forceActiveFocus()
-                                            }
-                                            onDoubleClicked: {
-                                                if (root.cellEditorModal) root.cellEditorModal.open(cellItem.trackIdx, rowIndex)
-                                                else root.requestEditCell(cellItem.trackIdx, rowIndex)
-                                            }
-                                        }
                                     }
                                 }
 
                                 MouseArea {
+                                    id: cellMouseArea
                                     anchors.fill: parent
-                                    z: -1
-                                    onClicked: {
-                                        root.selectedTrack = cellItem.trackIdx
-                                        root.selectedRow = rowIndex
-                                        if (engine) {
-                                            engine.setSelectedInstrument(cellItem.trackIdx)
-                                            if (!engine.isPlaying) {
-                                                engine.setCurrentRow(rowIndex)
+                                    z: 10
+                                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+                                    property real pressX: 0
+                                    property real pressY: 0
+                                    property bool dragStarted: false
+
+                                    onPressed: (mouse) => {
+                                        if (mouse.button === Qt.RightButton) {
+                                            if (!root.isCellSelected(cellItem.trackIdx, rowIndex)) {
+                                                root.hasSelection = false
+                                                root.selectedTrack = cellItem.trackIdx
+                                                root.selectedRow = rowIndex
+                                                if (engine) {
+                                                    engine.setSelectedInstrument(cellItem.trackIdx)
+                                                    if (!engine.isPlaying) engine.setCurrentRow(rowIndex)
+                                                }
+                                            }
+                                            root.ensureTrackVisible(cellItem.trackIdx)
+                                            root.forceActiveFocus()
+                                            trackerContextMenu.popup()
+                                            return
+                                        }
+
+                                        pressX = mouse.x
+                                        pressY = mouse.y
+                                        dragStarted = false
+
+                                        if (mouse.modifiers & Qt.ShiftModifier) {
+                                            if (!root.hasSelection) {
+                                                root.selStartTrack = root.selectedTrack
+                                                root.selStartRow = root.selectedRow
+                                            }
+                                            root.selEndTrack = cellItem.trackIdx
+                                            root.selEndRow = rowIndex
+                                            root.hasSelection = true
+                                            root.selectedTrack = cellItem.trackIdx
+                                            root.selectedRow = rowIndex
+                                        } else {
+                                            root.selStartTrack = cellItem.trackIdx
+                                            root.selStartRow = rowIndex
+                                            root.selEndTrack = cellItem.trackIdx
+                                            root.selEndRow = rowIndex
+                                        }
+                                    }
+
+                                    onPositionChanged: (mouse) => {
+                                        if (!(mouse.buttons & Qt.LeftButton)) return
+                                        let dx = mouse.x - pressX
+                                        let dy = mouse.y - pressY
+                                        if (!dragStarted && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+                                            dragStarted = true
+                                            root.isSelecting = true
+                                            root.hasSelection = true
+                                        }
+                                        if (dragStarted) {
+                                            let ptToContent = cellItem.mapToItem(matrixListView.contentItem, mouse.x, mouse.y)
+                                            let nTracks = engine ? engine.numTracks : 1
+                                            let nRows = engine ? engine.numRows : 32
+                                            let curTrack = Math.max(0, Math.min(nTracks - 1, Math.floor(ptToContent.x / root.trackColumnWidth)))
+                                            let curRow = Math.max(0, Math.min(nRows - 1, Math.floor(ptToContent.y / 20)))
+
+                                            root.selEndTrack = curTrack
+                                            root.selEndRow = curRow
+                                            root.selectedTrack = curTrack
+                                            root.selectedRow = curRow
+
+                                            let ptToLv = cellItem.mapToItem(matrixListView, mouse.x, mouse.y)
+                                            if (ptToLv.y < 25) {
+                                                matrixListView.contentY = Math.max(0, matrixListView.contentY - 20)
+                                            } else if (ptToLv.y > matrixListView.height - 25) {
+                                                matrixListView.contentY = Math.min(matrixListView.contentHeight - matrixListView.height, matrixListView.contentY + 20)
+                                            }
+                                            if (ptToLv.x < 30) {
+                                                matrixListView.contentX = Math.max(0, matrixListView.contentX - 25)
+                                            } else if (ptToLv.x > matrixListView.width - 30) {
+                                                matrixListView.contentX = Math.min(matrixListView.contentWidth - matrixListView.width, matrixListView.contentX + 25)
                                             }
                                         }
-                                        root.ensureTrackVisible(cellItem.trackIdx)
-                                        root.forceActiveFocus()
                                     }
-                                    onDoubleClicked: {
-                                        if (root.cellEditorModal) root.cellEditorModal.open(cellItem.trackIdx, rowIndex)
-                                        else root.requestEditCell(cellItem.trackIdx, rowIndex)
+
+                                    onReleased: (mouse) => {
+                                        if (mouse.button !== Qt.LeftButton) return
+                                        if (dragStarted) {
+                                            root.isSelecting = false
+                                        } else if (!(mouse.modifiers & Qt.ShiftModifier)) {
+                                            root.hasSelection = false
+                                            root.selectedTrack = cellItem.trackIdx
+                                            root.selectedRow = rowIndex
+                                            if (engine) {
+                                                engine.setSelectedInstrument(cellItem.trackIdx)
+                                                if (!engine.isPlaying) engine.setCurrentRow(rowIndex)
+                                            }
+                                            let p0 = col0Box.mapFromItem(cellItem, mouse.x, mouse.y)
+                                            let p1 = col1Box.mapFromItem(cellItem, mouse.x, mouse.y)
+                                            let p2 = col2Box.mapFromItem(cellItem, mouse.x, mouse.y)
+                                            let p3 = col3Box.mapFromItem(cellItem, mouse.x, mouse.y)
+                                            if (p0.x >= 0 && p0.x <= col0Box.width && p0.y >= 0 && p0.y <= col0Box.height) {
+                                                root.selectedColumn = 0
+                                            } else if (p1.x >= 0 && p1.x <= col1Box.width && p1.y >= 0 && p1.y <= col1Box.height) {
+                                                root.selectedColumn = 1
+                                            } else if (p2.x >= 0 && p2.x <= col2Box.width && p2.y >= 0 && p2.y <= col2Box.height) {
+                                                root.selectedColumn = 2
+                                            } else if (p3.x >= 0 && p3.x <= col3Box.width && p3.y >= 0 && p3.y <= col3Box.height) {
+                                                root.selectedColumn = 3
+                                            }
+                                            root.ensureTrackVisible(cellItem.trackIdx)
+                                            root.forceActiveFocus()
+                                        }
+                                    }
+
+                                    onDoubleClicked: (mouse) => {
+                                        if (mouse.button === Qt.LeftButton) {
+                                            root.hasSelection = false
+                                            if (root.cellEditorModal) root.cellEditorModal.open(cellItem.trackIdx, rowIndex)
+                                            else root.requestEditCell(cellItem.trackIdx, rowIndex)
+                                        }
                                     }
                                 }
 
@@ -1139,6 +1393,7 @@ Rectangle {
                                     width: 1
                                     height: parent.height
                                     color: theme.border
+                                    z: 2
                                 }
                             }
                         }
@@ -1148,6 +1403,57 @@ Rectangle {
                             height: parent.height
                         }
                     }
+                }
+            }
+        }
+    }
+
+    // ==========================================
+    // Context Menu for Tracker Matrix Grid
+    // ==========================================
+    Menu {
+        id: trackerContextMenu
+        MenuItem {
+            text: "Cu&t Chunk\tCtrl+X"
+            onTriggered: root.cutSelection()
+        }
+        MenuItem {
+            text: "&Copy Chunk\tCtrl+C"
+            onTriggered: root.copySelection()
+        }
+        MenuItem {
+            text: "&Paste Chunk\tCtrl+V"
+            enabled: engine && engine.hasClipboardData
+            onTriggered: root.pasteClipboard()
+        }
+        MenuItem {
+            text: "&Delete Chunk\tDel"
+            onTriggered: root.deleteSelection()
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: "Select &All Pattern\tCtrl+A"
+            onTriggered: root.selectAll()
+        }
+        MenuItem {
+            text: "Deselect\tEsc"
+            visible: root.hasSelection
+            onTriggered: root.clearSelection()
+        }
+        MenuSeparator {}
+        MenuItem {
+            text: "Edit Cell Details..."
+            onTriggered: {
+                if (root.cellEditorModal) root.cellEditorModal.open(root.selectedTrack, root.selectedRow)
+                else root.requestEditCell(root.selectedTrack, root.selectedRow)
+            }
+        }
+        MenuItem {
+            text: "Edit Instrument / Synth..."
+            onTriggered: {
+                if (engine) {
+                    let trkType = engine.getTrackType(root.selectedTrack)
+                    root.requestEditInstrument(root.selectedTrack, trkType)
                 }
             }
         }

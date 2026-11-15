@@ -312,7 +312,24 @@
       - Output filename dynamically defaults to the active project's name (`<ProjectName>.<fmt>`) or `untitled.<fmt>` if unsaved, refreshed freshly on every modal open rather than preserving the previous export's path.
       - Added interactive **Pattern Loop** controls when Pattern Mode is active: toggle `[ ⟳ LOOP PATTERN ]`, stepper `[-] [count] [+]`, and quick preset pills (`1x`, `2x`, `4x`, `8x`).
       - C++ DSP engine loops the pattern seamlessly for the specified repeat count before gracefully stopping the sequencer and capturing natural reverb/delay tail decay.
+  - **Tracker Chunk Selection & Clipboard Operations (`TrackerView.qml`, `myms_bridge.py`, `main.py`)**:
+    - **Multi-Track & Multi-Row Rectangular Chunk Selection**:
+      - Mouse press-and-drag interaction across tracks and rows with dynamic bounding calculation (`minSelectedTrack`, `maxSelectedTrack`, `minSelectedRow`, `maxSelectedRow`).
+      - Cohesive visual styling: translucent KDE Breeze blue (`#3daee9` at 0.35 opacity) fill with a 1px white border outline highlighting the chunk perimeter, keeping underlying notes, instruments, volumes, and FX values completely legible.
+      - Full-cell granularity: captures entire cells (`Note + Instrument + Volume + FX Type + FX Param`) as cohesive musical units.
+      - Auto-scrolling: viewport smoothly scrolls horizontally and vertically when dragging past visible boundaries.
+      - Shift + Click and Shift + Arrow range expansion (<kbd>Shift+Up</kbd>, <kbd>Shift+Down</kbd>, <kbd>Shift+Left</kbd>, <kbd>Shift+Right</kbd>).
+      - Select All (<kbd>Ctrl+A</kbd>) selecting the entire pattern across all tracks and rows.
+      - Safe Deselection: single click outside selection or pressing <kbd>Esc</kbd> clears chunk selection without interrupting audio playback or stopping the transport.
+    - **High-Performance Overwrite Clipboard Architecture**:
+      - Copy (<kbd>Ctrl+C</kbd>): extracts rectangular chunks into memory (`_cell_clipboard`) and serializes to the system clipboard (`QGuiApplication.clipboard`) as JSON for inter-pattern and inter-instance sharing.
+      - Cut (<kbd>Ctrl+X</kbd>): copies chunk then clears selected cells to empty defaults (`note: 255`).
+      - Paste (<kbd>Ctrl+V</kbd>): pastes in overwrite mode starting at the active cell `(selectedTrack, selectedRow)` with automatic graceful boundary clipping at pattern and track limits.
+      - Delete (<kbd>Del</kbd> / <kbd>Backspace</kbd>): clears cells in the active chunk while preserving single-column delete when no chunk is selected.
+    - **Menus & Context Integration**:
+      - Main window **Edit** menu: `Cu&t Chunk` (<kbd>Ctrl+X</kbd>), `&Copy Chunk` (<kbd>Ctrl+C</kbd>), `&Paste Chunk` (<kbd>Ctrl+V</kbd>), `&Delete Chunk` (<kbd>Del</kbd>), `Select &All Pattern` (<kbd>Ctrl+A</kbd>).
+      - Tracker grid right-click context menu: quick one-click Cut, Copy, Paste, Delete, Select All, Deselect, Edit Cell Details, and Edit Instrument.
   - **Comprehensive Verification Suite**:
-    - 12 dedicated unit and integration tests in `tests/test_phase4_audio_export.py` validating file integrity, headers, sample rates, channel counts, stream bit depths, song order reordering, pattern looping, and track removal.
-    - Full test suite passing across all phases (34/34 unit tests OK).
+    - 7 dedicated unit and integration tests in `tests/test_phase4_chunk_selection.py` validating single-cell and multi-track copy/paste, cut, delete, boundary clipping, QML selection helper methods, Escape handling, and Edit menu actions.
+    - Full DAW test suite passing across all phases (41/41 unit tests OK).
   - Git checkpoint commit and `phase-4` branch.

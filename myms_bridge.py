@@ -190,11 +190,12 @@ class MymsEngine(QObject):
     requestOpenTrackPreFxGui = pyqtSignal(int, int)
     cpuUsageChanged = pyqtSignal(float)
 
-    # Phase 4 Signals (Audio Export)
+    # Phase 4 Signals (Audio Export & Tracker Clipboard)
     exportProgressChanged = pyqtSignal(float, str)
     exportFinished = pyqtSignal(bool, str)
     isExportingChanged = pyqtSignal(bool)
     requestExportAudio = pyqtSignal()
+    clipboardChanged = pyqtSignal()
 
     def _detect_system_keyboard_layout(self):
         try:
@@ -259,6 +260,7 @@ class MymsEngine(QObject):
         self._master_volume = 0.85
         self._export_worker = None
         self._is_exporting = False
+        self._cell_clipboard = None
 
         self._timer = QTimer(self)
         self._timer.setInterval(16)
@@ -1886,6 +1888,118 @@ class MymsEngine(QObject):
     def transposeTrack(self, track, semitones):
         self.lib.myms_transpose_track(track, semitones)
         self.gridCellChanged.emit(track, 0)
+
+    @pyqtProperty(bool, notify=clipboardChanged)
+    def hasClipboardData(self):
+        if self._cell_clipboard is not None:
+            return True
+        try:
+            from PyQt6.QtGui import QGuiApplication
+            clipboard = QGuiApplication.clipboard()
+            if clipboard:
+                txt = clipboard.text()
+                if txt and "myms_pattern_chunk" in txt:
+                    return True
+        except Exception:
+            pass
+        return False
+
+    @pyqtSlot(int, int, int, int)
+    def copyRange(self, startTrack, startRow, endTrack, endRow):
+        min_t = max(0, min(startTrack, endTrack))
+        max_t = min(self.numTracks - 1, max(startTrack, endTrack))
+        min_r = max(0, min(startRow, endRow))
+        max_r = min(self.numRows - 1, max(startRow, endRow))
+
+        w = max_t - min_t + 1
+        h = max_r - min_r + 1
+
+        rows_list = []
+        for r in range(min_r, max_r + 1):
+            row_cells = []
+            for t in range(min_t, max_t + 1):
+                cell = self.getCell(t, r)
+                row_cells.append(cell)
+            rows_list.append(row_cells)
+
+        self._cell_clipboard = {
+            "type": "myms_pattern_chunk",
+            "version": 1,
+            "width": w,
+            "height": h,
+            "rows": rows_list
+        }
+        self.clipboardChanged.emit()
+
+        try:
+            from PyQt6.QtGui import QGuiApplication
+            import json
+            clipboard = QGuiApplication.clipboard()
+            if clipboard:
+                clipboard.setText(json.dumps(self._cell_clipboard))
+        except Exception:
+            pass
+
+    @pyqtSlot(int, int, int, int)
+    def deleteRange(self, startTrack, startRow, endTrack, endRow):
+        min_t = max(0, min(startTrack, endTrack))
+        max_t = min(self.numTracks - 1, max(startTrack, endTrack))
+        min_r = max(0, min(startRow, endRow))
+        max_r = min(self.numRows - 1, max(startRow, endRow))
+
+        for r in range(min_r, max_r + 1):
+            for t in range(min_t, max_t + 1):
+                self.setCell(t, r, 255, t + 1, 255, 0, 0)
+
+    @pyqtSlot(int, int, int, int)
+    def cutRange(self, startTrack, startRow, endTrack, endRow):
+        self.copyRange(startTrack, startRow, endTrack, endRow)
+        self.deleteRange(startTrack, startRow, endTrack, endRow)
+
+    @pyqtSlot(int, int)
+    def pasteClipboard(self, targetTrack, targetRow):
+        chunk_data = None
+        try:
+            from PyQt6.QtGui import QGuiApplication
+            import json
+            clipboard = QGuiApplication.clipboard()
+            if clipboard:
+                txt = clipboard.text()
+                if txt and "myms_pattern_chunk" in txt:
+                    parsed = json.loads(txt)
+                    if parsed.get("type") == "myms_pattern_chunk" and "rows" in parsed:
+                        chunk_data = parsed
+        except Exception:
+            pass
+
+        if not chunk_data and self._cell_clipboard:
+            chunk_data = self._cell_clipboard
+
+        if not chunk_data:
+            return
+
+        rows = chunk_data.get("rows", [])
+        if not rows:
+            return
+
+        num_rows = self.numRows
+        num_tracks = self.numTracks
+
+        for r_idx, row_cells in enumerate(rows):
+            dest_r = targetRow + r_idx
+            if dest_r >= num_rows:
+                break
+            for c_idx, cell in enumerate(row_cells):
+                dest_t = targetTrack + c_idx
+                if dest_t >= num_tracks:
+                    continue
+                note = cell.get("note", 255)
+                default_inst = dest_t + 1
+                inst = default_inst if note == 255 else cell.get("instrument", default_inst)
+                vol = cell.get("volume", 255)
+                fx_t = cell.get("effectType", 0)
+                fx_p = cell.get("effectParam", 0)
+                self.setCell(dest_t, dest_r, note, inst, vol, fx_t, fx_p)
 
     @pyqtSlot(str, result=bool)
     def saveProject(self, filepath=""):

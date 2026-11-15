@@ -16,7 +16,7 @@ import signal
 from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QWidget, QMenuBar
 from PyQt6.QtGui import QAction, QKeySequence, QIcon, QGuiApplication
 from PyQt6.QtQuickWidgets import QQuickWidget
-from PyQt6.QtCore import QUrl, Qt, QObject
+from PyQt6.QtCore import QUrl, Qt, QObject, QMetaObject
 from myms_bridge import MymsEngine
 
 class PluginNativeHostWindow(QMainWindow):
@@ -172,6 +172,33 @@ class AppWindow(QMainWindow):
         # --- Edit Menu ---
         edit_menu = mb.addMenu("&Edit")
 
+        act_cut = QAction("Cu&t Chunk", self)
+        act_cut.setShortcut(QKeySequence.StandardKey.Cut)
+        act_cut.triggered.connect(self._on_cut)
+        edit_menu.addAction(act_cut)
+
+        act_copy = QAction("&Copy Chunk", self)
+        act_copy.setShortcut(QKeySequence.StandardKey.Copy)
+        act_copy.triggered.connect(self._on_copy)
+        edit_menu.addAction(act_copy)
+
+        act_paste = QAction("&Paste Chunk", self)
+        act_paste.setShortcut(QKeySequence.StandardKey.Paste)
+        act_paste.triggered.connect(self._on_paste)
+        edit_menu.addAction(act_paste)
+
+        act_delete = QAction("&Delete Chunk", self)
+        act_delete.setShortcut(QKeySequence.StandardKey.Delete)
+        act_delete.triggered.connect(self._on_delete)
+        edit_menu.addAction(act_delete)
+
+        act_select_all = QAction("Select &All Pattern", self)
+        act_select_all.setShortcut(QKeySequence.StandardKey.SelectAll)
+        act_select_all.triggered.connect(self._on_select_all)
+        edit_menu.addAction(act_select_all)
+
+        edit_menu.addSeparator()
+
         act_add_track = QAction("&Add Track", self)
         act_add_track.setShortcut(QKeySequence("Ctrl+T"))
         act_add_track.triggered.connect(self.engine.addTrack)
@@ -261,6 +288,77 @@ class AppWindow(QMainWindow):
         else:
             self.setWindowTitle("myms")
 
+    def _get_tracker_view(self):
+        if not hasattr(self, 'quick_widget'):
+            return None
+        root = self.quick_widget.rootObject()
+        if not root:
+            return None
+        return root.findChild(QObject, "trackerView")
+
+    def _on_copy(self):
+        tracker = self._get_tracker_view()
+        if tracker:
+            if tracker.property("hasSelection"):
+                st = tracker.property("selStartTrack")
+                et = tracker.property("selEndTrack")
+                sr = tracker.property("selStartRow")
+                er = tracker.property("selEndRow")
+                self.engine.copyRange(st, sr, et, er)
+            else:
+                st = tracker.property("selectedTrack")
+                sr = tracker.property("selectedRow")
+                self.engine.copyRange(st, sr, st, sr)
+
+    def _on_cut(self):
+        tracker = self._get_tracker_view()
+        if tracker:
+            if tracker.property("hasSelection"):
+                st = tracker.property("selStartTrack")
+                et = tracker.property("selEndTrack")
+                sr = tracker.property("selStartRow")
+                er = tracker.property("selEndRow")
+                self.engine.cutRange(st, sr, et, er)
+                tracker.setProperty("hasSelection", False)
+            else:
+                st = tracker.property("selectedTrack")
+                sr = tracker.property("selectedRow")
+                self.engine.cutRange(st, sr, st, sr)
+            QMetaObject.invokeMethod(tracker, "gridModified")
+
+    def _on_paste(self):
+        tracker = self._get_tracker_view()
+        if tracker:
+            st = tracker.property("selectedTrack")
+            sr = tracker.property("selectedRow")
+            self.engine.pasteClipboard(st, sr)
+            QMetaObject.invokeMethod(tracker, "gridModified")
+
+    def _on_delete(self):
+        tracker = self._get_tracker_view()
+        if tracker:
+            if tracker.property("hasSelection"):
+                st = tracker.property("selStartTrack")
+                et = tracker.property("selEndTrack")
+                sr = tracker.property("selStartRow")
+                er = tracker.property("selEndRow")
+                self.engine.deleteRange(st, sr, et, er)
+                tracker.setProperty("hasSelection", False)
+            else:
+                st = tracker.property("selectedTrack")
+                sr = tracker.property("selectedRow")
+                self.engine.deleteRange(st, sr, st, sr)
+            QMetaObject.invokeMethod(tracker, "gridModified")
+
+    def _on_select_all(self):
+        tracker = self._get_tracker_view()
+        if tracker:
+            tracker.setProperty("selStartTrack", 0)
+            tracker.setProperty("selStartRow", 0)
+            tracker.setProperty("selEndTrack", self.engine.numTracks - 1)
+            tracker.setProperty("selEndRow", self.engine.numRows - 1)
+            tracker.setProperty("hasSelection", True)
+
     def _on_escape_or_stop(self):
         root = self.quick_widget.rootObject() if hasattr(self, 'quick_widget') else None
         if root:
@@ -285,6 +383,10 @@ class AppWindow(QMainWindow):
             editor_modal = root.findChild(QObject, "editorModal")
             if editor_modal and editor_modal.property("isOpen"):
                 editor_modal.setProperty("isOpen", False)
+                return
+            tracker_view = root.findChild(QObject, "trackerView")
+            if tracker_view and tracker_view.property("hasSelection"):
+                tracker_view.setProperty("hasSelection", False)
                 return
         self.engine.stop()
 

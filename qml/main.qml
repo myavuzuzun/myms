@@ -30,6 +30,9 @@ Item {
         } else if (editorModal.isOpen) {
             editorModal.close()
             event.accepted = true
+        } else if (trackerView.hasSelection) {
+            trackerView.clearSelection()
+            event.accepted = true
         }
     }
 
@@ -771,6 +774,7 @@ Item {
             // ==========================================
             TrackerView {
                 id: trackerView
+                objectName: "trackerView"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 engine: mymsEngine
