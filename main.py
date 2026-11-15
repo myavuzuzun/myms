@@ -7,7 +7,7 @@ if "QT_QPA_PLATFORM" not in os.environ and os.environ.get("DISPLAY"):
     os.environ["QT_QPA_PLATFORM"] = "xcb"
 
 import signal
-from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QWidget, QMenuBar, QVBoxLayout
+from PyQt6.QtWidgets import QApplication, QMainWindow, QFileDialog, QWidget, QMenuBar, QVBoxLayout, QSizePolicy
 from PyQt6.QtGui import QAction, QKeySequence, QIcon, QGuiApplication
 from PyQt6.QtQuickWidgets import QQuickWidget
 from PyQt6.QtCore import QUrl, Qt, QObject, QMetaObject
@@ -98,8 +98,21 @@ class AppWindow(QMainWindow):
         self.engine.requestOpenTrackPreFxDialog.connect(self._on_open_track_pre_fx_dialog)
         self.engine.requestOpenTrackPreFxGui.connect(self._on_open_track_pre_fx_gui)
 
+        # Setup central container with in-window QMenuBar + QQuickWidget
+        self.central_container = QWidget(self)
+        self.container_layout = QVBoxLayout(self.central_container)
+        self.container_layout.setContentsMargins(0, 0, 0, 0)
+        self.container_layout.setSpacing(0)
+
+        # In-window standard menu bar (old-school desktop menu bar, un-stylized)
+        self.in_window_mb = QMenuBar(self.central_container)
+        self.in_window_mb.setNativeMenuBar(False)
+        self.in_window_mb.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.container_layout.addWidget(self.in_window_mb, stretch=0)
+        self.mb = self.in_window_mb
+
         # Setup QQuickWidget for hardware-accelerated QML content
-        self.quick_widget = QQuickWidget(self)
+        self.quick_widget = QQuickWidget(self.central_container)
         self.quick_widget.setResizeMode(QQuickWidget.ResizeMode.SizeRootObjectToView)
         self.quick_widget.rootContext().setContextProperty("mymsEngine", self.engine)
 
@@ -107,230 +120,203 @@ class AppWindow(QMainWindow):
         qml_file = os.path.join(current_dir, "qml", "main.qml")
         self.quick_widget.setSource(QUrl.fromLocalFile(qml_file))
 
-        self.setCentralWidget(self.quick_widget)
+        self.container_layout.addWidget(self.quick_widget, stretch=1)
+        self.setCentralWidget(self.central_container)
 
-        # Setup standard application menu bar
-        self._setup_menu_bar()
+        # Setup menu bars (native DBus for KDE Global Menu + in-window classic menu bar)
+        self._setup_menu_bars()
 
-    def _setup_menu_bar(self):
-        self.mb = self.menuBar()
-        # By default, render the menu bar directly above the app like a normal desktop application
-        from PyQt6.QtCore import QSettings
-        settings = QSettings("myms", "myms")
-        use_global = settings.value("use_global_menu", False, type=bool)
-        self.mb.setNativeMenuBar(use_global)
-        self.mb.setStyleSheet("""
-            QMenuBar {
-                background-color: #2b2e31;
-                color: #eff0f1;
-                border-bottom: 1px solid #383c40;
-                padding: 1px 4px;
-                font-family: sans-serif;
-                font-size: 12px;
-            }
-            QMenuBar::item {
-                background: transparent;
-                padding: 4px 8px;
-                border-radius: 3px;
-            }
-            QMenuBar::item:selected {
-                background-color: #3daee9;
-                color: #ffffff;
-            }
-            QMenuBar::item:pressed {
-                background-color: #2a7da8;
-                color: #ffffff;
-            }
-            QMenu {
-                background-color: #2b2e31;
-                color: #eff0f1;
-                border: 1px solid #383c40;
-                padding: 4px 0px;
-                font-size: 12px;
-            }
-            QMenu::item {
-                padding: 5px 28px 5px 24px;
-            }
-            QMenu::item:selected {
-                background-color: #3daee9;
-                color: #ffffff;
-            }
-            QMenu::separator {
-                height: 1px;
-                background-color: #383c40;
-                margin: 4px 6px;
-            }
-        """)
+    def _setup_menu_bars(self):
+        # 1. Native menu bar: exports to KDE Plasma Global Menu via DBus
+        if QGuiApplication.platformName() != "offscreen":
+            self.native_mb = self.menuBar()
+        else:
+            self.native_mb = None
+
+        # 2. Helper functions to register actions to both menu bars
+        def add_menu(title):
+            m_nat = self.native_mb.addMenu(title) if self.native_mb else None
+            m_win = self.in_window_mb.addMenu(title)
+            return (m_nat, m_win)
+
+        def add_action(menus, action):
+            if menus[0]:
+                menus[0].addAction(action)
+            menus[1].addAction(action)
+
+        def add_separator(menus):
+            if menus[0]:
+                menus[0].addSeparator()
+            menus[1].addSeparator()
+
+        def add_submenu(menus, title):
+            sub_nat = menus[0].addMenu(title) if menus[0] else None
+            sub_win = menus[1].addMenu(title)
+            return (sub_nat, sub_win)
 
         # --- File Menu ---
-        file_menu = self.mb.addMenu("&File")
+        file_menus = add_menu("&File")
 
         act_new = QAction("&New Project", self)
         act_new.setShortcut(QKeySequence.StandardKey.New)
         act_new.triggered.connect(self._on_new_project)
-        file_menu.addAction(act_new)
+        add_action(file_menus, act_new)
 
         act_open = QAction("&Open Project...", self)
         act_open.setShortcut(QKeySequence.StandardKey.Open)
         act_open.triggered.connect(self._on_open_project)
-        file_menu.addAction(act_open)
+        add_action(file_menus, act_open)
 
         act_save = QAction("&Save Project", self)
         act_save.setShortcut(QKeySequence.StandardKey.Save)
         act_save.triggered.connect(self._on_save_project)
-        file_menu.addAction(act_save)
+        add_action(file_menus, act_save)
 
         act_save_as = QAction("Save Project &As...", self)
         act_save_as.setShortcut(QKeySequence.StandardKey.SaveAs)
         act_save_as.triggered.connect(self._on_save_project_as)
-        file_menu.addAction(act_save_as)
+        add_action(file_menus, act_save_as)
 
-        file_menu.addSeparator()
+        add_separator(file_menus)
 
         act_export = QAction("&Export Audio...", self)
         act_export.setShortcut(QKeySequence("Ctrl+E"))
         act_export.triggered.connect(self.engine.requestExportAudio)
-        file_menu.addAction(act_export)
+        add_action(file_menus, act_export)
 
-        file_menu.addSeparator()
+        add_separator(file_menus)
 
         act_demo = QAction("&Load Demo Groove", self)
         act_demo.triggered.connect(self.engine.loadDemoGroove)
-        file_menu.addAction(act_demo)
+        add_action(file_menus, act_demo)
 
-        file_menu.addSeparator()
+        add_separator(file_menus)
 
         act_quit = QAction("&Quit", self)
         act_quit.setShortcut(QKeySequence.StandardKey.Quit)
         act_quit.triggered.connect(self.close)
-        file_menu.addAction(act_quit)
+        add_action(file_menus, act_quit)
 
         # --- Edit Menu ---
-        edit_menu = self.mb.addMenu("&Edit")
+        edit_menus = add_menu("&Edit")
 
         act_cut = QAction("Cu&t Chunk", self)
         act_cut.setShortcut(QKeySequence.StandardKey.Cut)
         act_cut.triggered.connect(self._on_cut)
-        edit_menu.addAction(act_cut)
+        add_action(edit_menus, act_cut)
 
         act_copy = QAction("&Copy Chunk", self)
         act_copy.setShortcut(QKeySequence.StandardKey.Copy)
         act_copy.triggered.connect(self._on_copy)
-        edit_menu.addAction(act_copy)
+        add_action(edit_menus, act_copy)
 
         act_paste = QAction("&Paste Chunk", self)
         act_paste.setShortcut(QKeySequence.StandardKey.Paste)
         act_paste.triggered.connect(self._on_paste)
-        edit_menu.addAction(act_paste)
+        add_action(edit_menus, act_paste)
 
         act_delete = QAction("&Delete Chunk", self)
         act_delete.setShortcut(QKeySequence.StandardKey.Delete)
         act_delete.triggered.connect(self._on_delete)
-        edit_menu.addAction(act_delete)
+        add_action(edit_menus, act_delete)
 
         act_select_all = QAction("Select &All Pattern", self)
         act_select_all.setShortcut(QKeySequence.StandardKey.SelectAll)
         act_select_all.triggered.connect(self._on_select_all)
-        edit_menu.addAction(act_select_all)
+        add_action(edit_menus, act_select_all)
 
-        edit_menu.addSeparator()
+        add_separator(edit_menus)
 
         act_add_track_e = QAction("&Add Track", self)
         act_add_track_e.setShortcut(QKeySequence("Ctrl+T"))
         act_add_track_e.triggered.connect(self.engine.addTrack)
-        edit_menu.addAction(act_add_track_e)
+        add_action(edit_menus, act_add_track_e)
 
         act_clear_all = QAction("Clear All Tracks", self)
         act_clear_all.triggered.connect(self.engine.clearAllTracks)
-        edit_menu.addAction(act_clear_all)
+        add_action(edit_menus, act_clear_all)
 
-        edit_menu.addSeparator()
+        add_separator(edit_menus)
 
         act_trans_up = QAction("Transpose +1 Semitone", self)
         act_trans_up.setShortcut(QKeySequence("Ctrl+Up"))
         act_trans_up.triggered.connect(lambda: self.engine.transposeTrack(self.engine.selectedInstrument, 1))
-        edit_menu.addAction(act_trans_up)
+        add_action(edit_menus, act_trans_up)
 
         act_trans_down = QAction("Transpose -1 Semitone", self)
         act_trans_down.setShortcut(QKeySequence("Ctrl+Down"))
         act_trans_down.triggered.connect(lambda: self.engine.transposeTrack(self.engine.selectedInstrument, -1))
-        edit_menu.addAction(act_trans_down)
+        add_action(edit_menus, act_trans_down)
 
         act_oct_up = QAction("Transpose +1 Octave (+12)", self)
         act_oct_up.setShortcut(QKeySequence("Ctrl+Shift+Up"))
         act_oct_up.triggered.connect(lambda: self.engine.transposeTrack(self.engine.selectedInstrument, 12))
-        edit_menu.addAction(act_oct_up)
+        add_action(edit_menus, act_oct_up)
 
         act_oct_down = QAction("Transpose -1 Octave (-12)", self)
         act_oct_down.setShortcut(QKeySequence("Ctrl+Shift+Down"))
         act_oct_down.triggered.connect(lambda: self.engine.transposeTrack(self.engine.selectedInstrument, -12))
-        edit_menu.addAction(act_oct_down)
+        add_action(edit_menus, act_oct_down)
 
         # --- Playback Menu ---
-        play_menu = self.mb.addMenu("&Playback")
+        play_menus = add_menu("&Playback")
 
         act_play = QAction("&Play / Pause", self)
         act_play.setShortcut(QKeySequence("Space"))
         act_play.triggered.connect(self.engine.togglePlay)
-        play_menu.addAction(act_play)
+        add_action(play_menus, act_play)
 
         act_stop = QAction("&Stop", self)
         act_stop.setShortcut(QKeySequence("Esc"))
         act_stop.triggered.connect(self._on_escape_or_stop)
-        play_menu.addAction(act_stop)
+        add_action(play_menus, act_stop)
 
         act_song_mode = QAction("Toggle &Song / Pattern Mode", self)
         act_song_mode.setShortcut(QKeySequence("F5"))
         act_song_mode.triggered.connect(self.engine.toggleSongMode)
-        play_menu.addAction(act_song_mode)
+        add_action(play_menus, act_song_mode)
 
         # --- View Menu ---
-        view_menu = self.mb.addMenu("&View")
-        self.act_global_menu = QAction("Desktop &Global Menu", self)
-        self.act_global_menu.setCheckable(True)
-        self.act_global_menu.setChecked(use_global)
-        self.act_global_menu.setShortcut(QKeySequence("Ctrl+Alt+M"))
-        self.act_global_menu.toggled.connect(self._on_toggle_global_menu)
-        view_menu.addAction(self.act_global_menu)
+        view_menus = add_menu("&View")
+        self.act_toggle_mb = QAction("Show &Menubar", self)
+        self.act_toggle_mb.setCheckable(True)
+        self.act_toggle_mb.setChecked(True)
+        self.act_toggle_mb.setShortcut(QKeySequence("Ctrl+M"))
+        self.act_toggle_mb.toggled.connect(self.in_window_mb.setVisible)
+        add_action(view_menus, self.act_toggle_mb)
 
         # --- Tracks Menu ---
-        track_menu = self.mb.addMenu("&Tracks")
+        track_menus = add_menu("&Tracks")
         act_add_track = QAction("&Add New Track", self)
         act_add_track.setShortcut(QKeySequence("Ctrl+T"))
         act_add_track.triggered.connect(self.engine.addTrack)
-        track_menu.addAction(act_add_track)
+        add_action(track_menus, act_add_track)
 
         act_remove_track = QAction("&Remove Selected Track", self)
         act_remove_track.setShortcut(QKeySequence("Ctrl+Shift+T"))
         act_remove_track.triggered.connect(self.engine.removeSelectedTrack)
-        track_menu.addAction(act_remove_track)
+        add_action(track_menus, act_remove_track)
 
         # --- Settings Menu ---
-        settings_menu = self.mb.addMenu("&Settings")
-        layout_menu = settings_menu.addMenu("Keyboard &Layout")
+        settings_menus = add_menu("&Settings")
+        layout_menus = add_submenu(settings_menus, "Keyboard &Layout")
 
         act_layout_tr = QAction("Turkish Q Layout", self)
         act_layout_tr.setCheckable(True)
         act_layout_tr.setChecked(self.engine.keyboardLayout == "tr")
         act_layout_tr.triggered.connect(lambda: self.engine.setKeyboardLayout("tr"))
-        layout_menu.addAction(act_layout_tr)
+        add_action(layout_menus, act_layout_tr)
 
         act_layout_us = QAction("US QWERTY Layout", self)
         act_layout_us.setCheckable(True)
         act_layout_us.setChecked(self.engine.keyboardLayout == "us")
         act_layout_us.triggered.connect(lambda: self.engine.setKeyboardLayout("us"))
-        layout_menu.addAction(act_layout_us)
+        add_action(layout_menus, act_layout_us)
 
         def _on_layout_changed(layout):
             act_layout_tr.setChecked(layout == "tr")
             act_layout_us.setChecked(layout == "us")
         self.engine.keyboardLayoutChanged.connect(_on_layout_changed)
-
-    def _on_toggle_global_menu(self, enabled):
-        self.mb.setNativeMenuBar(enabled)
-        from PyQt6.QtCore import QSettings
-        settings = QSettings("myms", "myms")
-        settings.setValue("use_global_menu", enabled)
 
     def _update_window_title(self, path=None):
         name = self.engine.projectName

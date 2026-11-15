@@ -262,12 +262,14 @@ class TestPhase4CellEffects(unittest.TestCase):
         self.assertAlmostEqual(self.engine.bpm, 90.0, places=1)
 
     def test_07_in_window_menu_bar_and_toggle(self):
-        from PyQt6.QtCore import QSettings
-        QSettings("myms", "myms").setValue("use_global_menu", False)
         window = AppWindow(self.engine)
         window.show()
         self.assertTrue(hasattr(window, "mb"))
         self.assertFalse(window.mb.isNativeMenuBar())
+        self.assertTrue(hasattr(window, "in_window_mb"))
+        self.assertTrue(window.in_window_mb.isVisible())
+        # Verify no custom stylesheet applied (not stylized into the app)
+        self.assertEqual(window.in_window_mb.styleSheet(), "")
 
         titles = [action.text().replace("&", "") for action in window.mb.actions()]
         self.assertIn("File", titles)
@@ -277,21 +279,18 @@ class TestPhase4CellEffects(unittest.TestCase):
         self.assertIn("Tracks", titles)
         self.assertIn("Settings", titles)
 
-        # Test toggle global menu action
-        self.assertTrue(hasattr(window, "act_global_menu"))
-        self.assertTrue(window.act_global_menu.isCheckable())
-        self.assertFalse(window.act_global_menu.isChecked())
+        # Test toggle in-window menubar action (Ctrl+M)
+        self.assertTrue(hasattr(window, "act_toggle_mb"))
+        self.assertTrue(window.act_toggle_mb.isCheckable())
+        self.assertTrue(window.act_toggle_mb.isChecked())
 
-        # Toggle to global menu
-        window.act_global_menu.setChecked(True)
-        from PyQt6.QtCore import QSettings
-        s = QSettings("myms", "myms")
-        self.assertTrue(s.value("use_global_menu", False, type=bool))
+        # Toggle hidden
+        window.act_toggle_mb.setChecked(False)
+        self.assertFalse(window.in_window_mb.isVisible())
 
-        # Toggle back to in-window menu
-        window.act_global_menu.setChecked(False)
-        self.assertFalse(s.value("use_global_menu", True, type=bool))
-        self.assertFalse(window.mb.isNativeMenuBar())
+        # Toggle visible
+        window.act_toggle_mb.setChecked(True)
+        self.assertTrue(window.in_window_mb.isVisible())
 
         window.close()
 
