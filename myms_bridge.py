@@ -237,7 +237,7 @@ class MymsEngine(QObject):
             print("[myms] Warning: Could not initialize audio output hardware.")
 
         self._is_playing = False
-        self._bpm = 120.0
+        self._bpm = 90.0
         self._current_row = 0
         self._current_pattern = 0
         self._num_patterns = 1
@@ -2409,7 +2409,7 @@ class MymsEngine(QObject):
         self.setSongOrderStep(0, 0)
         while self.songOrderLength > 1:
             self.removeSongOrderStep(self.songOrderLength - 1)
-        self.setBpm(120.0)
+        self.setBpm(90.0)
         self.setNumRows(32)
         self.setLooping(False)
         self.setSongMode(False)

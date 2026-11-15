@@ -322,6 +322,7 @@ private:
     StateVariableFilter m_trackCellFilterL[MAX_INSTRUMENTS];
     StateVariableFilter m_trackCellFilterR[MAX_INSTRUMENTS];
     bool m_trackCellFilterActive[MAX_INSTRUMENTS]{};
+    float m_trackBaseCutoff[MAX_INSTRUMENTS]{};
 
     float m_trackPitchBendSemi[MAX_INSTRUMENTS]{};
     float m_trackPitchSlidePerSample[MAX_INSTRUMENTS]{};
@@ -344,23 +345,25 @@ private:
                 l = m_trackCellFilterL[t].process(l, StateVariableFilter::LOWPASS);
                 r = m_trackCellFilterR[t].process(r, StateVariableFilter::LOWPASS);
             }
-            if (m_trackDelaySend[t] > 0.01f) {
-                float curBpm = m_sequencer.getBpm();
-                if (curBpm < 30.0f) curBpm = 120.0f;
-                int delaySamples = static_cast<int>(m_sampleRate * (60.0f / curBpm) * 0.75f);
-                if (delaySamples <= 0 || delaySamples >= TRACK_DELAY_SIZE) {
-                    delaySamples = static_cast<int>(m_sampleRate * 0.25f);
-                }
-                int readPos = (m_trackDelayWritePos[t] - delaySamples + TRACK_DELAY_SIZE) % TRACK_DELAY_SIZE;
-                float wetL = m_trackDelayBufL[t][readPos];
-                float wetR = m_trackDelayBufR[t][readPos];
-                float feedback = 0.40f;
-                m_trackDelayBufL[t][m_trackDelayWritePos[t]] = l + wetR * feedback;
-                m_trackDelayBufR[t][m_trackDelayWritePos[t]] = r + wetL * feedback;
-                m_trackDelayWritePos[t] = (m_trackDelayWritePos[t] + 1) % TRACK_DELAY_SIZE;
+            float curBpm = m_sequencer.getBpm();
+            if (curBpm < 30.0f) curBpm = 90.0f;
+            int delaySamples = static_cast<int>(m_sampleRate * (60.0f / curBpm) * 0.75f);
+            if (delaySamples <= 0 || delaySamples >= TRACK_DELAY_SIZE) {
+                delaySamples = static_cast<int>(m_sampleRate * 0.25f);
+            }
+            int readPos = (m_trackDelayWritePos[t] - delaySamples + TRACK_DELAY_SIZE) % TRACK_DELAY_SIZE;
+            float wetL = m_trackDelayBufL[t][readPos];
+            float wetR = m_trackDelayBufR[t][readPos];
+            float feedback = 0.40f;
+            float send = m_trackDelaySend[t];
 
-                l += wetL * m_trackDelaySend[t];
-                r += wetR * m_trackDelaySend[t];
+            m_trackDelayBufL[t][m_trackDelayWritePos[t]] = (l * send) + wetR * feedback;
+            m_trackDelayBufR[t][m_trackDelayWritePos[t]] = (r * send) + wetL * feedback;
+            m_trackDelayWritePos[t] = (m_trackDelayWritePos[t] + 1) % TRACK_DELAY_SIZE;
+
+            if (std::abs(wetL) > 1e-6f || std::abs(wetR) > 1e-6f) {
+                l += wetL * 0.65f;
+                r += wetR * 0.65f;
             }
         }
     }

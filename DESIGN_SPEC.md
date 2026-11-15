@@ -351,9 +351,19 @@
       - **`01 XX` / `02 XX` Pitch Slide**: Real-time pitch slide up / down across step duration for AuraSynth and SoundFont.
       - **`0C XX` Retrigger / Note Cut**: Precision staccato note cut (param <= 16) or ratcheting rolls (param > 16).
       - **`0E XX` Delay / Echo Send**: Tempo-synced ping-pong stereo echo send on that step.
-  - **Comprehensive Verification Suite**:
-    - 7 dedicated unit and integration tests in `tests/test_phase4_chunk_selection.py` validating single-cell and multi-track copy/paste, cut, delete, boundary clipping, QML selection helper methods, Escape handling, and Edit menu actions.
-    - 4 dedicated unit and integration tests in `tests/test_phase4_pattern_rows.py` validating per-pattern row switching, cell preservation, project save/load serialization, backward compatibility, and QML UI input synchronization.
-    - 4 dedicated unit and integration tests in `tests/test_phase4_cell_effects.py` validating audible filter cutoff frequency variance, delay echo tail generation, note cut energy reduction, and QML Ctrl-selection bindings.
-    - Full DAW test suite passing across all phases (49/49 unit tests OK).
-  - Git checkpoint commit and `phase-4` branch.
+  - **Phase 4.4: Per-Note Effects Scoping, Default BPM (90), and Dual Menu Architecture (`audio_engine.cpp`, `audio_engine.h`, `tracker_sequencer.h`, `myms_bridge.py`, `main.py`, `qml/main.qml`)**:
+    - **Per-Note Effects Isolation**:
+      - Modulated effects (`0x10` Filter Cutoff, `0x0E` Delay Send, `0x01`/`0x02` Pitch Slide, `0x0C` Note Cut/Retrigger) are strictly isolated to the note where they are placed.
+      - On subsequent notes or rows where an effect is not explicitly specified (`effectType != 0x10`), `m_trackCellFilterActive` is deactivated and synth filter cutoff is restored immediately to the track's patch baseline (`m_trackBaseCutoff`).
+      - Delay send (`m_trackDelaySend`) resets to `0.0f` (dry) on rows without `0x0E`, so subsequent notes feed no new signal to the delay buffer while previous echoes ring out cleanly.
+      - Pitch slide stops sliding (`m_trackPitchSlidePerSample = 0.0f`), and new note triggers reset pitch bend (`m_trackPitchBendSemi = 0.0f`) to true concert pitch.
+      - Note cut and retrigger countdowns are cleared when no `0x0C` effect is present.
+    - **Default BPM to 90.0**:
+      - Updated default project tempo to 90.0 BPM across C++ DSP sequencer (`tracker_sequencer.h`), Python bridge (`myms_bridge.py`), and QML UI toolbar readout (`qml/main.qml`).
+    - **Dual Application Menu Architecture (In-Window Normal App + Global Menu Compatibility)**:
+      - Embedded an in-window `QMenuBar` (`setNativeMenuBar(False)`) directly above the DAW content, styled with Breeze dark palette (`#2b2e31`, border `#383c40`, text `#eff0f1`, accent `#3daee9`).
+      - Preserved native DBus menu registration (`self.menuBar()`) for 100% compatibility with KDE Plasma Global Menu applets and macOS.
+      - Added `View` -> `Show In-Window Menu Bar` (<kbd>Ctrl+Alt+M</kbd>) toggle allowing users to show or hide the in-window bar according to their desktop setup.
+    - **Comprehensive Verification Suite**:
+      - 52/52 tests passing in test suite across all phases.
+      - Captured offscreen visual verification screenshots demonstrating the in-window menu bar and 90.0 BPM readout.

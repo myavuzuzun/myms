@@ -81,7 +81,7 @@ class TrackerSequencer {
 public:
     void init(float sampleRate) {
         m_sampleRate = sampleRate;
-        m_bpm = 120.0f;
+        m_bpm = 90.0f;
         m_lpb = 4;
         m_currentRow = 0;
         m_samplesUntilNextRow = 0;
@@ -473,7 +473,7 @@ public:
 
 private:
     float m_sampleRate = 48000.0f;
-    float m_bpm = 120.0f;
+    float m_bpm = 90.0f;
     int m_lpb = 4;
     int m_currentRow = 0;
     int m_currentPattern = 0;

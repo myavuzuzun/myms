@@ -26,6 +26,9 @@ AudioEngine& AudioEngine::instance() {
 }
 
 AudioEngine::AudioEngine() {
+    for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        m_trackBaseCutoff[i] = 3500.0f;
+    }
 }
 
 AudioEngine::~AudioEngine() {
@@ -180,6 +183,7 @@ bool AudioEngine::init(int sampleRate, int bufferSize) {
         m_trackCellFilterL[i].init(m_sampleRate);
         m_trackCellFilterR[i].init(m_sampleRate);
         m_trackCellFilterActive[i] = false;
+        m_trackBaseCutoff[i] = 3500.0f;
         m_trackPitchBendSemi[i] = 0.0f;
         m_trackPitchSlidePerSample[i] = 0.0f;
         m_trackNoteCutCountdown[i] = -1;
@@ -589,14 +593,22 @@ void AudioEngine::allNotesOff() {
         if (m_masterFx[s]) m_masterFx[s]->allNotesOff();
     }
     for (int i = 0; i < MAX_INSTRUMENTS; ++i) {
+        m_previewCountdowns[i] = 0;
         m_trackPitchBendSemi[i] = 0.0f;
         m_trackPitchSlidePerSample[i] = 0.0f;
         m_trackNoteCutCountdown[i] = -1;
         m_trackRetrigInterval[i] = -1;
         m_trackRetrigCountdown[i] = -1;
+        m_trackCellFilterActive[i] = false;
+        m_trackDelaySend[i] = 0.0f;
         m_soundfont.setChannelPitchWheel(i, 8192);
         if (i < static_cast<int>(m_instruments.size())) {
             m_instruments[i].setPitchBendSemi(0.0f);
+            m_instruments[i].getParams().filterCutoff = m_trackBaseCutoff[i];
+        }
+        if (i < static_cast<int>(m_trackDelayBufL.size())) {
+            std::fill(m_trackDelayBufL[i].begin(), m_trackDelayBufL[i].end(), 0.0f);
+            std::fill(m_trackDelayBufR[i].begin(), m_trackDelayBufR[i].end(), 0.0f);
         }
     }
     m_macros.resetBuffers();
@@ -629,7 +641,11 @@ void AudioEngine::setInstrumentDetune(int inst, float semi, float cents) {
 
 void AudioEngine::setInstrumentFilter(int inst, float cutoffHz, float resonance, float envAmount) {
     if (inst >= 0 && inst < static_cast<int>(m_instruments.size())) {
-        m_instruments[inst].getParams().filterCutoff = std::clamp(cutoffHz, 20.0f, 20000.0f);
+        float c = std::clamp(cutoffHz, 20.0f, 20000.0f);
+        m_instruments[inst].getParams().filterCutoff = c;
+        if (inst < MAX_INSTRUMENTS) {
+            m_trackBaseCutoff[inst] = c;
+        }
         m_instruments[inst].getParams().filterResonance = std::clamp(resonance, 0.0f, 0.98f);
         m_instruments[inst].getParams().filterEnvAmount = std::clamp(envAmount, 0.0f, 1.0f);
     }
@@ -983,11 +999,21 @@ void AudioEngine::renderProcessBlock(float* output, int frameCount, int channels
                     m_trackRetrigCountdown[t] = -1;
                 }
 
+                // Per-step delay send reset: if cell doesn't set 0x0E, dry signal sends 0 to delay
+                if (cell.effectType != 0x0E) {
+                    m_trackDelaySend[t] = 0.0f;
+                }
+
                 // --- 2. Evaluate Note Events ---
                 if (cell.note == NOTE_OFF) {
                     m_trackLastNote[t] = -1;
                     m_trackPitchBendSemi[t] = 0.0f;
                     m_trackPitchSlidePerSample[t] = 0.0f;
+                    m_trackCellFilterActive[t] = false;
+                    m_trackDelaySend[t] = 0.0f;
+                    m_trackNoteCutCountdown[t] = -1;
+                    m_trackRetrigInterval[t] = -1;
+                    m_trackRetrigCountdown[t] = -1;
                     if (targetInst < static_cast<int>(m_trackPreFx.size())) {
                         int maxPre = (targetInst < MAX_INSTRUMENTS) ? m_trackPreFxMaxSlot[targetInst].load(std::memory_order_relaxed) : 0;
                         for (int s = 0; s < maxPre; ++s) {
@@ -1003,9 +1029,33 @@ void AudioEngine::renderProcessBlock(float* output, int frameCount, int channels
                             m_plugins[targetInst]->noteOff(cell.note);
                         }
                     } else if (type == TRACK_TYPE_SYNTH && targetInst < static_cast<int>(m_instruments.size())) {
+                        m_instruments[targetInst].getParams().filterCutoff = m_trackBaseCutoff[targetInst];
+                        m_instruments[targetInst].setPitchBendSemi(0.0f);
                         m_instruments[targetInst].noteOff(cell.note);
                     }
                 } else if (cell.note <= 127) {
+                    // When a new note triggers, ensure previous note's effects do not carry over:
+                    if (cell.effectType != 0x10) {
+                        m_trackCellFilterActive[t] = false;
+                        if (type == TRACK_TYPE_SYNTH && targetInst < static_cast<int>(m_instruments.size())) {
+                            m_instruments[targetInst].getParams().filterCutoff = m_trackBaseCutoff[targetInst];
+                        }
+                    }
+                    if (cell.effectType != 0x01 && cell.effectType != 0x02) {
+                        m_trackPitchBendSemi[t] = 0.0f;
+                        m_trackPitchSlidePerSample[t] = 0.0f;
+                        if (type == TRACK_TYPE_SYNTH && targetInst < static_cast<int>(m_instruments.size())) {
+                            m_instruments[targetInst].setPitchBendSemi(0.0f);
+                        } else if (type == TRACK_TYPE_SOUNDFONT) {
+                            m_soundfont.setChannelPitchWheel(targetInst, 8192);
+                        }
+                    }
+                    if (cell.effectType != 0x0C) {
+                        m_trackNoteCutCountdown[t] = -1;
+                        m_trackRetrigInterval[t] = -1;
+                        m_trackRetrigCountdown[t] = -1;
+                    }
+
                     float vel = (cell.volume == 255) ? 1.0f : (cell.volume / 128.0f);
                     m_trackLastNote[t] = cell.note;
                     m_trackLastVel[t] = vel;

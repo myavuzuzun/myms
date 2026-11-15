@@ -211,5 +211,97 @@ class TestPhase4CellEffects(unittest.TestCase):
 
         window.close()
 
+    def test_05_cell_effects_per_note_isolation(self):
+        # Verify that an effect on note 1 does not leak into note 2
+        # Row 0: Note 60, heavily muffled filter cutoff 0x10, param 20
+        self.engine.setCell(0, 0, 60, 1, 255, 0x10, 20)
+        # Row 4: Note 60, no effect (0, 0)
+        self.engine.setCell(0, 4, 60, 1, 255, 0, 0)
+
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
+            iso_wav = tf.name
+
+        try:
+            res = self._run_export_sync({
+                "filepath": iso_wav,
+                "format": "wav",
+                "song_mode": False,
+                "pattern_idx": 0,
+                "tail_seconds": 0.0,
+                "sample_rate": 48000,
+                "wav_bit_depth": 16,
+                "pattern_loops": 1
+            })
+            self.assertTrue(res["success"])
+
+            import wave
+            with wave.open(iso_wav, "rb") as wf:
+                raw = wf.readframes(wf.getnframes())
+            samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32)
+
+            # Row 0 starts at index 0. At 90bpm (4 lpb), row = (60 / 90 / 4) * 48000 = 8000 samples.
+            # Row 0: samples 0 to 8000
+            # Row 4: samples 32000 to 40000
+            # Note on Row 4 must have restored high frequencies (diff squared)
+            r0_samples = samples[500:7500]
+            r4_samples = samples[32500:39500]
+            hf_r0 = np.mean(np.diff(r0_samples) ** 2)
+            hf_r4 = np.mean(np.diff(r4_samples) ** 2)
+
+            self.assertGreater(hf_r4, hf_r0 * 2.0, "Note 2 on row 4 must NOT inherit Note 1's low-pass filter")
+        finally:
+            if os.path.exists(iso_wav):
+                os.remove(iso_wav)
+
+    def test_06_default_bpm_is_90(self):
+        # Default engine BPM must be 90.0
+        self.assertAlmostEqual(self.engine.bpm, 90.0, places=1)
+        self.engine.setBpm(135.0)
+        self.assertAlmostEqual(self.engine.bpm, 135.0, places=1)
+        self.engine.newProject()
+        self.assertAlmostEqual(self.engine.bpm, 90.0, places=1)
+
+    def test_07_in_window_menu_bar_and_toggle(self):
+        window = AppWindow(self.engine)
+        window.show()
+        self.assertTrue(hasattr(window, "in_window_mb"))
+        self.assertFalse(window.in_window_mb.isNativeMenuBar())
+        self.assertTrue(window.in_window_mb.isVisible())
+
+        titles = [action.text().replace("&", "") for action in window.in_window_mb.actions()]
+        self.assertIn("File", titles)
+        self.assertIn("Edit", titles)
+        self.assertIn("Playback", titles)
+        self.assertIn("View", titles)
+        self.assertIn("Tracks", titles)
+        self.assertIn("Settings", titles)
+
+        # Test toggle action
+        view_menu = None
+        for act in window.in_window_mb.actions():
+            if "View" in act.text():
+                view_menu = act.menu()
+                break
+        self.assertIsNotNone(view_menu)
+
+        toggle_act = None
+        for a in view_menu.actions():
+            if "Menu Bar" in a.text():
+                toggle_act = a
+                break
+        self.assertIsNotNone(toggle_act)
+        self.assertTrue(toggle_act.isCheckable())
+        self.assertTrue(toggle_act.isChecked())
+
+        # Toggle hidden
+        toggle_act.setChecked(False)
+        self.assertFalse(window.in_window_mb.isVisible())
+
+        # Toggle visible
+        toggle_act.setChecked(True)
+        self.assertTrue(window.in_window_mb.isVisible())
+
+        window.close()
+
 if __name__ == "__main__":
     unittest.main()

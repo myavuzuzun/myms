@@ -306,7 +306,7 @@ Item {
                                     id: bpmInput
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
-                                    text: mymsEngine ? mymsEngine.bpm.toFixed(1) : "120.0"
+                                    text: mymsEngine ? mymsEngine.bpm.toFixed(1) : "90.0"
                                     font.bold: true
                                     font.pixelSize: 10
                                     font.family: "Monospace"
@@ -334,10 +334,10 @@ Item {
 
                                     function commitValue() {
                                         let v = parseFloat(text)
-                                        if (!isNaN(v) && v >= 20 && v <= 999) {
+                                        if (!isNaN(v) && v >= 1 && v <= 999) {
                                             if (mymsEngine) mymsEngine.setBpm(v)
                                         } else {
-                                            text = mymsEngine ? mymsEngine.bpm.toFixed(1) : "120.0"
+                                            text = mymsEngine ? mymsEngine.bpm.toFixed(1) : "90.0"
                                         }
                                     }
 
