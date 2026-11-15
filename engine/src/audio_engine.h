@@ -272,7 +272,7 @@ public:
 
     // Non-realtime / Offline Audio Export
     typedef bool (*AudioExportCallback)(float progress, void* userData);
-    bool exportRenderWav(const std::string& outputPath, bool songMode, int patternIdx, float tailSeconds, AudioExportCallback callback, void* userData);
+    bool exportRenderWav(const std::string& outputPath, bool songMode, int patternIdx, float tailSeconds, int patternLoops = 1, AudioExportCallback callback = nullptr, void* userData = nullptr);
     bool isExporting() const { return m_isExporting.load(std::memory_order_relaxed); }
 
 private:

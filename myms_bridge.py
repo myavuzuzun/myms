@@ -31,6 +31,11 @@ class AudioExportWorker(QThread):
             song_mode = bool(self.params.get("song_mode", True))
             pattern_idx = int(self.params.get("pattern_idx", 0))
             tail_seconds = float(self.params.get("tail_seconds", 2.0))
+            pattern_loops = int(self.params.get("pattern_loops", 1))
+            if song_mode:
+                pattern_loops = 1
+            else:
+                pattern_loops = max(1, pattern_loops)
             sample_rate = int(self.params.get("sample_rate", 48000))
 
             temp_fd, self._temp_wav_path = tempfile.mkstemp(prefix="myms_export_", suffix=".wav")
@@ -54,6 +59,7 @@ class AudioExportWorker(QThread):
                 song_mode,
                 pattern_idx,
                 ctypes.c_float(tail_seconds),
+                ctypes.c_int(pattern_loops),
                 cb_handle,
                 None
             )
@@ -468,6 +474,7 @@ class MymsEngine(QObject):
             ctypes.c_bool,
             ctypes.c_int,
             ctypes.c_float,
+            ctypes.c_int,
             PROGRESS_CB,
             ctypes.c_void_p
         ]
@@ -1727,6 +1734,11 @@ class MymsEngine(QObject):
         if self._selected_instrument >= self._num_tracks:
             self.setSelectedInstrument(max(0, self._num_tracks - 1))
 
+    @pyqtSlot()
+    def removeSelectedTrack(self):
+        if self._num_tracks > 1:
+            self.removeTrack(self._selected_instrument)
+
     @pyqtSlot(int, int, float)
     def noteOnInst(self, inst, note, vel=1.0):
         self.lib.myms_note_on_inst(inst, note, vel)
@@ -2291,8 +2303,10 @@ class MymsEngine(QObject):
         proj = self._current_project_path
         if proj:
             base_name = os.path.splitext(os.path.basename(proj))[0]
+        elif self.projectName:
+            base_name = self.projectName
         else:
-            base_name = "untitled_export"
+            base_name = "untitled"
 
         ext = fmt.lower().strip()
         if not ext.startswith("."):

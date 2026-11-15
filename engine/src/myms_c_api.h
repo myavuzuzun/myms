@@ -216,6 +216,7 @@ bool myms_export_render_wav(const char* output_path,
                             bool song_mode,
                             int pattern_idx,
                             float tail_seconds,
+                            int pattern_loops,
                             myms_export_progress_cb callback,
                             void* user_data);
 bool myms_is_exporting(void);

@@ -327,14 +327,15 @@ class TestPhase4AudioExport(unittest.TestCase):
                 os.unlink(target)
 
     def test_09_default_export_path_generation(self):
+        self.engine.newProject()
         wav_path = self.engine.getDefaultExportPath("wav")
-        self.assertTrue(wav_path.endswith(".wav"))
+        self.assertTrue(wav_path.endswith("untitled.wav"))
         flac_path = self.engine.getDefaultExportPath("flac")
-        self.assertTrue(flac_path.endswith(".flac"))
+        self.assertTrue(flac_path.endswith("untitled.flac"))
         mp3_path = self.engine.getDefaultExportPath("mp3")
-        self.assertTrue(mp3_path.endswith(".mp3"))
+        self.assertTrue(mp3_path.endswith("untitled.mp3"))
         ogg_path = self.engine.getDefaultExportPath("ogg")
-        self.assertTrue(ogg_path.endswith(".ogg"))
+        self.assertTrue(ogg_path.endswith("untitled.ogg"))
 
     def test_10_song_order_rearranging(self):
         self.engine.newProject()
@@ -368,6 +369,42 @@ class TestPhase4AudioExport(unittest.TestCase):
         self.assertFalse(self.engine.moveSongOrderStep(-1, 0))
         self.assertFalse(self.engine.moveSongOrderStep(0, 99))
         self.assertFalse(self.engine.swapSongOrderSteps(0, 0))
+
+    def test_11_pattern_export_looping(self):
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf:
+            target = tf.name
+
+        try:
+            # 32 rows at 120bpm = 4.0s. 2 loops = 8.0s + 0.5s tail = 8.5s
+            params = {
+                "filepath": target,
+                "format": "wav",
+                "song_mode": False,
+                "pattern_idx": 0,
+                "tail_seconds": 0.5,
+                "pattern_loops": 2,
+                "sample_rate": 48000,
+                "wav_bit_depth": 16
+            }
+            res = self._run_export_sync(params)
+            self.assertTrue(res["success"], f"Pattern loop export failed: {res['msg']}")
+            self.assertTrue(os.path.exists(target))
+            probe = self._probe_audio(target)
+            duration = float(probe.get("duration", 0.0))
+            self.assertGreaterEqual(duration, 8.0)
+        finally:
+            if os.path.exists(target):
+                os.unlink(target)
+
+    def test_12_remove_selected_track(self):
+        self.engine.newProject()
+        self.engine.addTrack()
+        self.engine.addTrack()
+        self.assertEqual(self.engine.numTracks, 3)
+        self.engine.setSelectedInstrument(1)
+
+        self.engine.removeSelectedTrack()
+        self.assertEqual(self.engine.numTracks, 2)
 
 if __name__ == "__main__":
     unittest.main()

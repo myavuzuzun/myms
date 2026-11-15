@@ -1246,6 +1246,7 @@ bool AudioEngine::exportRenderWav(const std::string& outputPath,
                                   bool songMode,
                                   int patternIdx,
                                   float tailSeconds,
+                                  int patternLoops,
                                   AudioExportCallback callback,
                                   void* userData) {
     if (m_isExporting.exchange(true)) {
@@ -1282,7 +1283,8 @@ bool AudioEngine::exportRenderWav(const std::string& outputPath,
     } else {
         int targetP = (patternIdx >= 0 && patternIdx < numPats) ? patternIdx : savedPat;
         int rows = m_sequencer.getPatternNumRows(targetP);
-        totalSongFrames = rows * samplesPerRow;
+        int loops = std::max(1, patternLoops);
+        totalSongFrames = rows * samplesPerRow * loops;
     }
 
     int tailFrames = static_cast<int>(std::max(0.0f, tailSeconds) * m_sampleRate);
@@ -1290,14 +1292,16 @@ bool AudioEngine::exportRenderWav(const std::string& outputPath,
     if (totalFrames <= 0) totalFrames = samplesPerRow * 16;
 
     // Setup sequencer for offline export
-    m_sequencer.setLooping(false);
     if (songMode) {
+        m_sequencer.setLooping(false);
         m_sequencer.setSongMode(true);
         m_sequencer.setSongOrderIndex(0);
         int firstPat = m_sequencer.getSongOrderStep(0);
         m_sequencer.setCurrentPattern(firstPat);
         m_sequencer.setCurrentRow(0);
     } else {
+        int loops = std::max(1, patternLoops);
+        m_sequencer.setLooping(loops > 1);
         m_sequencer.setSongMode(false);
         int targetP = (patternIdx >= 0 && patternIdx < numPats) ? patternIdx : savedPat;
         m_sequencer.setCurrentPattern(targetP);
@@ -1336,6 +1340,11 @@ bool AudioEngine::exportRenderWav(const std::string& outputPath,
 
     while (framesRendered < totalFrames && !cancelled) {
         int toRender = std::min(CHUNK_SIZE, totalFrames - framesRendered);
+
+        // When all active pattern loops or song order steps have finished, stop sequencer so tail rings out
+        if (framesRendered >= totalSongFrames && m_sequencer.isPlaying()) {
+            m_sequencer.stop();
+        }
 
         bool isPlayingNow = m_sequencer.isPlaying();
         renderProcessBlock(chunk.data(), toRender, 2, isPlayingNow, nullptr, nullptr);

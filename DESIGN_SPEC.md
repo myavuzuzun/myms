@@ -305,7 +305,14 @@
       - Implemented C++ DSP sequencer APIs: `tracker_sequencer.h::moveSongOrderStep(fromStep, toStep)` and `swapSongOrderSteps(stepA, stepB)`, keeping active playback step tracking synchronized.
       - Added quick mouse wheel pattern cycling on the `PAT XX ▾` pill to rapidly step through patterns without opening menus.
       - Added right-click context menu on each arranger step card: `◀ Move Left`, `▶ Move Right`, `Duplicate Step`, and `Remove Step (×)`.
+    - **Streamlined Menu Actions (`main.py`)**:
+      - Replaced the 8 hardcoded "Select Track / Instrument" actions in the **Tracks** menu with a single clean **Remove Selected Track** action (`Ctrl+Shift+T`).
+      - Removed redundant "Increase/Decrease Tempo" menu actions from the **Playback** menu (tempo is managed directly via the toolbar BPM widget).
+    - **Project-Aware Export Naming & Pattern Looping (`ExportAudioModal.qml`)**:
+      - Output filename dynamically defaults to the active project's name (`<ProjectName>.<fmt>`) or `untitled.<fmt>` if unsaved, refreshed freshly on every modal open rather than preserving the previous export's path.
+      - Added interactive **Pattern Loop** controls when Pattern Mode is active: toggle `[ ⟳ LOOP PATTERN ]`, stepper `[-] [count] [+]`, and quick preset pills (`1x`, `2x`, `4x`, `8x`).
+      - C++ DSP engine loops the pattern seamlessly for the specified repeat count before gracefully stopping the sequencer and capturing natural reverb/delay tail decay.
   - **Comprehensive Verification Suite**:
-    - 10 dedicated unit and integration tests in `tests/test_phase4_audio_export.py` validating file integrity, headers, sample rates, channel counts, stream bit depths, and song order reordering.
-    - Full test suite passing across all phases (32/32 unit tests OK).
+    - 12 dedicated unit and integration tests in `tests/test_phase4_audio_export.py` validating file integrity, headers, sample rates, channel counts, stream bit depths, song order reordering, pattern looping, and track removal.
+    - Full test suite passing across all phases (34/34 unit tests OK).
   - Git checkpoint commit and `phase-4` branch.

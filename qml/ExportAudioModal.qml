@@ -17,6 +17,8 @@ Item {
     property string exportRange: "song" // "song" or "pattern"
     property string exportFormat: "wav" // "wav", "mp3", "ogg", "flac"
     property real tailSeconds: 2.0
+    property bool patternLoop: true
+    property int patternLoops: 2
 
     // Format specific options
     property int wavBitDepth: 24       // 16, 24, 32
@@ -40,12 +42,10 @@ Item {
     property string lastExportedPath: ""
 
     function open() {
-        if (!outputPath || outputPath === "") {
-            if (engine) {
-                outputPath = engine.getDefaultExportPath(exportFormat)
-            } else {
-                outputPath = "/tmp/untitled_export." + exportFormat
-            }
+        if (engine) {
+            outputPath = engine.getDefaultExportPath(exportFormat)
+        } else {
+            outputPath = "/tmp/untitled." + exportFormat
         }
         exportProgress = 0.0
         statusText = "Ready to export."
@@ -89,12 +89,15 @@ Item {
         else if (exportFormat === "ogg") sampleRate = oggSampleRate
         else if (exportFormat === "flac") sampleRate = flacSampleRate
 
+        let loops = (exportRange === "pattern" && patternLoop) ? Math.max(1, patternLoops) : 1
+
         let params = {
             "filepath": outputPath,
             "format": exportFormat,
             "song_mode": (exportRange === "song"),
             "pattern_idx": (engine ? engine.currentPattern : 0),
             "tail_seconds": tailSeconds,
+            "pattern_loops": loops,
             "sample_rate": sampleRate,
             "wav_bit_depth": wavBitDepth,
             "mp3_bitrate": mp3Bitrate,
@@ -144,7 +147,7 @@ Item {
         id: modalDialog
         anchors.centerIn: parent
         width: Math.min(parent.width - 24, 600)
-        height: Math.min(parent.height - 24, 530)
+        height: Math.min(parent.height - 24, 560)
         color: theme.bgCard
         radius: 6
         border.color: theme.borderLight
@@ -299,6 +302,163 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             enabled: !(engine && engine.isExporting)
                             onClicked: root.exportRange = "pattern"
+                        }
+                    }
+                }
+            }
+
+            // ==========================================
+            // 2b. Pattern Loop Settings (Pattern Mode Only)
+            // ==========================================
+            RowLayout {
+                visible: root.exportRange === "pattern"
+                Layout.fillWidth: true
+                spacing: 12
+
+                Text {
+                    text: "PATTERN LOOP:"
+                    font.bold: true
+                    font.pixelSize: 10
+                    color: theme.textMuted
+                    Layout.preferredWidth: 90
+                }
+
+                RowLayout {
+                    spacing: 8
+
+                    // Loop Toggle Pill
+                    Rectangle {
+                        width: 106
+                        height: 24
+                        radius: 3
+                        color: root.patternLoop ? theme.accent : theme.bgWell
+                        border.color: root.patternLoop ? theme.accentHover : theme.border
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 4
+                            Text {
+                                text: root.patternLoop ? "☑" : "☐"
+                                font.pixelSize: 10
+                                color: root.patternLoop ? "#ffffff" : theme.textMuted
+                            }
+                            Text {
+                                text: "Loop Pattern"
+                                font.bold: true
+                                font.pixelSize: 9
+                                color: root.patternLoop ? "#ffffff" : theme.textMain
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            enabled: !(engine && engine.isExporting)
+                            onClicked: root.patternLoop = !root.patternLoop
+                        }
+                    }
+
+                    // Loop Count Controls (Visible when patternLoop is enabled)
+                    RowLayout {
+                        visible: root.patternLoop
+                        spacing: 4
+
+                        Text {
+                            text: "REPEAT:"
+                            font.bold: true
+                            font.pixelSize: 9
+                            color: theme.textMuted
+                        }
+
+                        // Stepper Box [-] [ 2 ] [+]
+                        Rectangle {
+                            width: 68
+                            height: 24
+                            radius: 3
+                            color: theme.bgWell
+                            border.color: theme.border
+
+                            RowLayout {
+                                anchors.fill: parent
+                                spacing: 0
+
+                                // Minus
+                                Rectangle {
+                                    width: 18
+                                    height: parent.height
+                                    color: loopMinusMouse.containsMouse ? theme.btnHover : "transparent"
+                                    Text { anchors.centerIn: parent; text: "-"; font.bold: true; color: theme.textMain }
+                                    MouseArea {
+                                        id: loopMinusMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        enabled: !(engine && engine.isExporting)
+                                        onClicked: root.patternLoops = Math.max(1, root.patternLoops - 1)
+                                    }
+                                }
+
+                                // Count Display
+                                Text {
+                                    Layout.fillWidth: true
+                                    text: "" + root.patternLoops
+                                    font.bold: true
+                                    font.pixelSize: 10
+                                    font.family: "Monospace"
+                                    color: theme.accent
+                                    horizontalAlignment: Text.AlignHCenter
+                                }
+
+                                // Plus
+                                Rectangle {
+                                    width: 18
+                                    height: parent.height
+                                    color: loopPlusMouse.containsMouse ? theme.btnHover : "transparent"
+                                    Text { anchors.centerIn: parent; text: "+"; font.bold: true; color: theme.textMain }
+                                    MouseArea {
+                                        id: loopPlusMouse
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        enabled: !(engine && engine.isExporting)
+                                        onClicked: root.patternLoops = Math.min(32, root.patternLoops + 1)
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: "times"
+                            font.pixelSize: 9
+                            color: theme.textMuted
+                        }
+
+                        // Quick Presets Pills [1x] [2x] [4x] [8x]
+                        RowLayout {
+                            spacing: 3
+                            Layout.leftMargin: 6
+                            Repeater {
+                                model: [1, 2, 4, 8]
+                                Rectangle {
+                                    width: 28
+                                    height: 22
+                                    radius: 2
+                                    color: (root.patternLoops === modelData) ? theme.accent : theme.btnBg
+                                    border.color: (root.patternLoops === modelData) ? theme.accentHover : theme.border
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData + "x"
+                                        font.pixelSize: 9
+                                        font.bold: true
+                                        color: (root.patternLoops === modelData) ? "#ffffff" : theme.textMain
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        enabled: !(engine && engine.isExporting)
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.patternLoops = modelData
+                                    }
+                                }
+                            }
                         }
                     }
                 }

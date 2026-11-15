@@ -221,18 +221,6 @@ class AppWindow(QMainWindow):
         act_song_mode.triggered.connect(self.engine.toggleSongMode)
         play_menu.addAction(act_song_mode)
 
-        play_menu.addSeparator()
-
-        act_bpm_up = QAction("Increase Tempo (+5 BPM)", self)
-        act_bpm_up.setShortcut(QKeySequence("Alt+="))
-        act_bpm_up.triggered.connect(lambda: self.engine.setBpm(self.engine.bpm + 5))
-        play_menu.addAction(act_bpm_up)
-
-        act_bpm_down = QAction("Decrease Tempo (-5 BPM)", self)
-        act_bpm_down.setShortcut(QKeySequence("Alt+-"))
-        act_bpm_down.triggered.connect(lambda: self.engine.setBpm(self.engine.bpm - 5))
-        play_menu.addAction(act_bpm_down)
-
         # --- Settings Menu ---
         settings_menu = mb.addMenu("&Settings")
         layout_menu = settings_menu.addMenu("Keyboard &Layout")
@@ -260,14 +248,11 @@ class AppWindow(QMainWindow):
         act_add_track.setShortcut(QKeySequence("Ctrl+T"))
         act_add_track.triggered.connect(self.engine.addTrack)
         track_menu.addAction(act_add_track)
-        track_menu.addSeparator()
 
-        for i in range(8):
-            act_inst = QAction(f"Select Track / Instrument {i+1}", self)
-            act_inst.setShortcut(QKeySequence(f"Ctrl+{i+1}"))
-            idx = i
-            act_inst.triggered.connect(lambda checked=False, target=idx: self.engine.setSelectedInstrument(target))
-            track_menu.addAction(act_inst)
+        act_remove_track = QAction("&Remove Selected Track", self)
+        act_remove_track.setShortcut(QKeySequence("Ctrl+Shift+T"))
+        act_remove_track.triggered.connect(self.engine.removeSelectedTrack)
+        track_menu.addAction(act_remove_track)
 
     def _update_window_title(self, path=None):
         name = self.engine.projectName
