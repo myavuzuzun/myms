@@ -183,6 +183,8 @@ int myms_get_song_order_step(int step);
 void myms_set_song_order_step(int step, int pat);
 void myms_add_song_order_step(int pat);
 void myms_remove_song_order_step(int step);
+bool myms_move_song_order_step(int from_step, int to_step);
+bool myms_swap_song_order_steps(int step_a, int step_b);
 int myms_get_song_order_index();
 void myms_set_song_order_index(int step);
 

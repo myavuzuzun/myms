@@ -626,52 +626,6 @@ Rectangle {
                                     }
                                 }
 
-                                // Track Engine Badge (SYNTH / SF2 / DRUM / PLUGIN)
-                                Rectangle {
-                                    width: 32
-                                    height: 16
-                                    radius: 2
-                                    Layout.alignment: Qt.AlignVCenter
-                                    property int trkType: engine ? engine.getTrackType(index) : 0
-                                    color: (root.selectedTrack === index) ? "rgba(0,0,0,0.3)" : theme.bgWell
-                                    border.color: (root.selectedTrack === index) ? "#ffffff" : theme.border
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: {
-                                            let t = parent.trkType
-                                            if (t === 1) return "SF2"
-                                            if (t === 2) return "DRUM"
-                                            if (t === 3) return "PLG"
-                                            return "SYN"
-                                        }
-                                        font.bold: true
-                                        font.pixelSize: 8
-                                        color: {
-                                            let t = parent.trkType
-                                            if (t === 1) return "#92ebb5"
-                                            if (t === 2) return "#f7b731"
-                                            if (t === 3) return "#3daee9"
-                                            return "#5cd6e8"
-                                        }
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            if (engine) {
-                                                let nextType = (parent.trkType + 1) % 4
-                                                engine.setTrackType(index, nextType)
-                                                root.gridModified()
-                                            }
-                                        }
-                                        ToolTip.visible: containsMouse
-                                        ToolTip.text: "Track Engine: Click to cycle (SYNTH / SF2 / DRUM / PLUGIN)"
-                                        ToolTip.delay: 400
-                                    }
-                                }
-
                                 // Delete track button
                                 Rectangle {
                                     width: 14

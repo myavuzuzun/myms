@@ -493,6 +493,10 @@ class MymsEngine(QObject):
         self.lib.myms_set_song_order_step.argtypes = [ctypes.c_int, ctypes.c_int]
         self.lib.myms_add_song_order_step.argtypes = [ctypes.c_int]
         self.lib.myms_remove_song_order_step.argtypes = [ctypes.c_int]
+        self.lib.myms_move_song_order_step.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_move_song_order_step.restype = ctypes.c_bool
+        self.lib.myms_swap_song_order_steps.argtypes = [ctypes.c_int, ctypes.c_int]
+        self.lib.myms_swap_song_order_steps.restype = ctypes.c_bool
         self.lib.myms_get_song_order_index.restype = ctypes.c_int
         self.lib.myms_set_song_order_index.argtypes = [ctypes.c_int]
         self.lib.myms_set_pattern_cell.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_uint8, ctypes.c_uint8, ctypes.c_uint8, ctypes.c_uint8, ctypes.c_uint8]
@@ -986,6 +990,34 @@ class MymsEngine(QObject):
         self._current_pattern = cur_pat
         self.currentPatternChanged.emit(cur_pat)
         self.gridCellChanged.emit(0, 0)
+
+    @pyqtSlot(int, int, result=bool)
+    def moveSongOrderStep(self, from_step, to_step):
+        ok = self.lib.myms_move_song_order_step(from_step, to_step)
+        if ok:
+            self.songOrderChanged.emit()
+            so_idx = self.lib.myms_get_song_order_index()
+            self._song_order_index = so_idx
+            self.songOrderIndexChanged.emit(so_idx)
+            cur_pat = self.lib.myms_get_current_pattern()
+            self._current_pattern = cur_pat
+            self.currentPatternChanged.emit(cur_pat)
+            self.gridCellChanged.emit(0, 0)
+        return ok
+
+    @pyqtSlot(int, int, result=bool)
+    def swapSongOrderSteps(self, step_a, step_b):
+        ok = self.lib.myms_swap_song_order_steps(step_a, step_b)
+        if ok:
+            self.songOrderChanged.emit()
+            so_idx = self.lib.myms_get_song_order_index()
+            self._song_order_index = so_idx
+            self.songOrderIndexChanged.emit(so_idx)
+            cur_pat = self.lib.myms_get_current_pattern()
+            self._current_pattern = cur_pat
+            self.currentPatternChanged.emit(cur_pat)
+            self.gridCellChanged.emit(0, 0)
+        return ok
 
     # ==========================================
     # Phase 3: Linux VST2 & CLAP Plugin Host API

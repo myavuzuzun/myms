@@ -98,7 +98,7 @@ Rectangle {
                     // Single Arranger Step Card
                     Rectangle {
                         id: stepCard
-                        width: 104
+                        width: 140
                         height: 26
                         radius: 3
                         anchors.verticalCenter: parent.verticalCenter
@@ -118,9 +118,40 @@ Rectangle {
                             anchors.rightMargin: 4
                             spacing: 3
 
+                            // Move Step Left Button (◀)
+                            Rectangle {
+                                width: 14
+                                height: 16
+                                radius: 2
+                                Layout.alignment: Qt.AlignVCenter
+                                color: leftMouse.containsMouse ? theme.accent : "transparent"
+                                visible: stepCard.stepIdx > 0
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "◀"
+                                    font.pixelSize: 8
+                                    font.bold: true
+                                    color: leftMouse.containsMouse ? "#ffffff" : theme.textMuted
+                                }
+
+                                MouseArea {
+                                    id: leftMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (engine) engine.moveSongOrderStep(stepCard.stepIdx, stepCard.stepIdx - 1)
+                                    }
+                                    ToolTip.visible: containsMouse
+                                    ToolTip.text: "Move Step Left (Earlier in Song)"
+                                    ToolTip.delay: 300
+                                }
+                            }
+
                             // Step Order Label
                             Rectangle {
-                                width: 22
+                                width: 20
                                 height: parent.height
                                 color: "transparent"
                                 Layout.alignment: Qt.AlignVCenter
@@ -179,6 +210,17 @@ Rectangle {
                                         }
                                         patMenu.open()
                                     }
+                                    onWheel: (wheel) => {
+                                        if (engine && engine.numPatterns > 1) {
+                                            let delta = wheel.angleDelta.y > 0 ? 1 : -1
+                                            let newPat = (stepCard.patNum + delta + engine.numPatterns) % engine.numPatterns
+                                            engine.setSongOrderStep(stepCard.stepIdx, newPat)
+                                            engine.setCurrentPattern(newPat)
+                                        }
+                                    }
+                                    ToolTip.visible: containsMouse
+                                    ToolTip.text: "Click for pattern menu, scroll wheel to cycle patterns"
+                                    ToolTip.delay: 400
                                 }
 
                                 Menu {
@@ -196,6 +238,37 @@ Rectangle {
                                             }
                                         }
                                     }
+                                }
+                            }
+
+                            // Move Step Right Button (▶)
+                            Rectangle {
+                                width: 14
+                                height: 16
+                                radius: 2
+                                Layout.alignment: Qt.AlignVCenter
+                                color: rightMouse.containsMouse ? theme.accent : "transparent"
+                                visible: engine && (stepCard.stepIdx < engine.songOrderLength - 1)
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "▶"
+                                    font.pixelSize: 8
+                                    font.bold: true
+                                    color: rightMouse.containsMouse ? "#ffffff" : theme.textMuted
+                                }
+
+                                MouseArea {
+                                    id: rightMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (engine) engine.moveSongOrderStep(stepCard.stepIdx, stepCard.stepIdx + 1)
+                                    }
+                                    ToolTip.visible: containsMouse
+                                    ToolTip.text: "Move Step Right (Later in Song)"
+                                    ToolTip.delay: 300
                                 }
                             }
 
@@ -224,18 +297,51 @@ Rectangle {
                                     onClicked: {
                                         if (engine) engine.removeSongOrderStep(stepCard.stepIdx)
                                     }
+                                    ToolTip.visible: containsMouse
+                                    ToolTip.text: "Remove Step from Song"
+                                    ToolTip.delay: 300
                                 }
                             }
                         }
 
-                        // Clicking anywhere on card selects this step & pattern
+                        // Right-click context menu on stepCard
+                        Menu {
+                            id: stepContextMenu
+                            MenuItem {
+                                text: "◀ Move Left"
+                                enabled: stepCard.stepIdx > 0
+                                onTriggered: if (engine) engine.moveSongOrderStep(stepCard.stepIdx, stepCard.stepIdx - 1)
+                            }
+                            MenuItem {
+                                text: "▶ Move Right"
+                                enabled: engine && (stepCard.stepIdx < engine.songOrderLength - 1)
+                                onTriggered: if (engine) engine.moveSongOrderStep(stepCard.stepIdx, stepCard.stepIdx + 1)
+                            }
+                            MenuSeparator {}
+                            MenuItem {
+                                text: "Duplicate Step"
+                                onTriggered: if (engine) engine.addSongOrderStep(stepCard.patNum)
+                            }
+                            MenuItem {
+                                text: "Remove Step (×)"
+                                enabled: engine && engine.songOrderLength > 1
+                                onTriggered: if (engine) engine.removeSongOrderStep(stepCard.stepIdx)
+                            }
+                        }
+
+                        // Clicking anywhere on card selects this step & pattern; right click opens context menu
                         MouseArea {
                             anchors.fill: parent
                             z: -1
-                            onClicked: {
-                                if (engine) {
-                                    engine.setSongOrderIndex(stepCard.stepIdx)
-                                    engine.setCurrentPattern(stepCard.patNum)
+                            acceptedButtons: Qt.LeftButton | Qt.RightButton
+                            onClicked: (mouse) => {
+                                if (mouse.button === Qt.RightButton) {
+                                    stepContextMenu.popup()
+                                } else {
+                                    if (engine) {
+                                        engine.setSongOrderIndex(stepCard.stepIdx)
+                                        engine.setCurrentPattern(stepCard.patNum)
+                                    }
                                 }
                             }
                         }

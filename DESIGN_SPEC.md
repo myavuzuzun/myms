@@ -298,7 +298,14 @@
     - Output file path with direct inline editing and native KDE file dialog via `[ 📁 BROWSE... ]`.
     - Live progress bar, status notifications, and `[ 📁 SHOW IN DOLPHIN / FOLDER ]` integration using native `QDesktopServices`.
     - Main window integration: File Menu `&Export Audio...` (`Ctrl+E`) and top toolbar `[ ⤓ EXPORT ]` trigger button.
+  - **Song Structure & Tracker UI Enhancements**:
+    - **Removed Obsolete Engine Badges**: Eliminated the legacy `SYN` / `SF2` / `DRUM` / `PLG` indicators from `TrackerView.qml` track headers. With Option C cross-track instrument routing, tracks are universal channel columns, and removing the badges provides 36px more horizontal space for crisp, unclipped track titles.
+    - **Song Structure Pattern Rearranging (`SongArrangerBar.qml`)**:
+      - Added responsive `◀` and `▶` move buttons to each step card on the song timeline, allowing steps to be moved earlier or later across the song sequence.
+      - Implemented C++ DSP sequencer APIs: `tracker_sequencer.h::moveSongOrderStep(fromStep, toStep)` and `swapSongOrderSteps(stepA, stepB)`, keeping active playback step tracking synchronized.
+      - Added quick mouse wheel pattern cycling on the `PAT XX ▾` pill to rapidly step through patterns without opening menus.
+      - Added right-click context menu on each arranger step card: `◀ Move Left`, `▶ Move Right`, `Duplicate Step`, and `Remove Step (×)`.
   - **Comprehensive Verification Suite**:
-    - 9 dedicated unit and integration tests in `tests/test_phase4_audio_export.py` validating file integrity, headers, sample rates, channel counts, and stream bit depths via `ffprobe`.
-    - Full test suite passing across all phases (31/31 unit tests OK).
+    - 10 dedicated unit and integration tests in `tests/test_phase4_audio_export.py` validating file integrity, headers, sample rates, channel counts, stream bit depths, and song order reordering.
+    - Full test suite passing across all phases (32/32 unit tests OK).
   - Git checkpoint commit and `phase-4` branch.

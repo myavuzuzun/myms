@@ -360,6 +360,14 @@ void myms_remove_song_order_step(int step) {
     myms::AudioEngine::instance().removeSongOrderStep(step);
 }
 
+bool myms_move_song_order_step(int from_step, int to_step) {
+    return myms::AudioEngine::instance().moveSongOrderStep(from_step, to_step);
+}
+
+bool myms_swap_song_order_steps(int step_a, int step_b) {
+    return myms::AudioEngine::instance().swapSongOrderSteps(step_a, step_b);
+}
+
 int myms_get_song_order_index() {
     return myms::AudioEngine::instance().getSongOrderIndex();
 }

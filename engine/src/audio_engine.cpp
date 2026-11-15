@@ -449,6 +449,22 @@ void AudioEngine::removeSongOrderStep(int step) {
     m_sequencer.removeSongOrderStep(step);
 }
 
+bool AudioEngine::moveSongOrderStep(int fromStep, int toStep) {
+    bool ok = m_sequencer.moveSongOrderStep(fromStep, toStep);
+    if (ok) {
+        m_uiSongOrderIndex.store(m_sequencer.getSongOrderIndex(), std::memory_order_relaxed);
+    }
+    return ok;
+}
+
+bool AudioEngine::swapSongOrderSteps(int stepA, int stepB) {
+    bool ok = m_sequencer.swapSongOrderSteps(stepA, stepB);
+    if (ok) {
+        m_uiSongOrderIndex.store(m_sequencer.getSongOrderIndex(), std::memory_order_relaxed);
+    }
+    return ok;
+}
+
 int AudioEngine::getSongOrderIndex() const {
     if (m_sequencer.isPlaying()) {
         return m_uiSongOrderIndex.load(std::memory_order_relaxed);

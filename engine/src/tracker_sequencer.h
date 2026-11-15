@@ -331,6 +331,39 @@ public:
         }
     }
 
+    bool moveSongOrderStep(int fromStep, int toStep) {
+        int len = static_cast<int>(m_songOrder.size());
+        if (fromStep < 0 || fromStep >= len || toStep < 0 || toStep >= len || fromStep == toStep) {
+            return false;
+        }
+        int pat = m_songOrder[fromStep];
+        m_songOrder.erase(m_songOrder.begin() + fromStep);
+        m_songOrder.insert(m_songOrder.begin() + toStep, pat);
+
+        if (m_songOrderIndex == fromStep) {
+            m_songOrderIndex = toStep;
+        } else if (fromStep < toStep && m_songOrderIndex > fromStep && m_songOrderIndex <= toStep) {
+            m_songOrderIndex--;
+        } else if (fromStep > toStep && m_songOrderIndex >= toStep && m_songOrderIndex < fromStep) {
+            m_songOrderIndex++;
+        }
+        return true;
+    }
+
+    bool swapSongOrderSteps(int stepA, int stepB) {
+        int len = static_cast<int>(m_songOrder.size());
+        if (stepA < 0 || stepA >= len || stepB < 0 || stepB >= len || stepA == stepB) {
+            return false;
+        }
+        std::swap(m_songOrder[stepA], m_songOrder[stepB]);
+        if (m_songOrderIndex == stepA) {
+            m_songOrderIndex = stepB;
+        } else if (m_songOrderIndex == stepB) {
+            m_songOrderIndex = stepA;
+        }
+        return true;
+    }
+
     int getSongOrderIndex() const {
         return m_songOrderIndex;
     }

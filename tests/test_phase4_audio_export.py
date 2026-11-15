@@ -336,5 +336,39 @@ class TestPhase4AudioExport(unittest.TestCase):
         ogg_path = self.engine.getDefaultExportPath("ogg")
         self.assertTrue(ogg_path.endswith(".ogg"))
 
+    def test_10_song_order_rearranging(self):
+        self.engine.newProject()
+        self.assertEqual(self.engine.songOrderLength, 1)
+        self.assertEqual(self.engine.getSongOrderStep(0), 0)
+
+        # Add patterns and steps
+        self.engine.addPattern()
+        self.engine.addPattern()
+        self.engine.addSongOrderStep(1)
+        self.engine.addSongOrderStep(2)
+        self.assertEqual(self.engine.songOrderLength, 3)
+        self.assertEqual(self.engine.getSongOrderList(), [0, 1, 2])
+
+        # Move step 2 left to index 0: [2, 0, 1]
+        ok = self.engine.moveSongOrderStep(2, 0)
+        self.assertTrue(ok)
+        self.assertEqual(self.engine.getSongOrderList(), [2, 0, 1])
+
+        # Move step 0 right to index 1: [0, 2, 1]
+        ok = self.engine.moveSongOrderStep(0, 1)
+        self.assertTrue(ok)
+        self.assertEqual(self.engine.getSongOrderList(), [0, 2, 1])
+
+        # Swap steps 1 and 2: [0, 1, 2]
+        ok = self.engine.swapSongOrderSteps(1, 2)
+        self.assertTrue(ok)
+        self.assertEqual(self.engine.getSongOrderList(), [0, 1, 2])
+
+        # Invalid bounds checks
+        self.assertFalse(self.engine.moveSongOrderStep(-1, 0))
+        self.assertFalse(self.engine.moveSongOrderStep(0, 99))
+        self.assertFalse(self.engine.swapSongOrderSteps(0, 0))
+
 if __name__ == "__main__":
     unittest.main()
+

@@ -109,6 +109,8 @@ public:
     void setSongOrderStep(int step, int pat);
     void addSongOrderStep(int pat);
     void removeSongOrderStep(int step);
+    bool moveSongOrderStep(int fromStep, int toStep);
+    bool swapSongOrderSteps(int stepA, int stepB);
     int getSongOrderIndex() const;
     void setSongOrderIndex(int step);
 
