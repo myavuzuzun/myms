@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cstring>
 #include <cmath>
+#include <cstdio>
 
 namespace myms {
 
@@ -825,17 +826,8 @@ void AudioEngine::transposeTrack(int track, int semitones) {
     }
 }
 
-void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
-    auto startCpuTime = std::chrono::steady_clock::now();
-    std::memset(output, 0, frameCount * channels * sizeof(float));
-
-    float peakL = 0.0f;
-    float peakR = 0.0f;
-    float sumSq = 0.0f;
-
+void AudioEngine::renderProcessBlock(float* output, int frameCount, int channels, bool isPlayingNow, float* trkPeakL, float* trkPeakR) {
     int numTracks = m_sequencer.getNumTracks();
-    float trkPeakL[MAX_INSTRUMENTS] = {0.0f};
-    float trkPeakR[MAX_INSTRUMENTS] = {0.0f};
 
     // Determine solo state
     bool anySolo = false;
@@ -843,46 +835,6 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
         if (m_trackMixers[t].solo) {
             anySolo = true;
             break;
-        }
-    }
-
-    // Playback state transition & preview note auto-cutoff when playback is stopped
-    bool isPlayingNow = m_sequencer.isPlaying();
-    if (m_wasPlaying && !isPlayingNow) {
-        allNotesOff();
-    }
-    m_wasPlaying = isPlayingNow;
-
-    if (!isPlayingNow) {
-        for (int t = 0; t < numTracks && t < MAX_INSTRUMENTS; ++t) {
-            if (m_previewCountdowns[t] > 0) {
-                m_previewCountdowns[t] -= frameCount;
-                if (m_previewCountdowns[t] <= 0) {
-                    m_previewCountdowns[t] = 0;
-                    noteOff(t, -1);
-                }
-            }
-        }
-
-        bool anyPreview = false;
-        for (int t = 0; t < numTracks && t < MAX_INSTRUMENTS; ++t) {
-            if (m_previewCountdowns[t] > 0) {
-                anyPreview = true;
-                break;
-            }
-        }
-        if (!anyPreview) {
-            std::memset(output, 0, frameCount * channels * sizeof(float));
-            m_peakL.store(0.0f, std::memory_order_relaxed);
-            m_peakR.store(0.0f, std::memory_order_relaxed);
-            m_rms.store(0.0f, std::memory_order_relaxed);
-            for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
-                m_trackMixers[t].peakL.store(0.0f, std::memory_order_relaxed);
-                m_trackMixers[t].peakR.store(0.0f, std::memory_order_relaxed);
-            }
-            float prevCpu = m_cpuUsage.load(std::memory_order_relaxed);
-            m_cpuUsage.store(prevCpu * 0.90f, std::memory_order_relaxed);
-            return;
         }
     }
 
@@ -1008,10 +960,12 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
                 sL += instL;
                 sR += instR;
 
-                float absL = std::abs(instL);
-                float absR = std::abs(instR);
-                if (absL > trkPeakL[t]) trkPeakL[t] = absL;
-                if (absR > trkPeakR[t]) trkPeakR[t] = absR;
+                if (trkPeakL && trkPeakR) {
+                    float absL = std::abs(instL);
+                    float absR = std::abs(instR);
+                    if (absL > trkPeakL[t]) trkPeakL[t] = absL;
+                    if (absR > trkPeakR[t]) trkPeakR[t] = absR;
+                }
             }
         }
 
@@ -1054,10 +1008,12 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
                 sL += sfL;
                 sR += sfR;
 
-                float absL = std::abs(sfL);
-                float absR = std::abs(sfR);
-                if (absL > trkPeakL[t]) trkPeakL[t] = absL;
-                if (absR > trkPeakR[t]) trkPeakR[t] = absR;
+                if (trkPeakL && trkPeakR) {
+                    float absL = std::abs(sfL);
+                    float absR = std::abs(sfR);
+                    if (absL > trkPeakL[t]) trkPeakL[t] = absL;
+                    if (absR > trkPeakR[t]) trkPeakR[t] = absR;
+                }
             }
         }
 
@@ -1102,10 +1058,12 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
                 sL += dL;
                 sR += dR;
 
-                float absL = std::abs(dL);
-                float absR = std::abs(dR);
-                if (absL > trkPeakL[t]) trkPeakL[t] = absL;
-                if (absR > trkPeakR[t]) trkPeakR[t] = absR;
+                if (trkPeakL && trkPeakR) {
+                    float absL = std::abs(dL);
+                    float absR = std::abs(dR);
+                    if (absL > trkPeakL[t]) trkPeakL[t] = absL;
+                    if (absR > trkPeakR[t]) trkPeakR[t] = absR;
+                }
             }
         }
 
@@ -1148,10 +1106,12 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
                 sL += plgL;
                 sR += plgR;
 
-                float absL = std::abs(plgL);
-                float absR = std::abs(plgR);
-                if (absL > trkPeakL[t]) trkPeakL[t] = absL;
-                if (absR > trkPeakR[t]) trkPeakR[t] = absR;
+                if (trkPeakL && trkPeakR) {
+                    float absL = std::abs(plgL);
+                    float absR = std::abs(plgR);
+                    if (absL > trkPeakL[t]) trkPeakL[t] = absL;
+                    if (absR > trkPeakR[t]) trkPeakR[t] = absR;
+                }
             }
         }
 
@@ -1173,7 +1133,65 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
         } else {
             output[f] = 0.5f * (sL + sR);
         }
+    }
+}
 
+void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
+    auto startCpuTime = std::chrono::steady_clock::now();
+    std::memset(output, 0, frameCount * channels * sizeof(float));
+
+    int numTracks = m_sequencer.getNumTracks();
+    float trkPeakL[MAX_INSTRUMENTS] = {0.0f};
+    float trkPeakR[MAX_INSTRUMENTS] = {0.0f};
+
+    // Playback state transition & preview note auto-cutoff when playback is stopped
+    bool isPlayingNow = m_sequencer.isPlaying();
+    if (m_wasPlaying && !isPlayingNow) {
+        allNotesOff();
+    }
+    m_wasPlaying = isPlayingNow;
+
+    if (!isPlayingNow) {
+        for (int t = 0; t < numTracks && t < MAX_INSTRUMENTS; ++t) {
+            if (m_previewCountdowns[t] > 0) {
+                m_previewCountdowns[t] -= frameCount;
+                if (m_previewCountdowns[t] <= 0) {
+                    m_previewCountdowns[t] = 0;
+                    noteOff(t, -1);
+                }
+            }
+        }
+
+        bool anyPreview = false;
+        for (int t = 0; t < numTracks && t < MAX_INSTRUMENTS; ++t) {
+            if (m_previewCountdowns[t] > 0) {
+                anyPreview = true;
+                break;
+            }
+        }
+        if (!anyPreview) {
+            m_peakL.store(0.0f, std::memory_order_relaxed);
+            m_peakR.store(0.0f, std::memory_order_relaxed);
+            m_rms.store(0.0f, std::memory_order_relaxed);
+            for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
+                m_trackMixers[t].peakL.store(0.0f, std::memory_order_relaxed);
+                m_trackMixers[t].peakR.store(0.0f, std::memory_order_relaxed);
+            }
+            float prevCpu = m_cpuUsage.load(std::memory_order_relaxed);
+            m_cpuUsage.store(prevCpu * 0.90f, std::memory_order_relaxed);
+            return;
+        }
+    }
+
+    renderProcessBlock(output, frameCount, channels, isPlayingNow, trkPeakL, trkPeakR);
+
+    // Compute peaks & RMS from the rendered output
+    float peakL = 0.0f;
+    float peakR = 0.0f;
+    float sumSq = 0.0f;
+    for (int f = 0; f < frameCount; ++f) {
+        float sL = (channels == 2) ? output[f * 2 + 0] : output[f];
+        float sR = (channels == 2) ? output[f * 2 + 1] : output[f];
         float absL = std::abs(sL);
         float absR = std::abs(sR);
         if (absL > peakL) peakL = absL;
@@ -1206,6 +1224,138 @@ void AudioEngine::renderAudio(float* output, int frameCount, int channels) {
     float prevCpu = m_cpuUsage.load(std::memory_order_relaxed);
     float smoothedCpu = (currentLoad > prevCpu) ? (prevCpu * 0.70f + currentLoad * 0.30f) : (prevCpu * 0.92f + currentLoad * 0.08f);
     m_cpuUsage.store(smoothedCpu, std::memory_order_relaxed);
+}
+
+bool AudioEngine::exportRenderWav(const std::string& outputPath,
+                                  bool songMode,
+                                  int patternIdx,
+                                  float tailSeconds,
+                                  AudioExportCallback callback,
+                                  void* userData) {
+    if (m_isExporting.exchange(true)) {
+        return false; // Already exporting
+    }
+
+    bool wasPlaying = m_sequencer.isPlaying();
+    stop();
+
+    // Stop real-time audio device to avoid any race conditions during offline rendering
+    if (m_device) {
+        ma_device_stop(m_device.get());
+    }
+
+    // Save sequencer state
+    int savedPat = m_sequencer.getCurrentPattern();
+    int savedRow = m_sequencer.getCurrentRow();
+    bool savedSongMode = m_sequencer.isSongMode();
+    int savedSongOrderIdx = m_sequencer.getSongOrderIndex();
+    bool savedLooping = m_sequencer.isLooping();
+
+    // Calculate total frames
+    int samplesPerRow = m_sequencer.getSamplesPerRow();
+    int totalSongFrames = 0;
+
+    int numPats = m_sequencer.getNumPatterns();
+    if (songMode) {
+        int songLen = m_sequencer.getSongOrderLength();
+        for (int i = 0; i < songLen; ++i) {
+            int p = m_sequencer.getSongOrderStep(i);
+            int rows = (p >= 0 && p < numPats) ? m_sequencer.getPatternNumRows(p) : m_sequencer.getNumRows();
+            totalSongFrames += rows * samplesPerRow;
+        }
+    } else {
+        int targetP = (patternIdx >= 0 && patternIdx < numPats) ? patternIdx : savedPat;
+        int rows = m_sequencer.getPatternNumRows(targetP);
+        totalSongFrames = rows * samplesPerRow;
+    }
+
+    int tailFrames = static_cast<int>(std::max(0.0f, tailSeconds) * m_sampleRate);
+    int totalFrames = totalSongFrames + tailFrames;
+    if (totalFrames <= 0) totalFrames = samplesPerRow * 16;
+
+    // Setup sequencer for offline export
+    m_sequencer.setLooping(false);
+    if (songMode) {
+        m_sequencer.setSongMode(true);
+        m_sequencer.setSongOrderIndex(0);
+        int firstPat = m_sequencer.getSongOrderStep(0);
+        m_sequencer.setCurrentPattern(firstPat);
+        m_sequencer.setCurrentRow(0);
+    } else {
+        m_sequencer.setSongMode(false);
+        int targetP = (patternIdx >= 0 && patternIdx < numPats) ? patternIdx : savedPat;
+        m_sequencer.setCurrentPattern(targetP);
+        m_sequencer.setCurrentRow(0);
+    }
+
+    allNotesOff();
+    m_sequencer.play();
+
+    // Initialize miniaudio WAV encoder (32-bit float stereo WAV at native sampleRate)
+    ma_encoder_config config = ma_encoder_config_init(
+        ma_encoding_format_wav,
+        ma_format_f32,
+        2,
+        static_cast<ma_uint32>(m_sampleRate)
+    );
+    ma_encoder encoder;
+    ma_result res = ma_encoder_init_file(outputPath.c_str(), &config, &encoder);
+    if (res != MA_SUCCESS) {
+        // Restore state
+        m_sequencer.setSongMode(savedSongMode);
+        m_sequencer.setSongOrderIndex(savedSongOrderIdx);
+        m_sequencer.setCurrentPattern(savedPat);
+        m_sequencer.setCurrentRow(savedRow);
+        m_sequencer.setLooping(savedLooping);
+        if (m_device) ma_device_start(m_device.get());
+        if (wasPlaying) play();
+        m_isExporting.store(false);
+        return false;
+    }
+
+    const int CHUNK_SIZE = 512;
+    std::vector<float> chunk(CHUNK_SIZE * 2, 0.0f);
+    int framesRendered = 0;
+    bool cancelled = false;
+
+    while (framesRendered < totalFrames && !cancelled) {
+        int toRender = std::min(CHUNK_SIZE, totalFrames - framesRendered);
+
+        bool isPlayingNow = m_sequencer.isPlaying();
+        renderProcessBlock(chunk.data(), toRender, 2, isPlayingNow, nullptr, nullptr);
+
+        ma_uint64 written = 0;
+        ma_encoder_write_pcm_frames(&encoder, chunk.data(), toRender, &written);
+
+        framesRendered += toRender;
+
+        if (callback && (framesRendered % (CHUNK_SIZE * 8) == 0 || framesRendered >= totalFrames)) {
+            float pct = static_cast<float>(framesRendered) / static_cast<float>(totalFrames);
+            if (!callback(pct, userData)) {
+                cancelled = true;
+            }
+        }
+    }
+
+    ma_encoder_uninit(&encoder);
+
+    // Restore state
+    allNotesOff();
+    m_sequencer.setSongMode(savedSongMode);
+    m_sequencer.setSongOrderIndex(savedSongOrderIdx);
+    m_sequencer.setCurrentPattern(savedPat);
+    m_sequencer.setCurrentRow(savedRow);
+    m_sequencer.setLooping(savedLooping);
+    if (m_device) ma_device_start(m_device.get());
+    if (wasPlaying) play();
+    m_isExporting.store(false);
+
+    if (cancelled) {
+        std::remove(outputPath.c_str());
+        return false;
+    }
+
+    return true;
 }
 
 // ==========================================

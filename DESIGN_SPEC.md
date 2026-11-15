@@ -274,6 +274,31 @@
   - **Project Format v3 Persistence**: Schema v3 serializing unified plugin paths, formats, parameter arrays, and per-track insert FX chains.
   - Git checkpoint commit and `phase-3` tag.
 
-- [ ] **Phase 4: Non-realtime Audio Export & Final Polish**
-  - Non-realtime 32-bit float / 24-bit / 16-bit PCM WAV audio export.
-  - Master bounce options (entire song sequence or current pattern loop).
+- [x] **Phase 4: Non-realtime Audio Export (WAV, MP3, OGG, FLAC) & Final Polish** *(Completed)*
+  - **Offline DSP Render Architecture**:
+    - Chunked offline rendering via C++ `AudioEngine::exportRenderWav` using `miniaudio.h`'s `ma_encoder` writing 32-bit float stereo WAV at native 48kHz with zero locks and zero heap allocations in inner render loops.
+    - Safe device management: temporarily stops the real-time `ma_device` audio callback during offline export to prevent race conditions, then restores state seamlessly.
+    - Clean sequencer state preservation: captures and restores song mode, order indices, current pattern, row, and looping configurations.
+    - Configurable Reverb/Delay Tail: renders user-selected audio tail duration (0.0s, 1.0s, 2.0s default, 4.0s) allowing reflections and decays to fade naturally into silence.
+  - **Multi-Format Container & Codec Pipeline**:
+    - **WAV**: Broadcast quality uncompressed PCM supporting 16-bit PCM (`pcm_s16le`), 24-bit studio standard (`pcm_s24le`), and 32-bit float (`pcm_f32le`) at 44.1 kHz, 48.0 kHz, and 96.0 kHz.
+    - **MP3**: Universal distribution audio via FFmpeg `libmp3lame` supporting 128 kbps, 192 kbps, 256 kbps, and 320 kbps bitrates at 44.1 kHz and 48.0 kHz.
+    - **OGG Vorbis**: High-efficiency Vorbis audio via FFmpeg `libvorbis` supporting variable quality levels Q4 (~128k), Q6 (~192k), Q8 (~256k, default), and Q10 (~500k) at 44.1 kHz and 48.0 kHz.
+    - **FLAC**: Free Lossless Audio Codec supporting 16-bit and 24-bit depths (`-sample_fmt s16` / `s32`) with selectable compression levels (Level 5 Fast, Level 8 Maximum) at 44.1 kHz, 48.0 kHz, and 96.0 kHz.
+  - **Background Worker & Reactive Progress Architecture**:
+    - `AudioExportWorker` running on a separate `QThread` preventing UI stutter or blocking.
+    - C++ to Python progress callback pipeline (`PROGRESS_CB`) scaling rendering (0%–85%) and container encoding (85%–100%) with live percentage readouts.
+    - Instant cancellation and cleanup: `cancelExport()` immediately signals the C++ DSP chunk loop to stop, closes encoders, and deletes partial temporary files.
+  - **KDE Plasma 6 Breeze Audio Export UI (`ExportAudioModal.qml`)**:
+    - Modal dialog adhering strictly to KDE dark palette (`#474747`, `#393939`, `#2c2c2c`, `#3daee9`).
+    - Floating centered circular close button (`✕`) above the window frame with hover highlight and <kbd>Esc</kbd> shortcut support.
+    - Range selector: Song Mode (full arrangement sequence across patterns) vs Current Pattern Mode.
+    - Interactive format selector pills adapting options dynamically (bit depth, sample rate, bitrate, quality, compression).
+    - Reverb/Delay tail duration selector pills (0.0s, 1.0s, 2.0s, 4.0s).
+    - Output file path with direct inline editing and native KDE file dialog via `[ 📁 BROWSE... ]`.
+    - Live progress bar, status notifications, and `[ 📁 SHOW IN DOLPHIN / FOLDER ]` integration using native `QDesktopServices`.
+    - Main window integration: File Menu `&Export Audio...` (`Ctrl+E`) and top toolbar `[ ⤓ EXPORT ]` trigger button.
+  - **Comprehensive Verification Suite**:
+    - 9 dedicated unit and integration tests in `tests/test_phase4_audio_export.py` validating file integrity, headers, sample rates, channel counts, and stream bit depths via `ffprobe`.
+    - Full test suite passing across all phases (31/31 unit tests OK).
+  - Git checkpoint commit and `phase-4` branch.

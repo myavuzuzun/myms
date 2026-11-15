@@ -228,6 +228,13 @@ public:
         return static_cast<int>(m_patterns.size());
     }
 
+    int getPatternNumRows(int pat) const {
+        if (pat >= 0 && pat < static_cast<int>(m_patterns.size())) {
+            return m_patterns[pat].numRows;
+        }
+        return DEFAULT_NUM_ROWS;
+    }
+
     int getCurrentPattern() const {
         return std::clamp(m_currentPattern, 0, std::max(0, static_cast<int>(m_patterns.size()) - 1));
     }

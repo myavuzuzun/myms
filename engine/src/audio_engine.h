@@ -265,12 +265,21 @@ public:
     // Real-time audio render callback (invoked by miniaudio)
     void renderAudio(float* output, int frameCount, int channels);
 
+    // Audio Block Processor (used by both real-time callback and offline export)
+    void renderProcessBlock(float* output, int frameCount, int channels, bool isPlayingNow, float* trkPeakL = nullptr, float* trkPeakR = nullptr);
+
+    // Non-realtime / Offline Audio Export
+    typedef bool (*AudioExportCallback)(float progress, void* userData);
+    bool exportRenderWav(const std::string& outputPath, bool songMode, int patternIdx, float tailSeconds, AudioExportCallback callback, void* userData);
+    bool isExporting() const { return m_isExporting.load(std::memory_order_relaxed); }
+
 private:
     AudioEngine();
     ~AudioEngine();
 
     void setupInitialInstruments();
 
+    std::atomic<bool> m_isExporting{false};
     float m_sampleRate = 48000.0f;
     std::unique_ptr<ma_device> m_device;
     bool m_initialized = false;

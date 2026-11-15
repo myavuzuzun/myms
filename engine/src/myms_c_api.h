@@ -208,6 +208,16 @@ void myms_clear_all_tracks();
 void myms_transpose_track(int track, int semitones);
 void myms_load_demo();
 
+// Non-realtime Audio Export
+typedef bool (*myms_export_progress_cb)(float progress, void* user_data);
+bool myms_export_render_wav(const char* output_path,
+                            bool song_mode,
+                            int pattern_idx,
+                            float tail_seconds,
+                            myms_export_progress_cb callback,
+                            void* user_data);
+bool myms_is_exporting(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -757,3 +757,25 @@ bool myms_swap_track_pre_fx(int track, int slot_a, int slot_b) {
 bool myms_move_track(int from_idx, int to_idx) {
     return myms::AudioEngine::instance().moveTrack(from_idx, to_idx);
 }
+
+// Audio Export
+bool myms_export_render_wav(const char* output_path,
+                            bool song_mode,
+                            int pattern_idx,
+                            float tail_seconds,
+                            myms_export_progress_cb callback,
+                            void* user_data) {
+    if (!output_path) return false;
+    return myms::AudioEngine::instance().exportRenderWav(
+        std::string(output_path),
+        song_mode,
+        pattern_idx,
+        tail_seconds,
+        callback,
+        user_data
+    );
+}
+
+bool myms_is_exporting(void) {
+    return myms::AudioEngine::instance().isExporting();
+}

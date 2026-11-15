@@ -15,7 +15,10 @@ Item {
     property real bottomDeckHeight: 330
 
     Keys.onEscapePressed: (event) => {
-        if (cellModal.isOpen) {
+        if (exportModal.isOpen) {
+            exportModal.close()
+            event.accepted = true
+        } else if (cellModal.isOpen) {
             cellModal.close()
             event.accepted = true
         } else if (macroModal.isOpen) {
@@ -35,6 +38,9 @@ Item {
         function onMetersUpdated(pL, pR, rms) {
             rootItem.meterPeakL = pL
             rootItem.meterPeakR = pR
+        }
+        function onRequestExportAudio() {
+            exportModal.open()
         }
     }
 
@@ -611,6 +617,44 @@ Item {
 
                     Item { Layout.fillWidth: true }
 
+                    // Offline Audio Export Button
+                    Button {
+                        id: exportToolbarBtn
+                        implicitWidth: 84
+                        implicitHeight: 24
+                        Layout.alignment: Qt.AlignVCenter
+                        onClicked: exportModal.open()
+
+                        background: Rectangle {
+                            color: exportToolbarBtn.hovered ? theme.btnHover : theme.btnBg
+                            border.color: exportToolbarBtn.hovered ? theme.accent : theme.border
+                            radius: 2
+                        }
+
+                        contentItem: Row {
+                            spacing: 4
+                            anchors.centerIn: parent
+                            Text {
+                                text: "⤓"
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: theme.accent
+                            }
+                            Text {
+                                text: "EXPORT"
+                                font.bold: true
+                                font.pixelSize: 9
+                                color: theme.btnText
+                            }
+                        }
+
+                        ToolTip.visible: exportToolbarBtn.hovered
+                        ToolTip.text: "Export Master Audio to WAV, MP3, OGG, or FLAC (Ctrl+E)"
+                        ToolTip.delay: 300
+                    }
+
+                    Rectangle { width: 1; height: 18; color: theme.border; Layout.alignment: Qt.AlignVCenter }
+
                     // Master VU Meter
                     Row {
                         spacing: 4
@@ -936,6 +980,14 @@ Item {
     StepCellEditorModal {
         id: cellModal
         objectName: "cellEditorModal"
+        engine: mymsEngine
+        anchors.fill: parent
+    }
+
+    // Pop-up Master Audio Export Modal (WAV, MP3, OGG, FLAC)
+    ExportAudioModal {
+        id: exportModal
+        objectName: "exportModal"
         engine: mymsEngine
         anchors.fill: parent
     }

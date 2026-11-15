@@ -151,6 +151,13 @@ class AppWindow(QMainWindow):
 
         file_menu.addSeparator()
 
+        act_export = QAction("&Export Audio...", self)
+        act_export.setShortcut(QKeySequence("Ctrl+E"))
+        act_export.triggered.connect(self.engine.requestExportAudio)
+        file_menu.addAction(act_export)
+
+        file_menu.addSeparator()
+
         act_demo = QAction("&Load Demo Groove", self)
         act_demo.triggered.connect(self.engine.loadDemoGroove)
         file_menu.addAction(act_demo)
@@ -273,6 +280,11 @@ class AppWindow(QMainWindow):
         root = self.quick_widget.rootObject() if hasattr(self, 'quick_widget') else None
         if root:
             # Check modals in reverse order of z-index (topmost first)
+            export_modal = root.findChild(QObject, "exportModal")
+            if export_modal and export_modal.property("isOpen"):
+                if not self.engine.isExporting:
+                    export_modal.setProperty("isOpen", False)
+                return
             cell_modal = root.findChild(QObject, "cellEditorModal")
             if cell_modal and cell_modal.property("isOpen"):
                 cell_modal.setProperty("isOpen", False)

@@ -1,7 +1,138 @@
 import os
 import sys
 import ctypes
-from PyQt6.QtCore import QObject, pyqtSignal, pyqtProperty, pyqtSlot, QTimer
+import tempfile
+import shutil
+import subprocess
+from PyQt6.QtCore import QObject, pyqtSignal, pyqtProperty, pyqtSlot, QTimer, QThread, QUrl
+
+class AudioExportWorker(QThread):
+    progressChanged = pyqtSignal(float, str)
+    finished = pyqtSignal(bool, str)
+
+    def __init__(self, lib, params, parent=None):
+        super().__init__(parent)
+        self.lib = lib
+        self.params = params
+        self._is_cancelled = False
+        self._temp_wav_path = None
+
+    def cancel(self):
+        self._is_cancelled = True
+
+    def run(self):
+        try:
+            target_path = self.params.get("filepath", "")
+            if not target_path:
+                self.finished.emit(False, "No export filepath specified.")
+                return
+
+            fmt = str(self.params.get("format", "wav")).lower().strip()
+            song_mode = bool(self.params.get("song_mode", True))
+            pattern_idx = int(self.params.get("pattern_idx", 0))
+            tail_seconds = float(self.params.get("tail_seconds", 2.0))
+            sample_rate = int(self.params.get("sample_rate", 48000))
+
+            temp_fd, self._temp_wav_path = tempfile.mkstemp(prefix="myms_export_", suffix=".wav")
+            os.close(temp_fd)
+
+            self.progressChanged.emit(0.01, "Initializing DSP render...")
+
+            PROGRESS_CB = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_float, ctypes.c_void_p)
+            def progress_callback(progress, user_data):
+                if self._is_cancelled:
+                    return False
+                scaled = 0.02 + float(progress) * 0.83
+                pct = int(progress * 100)
+                self.progressChanged.emit(scaled, f"Rendering audio... {pct}%")
+                return True
+
+            cb_handle = PROGRESS_CB(progress_callback)
+
+            ok = self.lib.myms_export_render_wav(
+                self._temp_wav_path.encode('utf-8'),
+                song_mode,
+                pattern_idx,
+                ctypes.c_float(tail_seconds),
+                cb_handle,
+                None
+            )
+
+            if self._is_cancelled:
+                if self._temp_wav_path and os.path.exists(self._temp_wav_path):
+                    try:
+                        os.unlink(self._temp_wav_path)
+                    except Exception:
+                        pass
+                self.finished.emit(False, "Export cancelled.")
+                return
+
+            if not ok or not os.path.exists(self._temp_wav_path) or os.path.getsize(self._temp_wav_path) == 0:
+                if self._temp_wav_path and os.path.exists(self._temp_wav_path):
+                    try:
+                        os.unlink(self._temp_wav_path)
+                    except Exception:
+                        pass
+                self.finished.emit(False, "Audio rendering failed in DSP engine.")
+                return
+
+            target_dir = os.path.dirname(os.path.abspath(target_path))
+            if target_dir:
+                os.makedirs(target_dir, exist_ok=True)
+
+            self.progressChanged.emit(0.88, f"Encoding {fmt.upper()}...")
+
+            if fmt == "wav":
+                wav_bit_depth = int(self.params.get("wav_bit_depth", 24))
+                if sample_rate == 48000 and wav_bit_depth == 32:
+                    shutil.move(self._temp_wav_path, target_path)
+                    self._temp_wav_path = None
+                else:
+                    codec = "pcm_s16le" if wav_bit_depth == 16 else ("pcm_s24le" if wav_bit_depth == 24 else "pcm_f32le")
+                    cmd = ["ffmpeg", "-y", "-i", self._temp_wav_path, "-ar", str(sample_rate), "-c:a", codec, target_path]
+                    proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+                    if proc.returncode != 0:
+                        raise RuntimeError(f"FFmpeg encoding failed: {proc.stderr}")
+            elif fmt == "mp3":
+                bitrate = int(self.params.get("mp3_bitrate", 320))
+                cmd = ["ffmpeg", "-y", "-i", self._temp_wav_path, "-ar", str(sample_rate), "-c:a", "libmp3lame", "-b:a", f"{bitrate}k", target_path]
+                proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+                if proc.returncode != 0:
+                    raise RuntimeError(f"FFmpeg encoding failed: {proc.stderr}")
+            elif fmt == "ogg":
+                quality = int(self.params.get("ogg_quality", 8))
+                cmd = ["ffmpeg", "-y", "-i", self._temp_wav_path, "-ar", str(sample_rate), "-c:a", "libvorbis", "-q:a", str(quality), target_path]
+                proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+                if proc.returncode != 0:
+                    raise RuntimeError(f"FFmpeg encoding failed: {proc.stderr}")
+            elif fmt == "flac":
+                flac_bit_depth = int(self.params.get("flac_bit_depth", 24))
+                sample_fmt = "s16" if flac_bit_depth == 16 else "s32"
+                comp_level = str(self.params.get("flac_compression", 8))
+                cmd = ["ffmpeg", "-y", "-i", self._temp_wav_path, "-ar", str(sample_rate), "-c:a", "flac", "-sample_fmt", sample_fmt, "-compression_level", comp_level, target_path]
+                proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+                if proc.returncode != 0:
+                    raise RuntimeError(f"FFmpeg encoding failed: {proc.stderr}")
+            else:
+                raise ValueError(f"Unsupported export format: {fmt}")
+
+            if self._temp_wav_path and os.path.exists(self._temp_wav_path):
+                try:
+                    os.unlink(self._temp_wav_path)
+                except Exception:
+                    pass
+                self._temp_wav_path = None
+
+            self.progressChanged.emit(1.0, f"Export complete! Saved to {os.path.basename(target_path)}")
+            self.finished.emit(True, target_path)
+
+        except Exception as e:
+            if self._temp_wav_path and os.path.exists(self._temp_wav_path):
+                try:
+                    os.unlink(self._temp_wav_path)
+                except Exception:
+                    pass
+            self.finished.emit(False, str(e))
 
 class MymsEngine(QObject):
     playingChanged = pyqtSignal(bool)
@@ -52,6 +183,12 @@ class MymsEngine(QObject):
     requestOpenTrackPreFxDialog = pyqtSignal(int, int)
     requestOpenTrackPreFxGui = pyqtSignal(int, int)
     cpuUsageChanged = pyqtSignal(float)
+
+    # Phase 4 Signals (Audio Export)
+    exportProgressChanged = pyqtSignal(float, str)
+    exportFinished = pyqtSignal(bool, str)
+    isExportingChanged = pyqtSignal(bool)
+    requestExportAudio = pyqtSignal()
 
     def _detect_system_keyboard_layout(self):
         try:
@@ -114,6 +251,8 @@ class MymsEngine(QObject):
         self._macro_tone = 0.5
         self._macro_space = 0.15
         self._master_volume = 0.85
+        self._export_worker = None
+        self._is_exporting = False
 
         self._timer = QTimer(self)
         self._timer.setInterval(16)
@@ -322,6 +461,19 @@ class MymsEngine(QObject):
         self.lib.myms_move_track.argtypes = [ctypes.c_int, ctypes.c_int]
         self.lib.myms_move_track.restype = ctypes.c_bool
 
+        # Audio Export
+        PROGRESS_CB = ctypes.CFUNCTYPE(ctypes.c_bool, ctypes.c_float, ctypes.c_void_p)
+        self.lib.myms_export_render_wav.argtypes = [
+            ctypes.c_char_p,
+            ctypes.c_bool,
+            ctypes.c_int,
+            ctypes.c_float,
+            PROGRESS_CB,
+            ctypes.c_void_p
+        ]
+        self.lib.myms_export_render_wav.restype = ctypes.c_bool
+        self.lib.myms_is_exporting.restype = ctypes.c_bool
+
         # Pattern & Song Sequencer
         self.lib.myms_get_num_patterns.restype = ctypes.c_int
         self.lib.myms_get_current_pattern.restype = ctypes.c_int
@@ -434,6 +586,10 @@ class MymsEngine(QObject):
     @pyqtProperty(float, notify=cpuUsageChanged)
     def cpuUsage(self):
         return self._cpu_usage
+
+    @pyqtProperty(bool, notify=isExportingChanged)
+    def isExporting(self):
+        return self._is_exporting
 
     @pyqtProperty(bool, notify=playingChanged)
     def isPlaying(self):
@@ -2063,6 +2219,90 @@ class MymsEngine(QObject):
         self.numTracksChanged.emit(self._num_tracks)
         self.projectLoaded.emit()
 
+    # ==========================================
+    # Phase 4: Offline Audio Export Slots
+    # ==========================================
+    @pyqtSlot('QVariantMap')
+    def startExport(self, params):
+        if self._is_exporting:
+            print("[myms] Export already in progress.")
+            return
+
+        self._is_exporting = True
+        self._export_worker = AudioExportWorker(self.lib, params, self)
+        self._export_worker.progressChanged.connect(self._on_export_progress)
+        self._export_worker.finished.connect(self._on_export_finished)
+        self.isExportingChanged.emit(True)
+        self._export_worker.start()
+
+    def _on_export_progress(self, progress, status):
+        self.exportProgressChanged.emit(progress, status)
+
+    def _on_export_finished(self, success, result_msg):
+        self._is_exporting = False
+        if self._export_worker:
+            self._export_worker.wait(1000)
+        self.isExportingChanged.emit(False)
+        self.exportFinished.emit(success, result_msg)
+
+    @pyqtSlot()
+    def cancelExport(self):
+        if self._export_worker and self._export_worker.isRunning():
+            self._export_worker.cancel()
+
+    @pyqtSlot(str, result=str)
+    def getDefaultExportPath(self, fmt="wav"):
+        base_dir = os.path.expanduser("~/Music")
+        if not os.path.exists(base_dir):
+            base_dir = os.path.expanduser("~")
+
+        proj = self._current_project_path
+        if proj:
+            base_name = os.path.splitext(os.path.basename(proj))[0]
+        else:
+            base_name = "untitled_export"
+
+        ext = fmt.lower().strip()
+        if not ext.startswith("."):
+            ext = "." + ext
+        return os.path.join(base_dir, base_name + ext)
+
+    @pyqtSlot(str, str, result=str)
+    def browseExportFilePath(self, current_path, fmt):
+        from PyQt6.QtWidgets import QFileDialog
+        filters = {
+            "wav": "WAV Audio (*.wav);;All Files (*)",
+            "mp3": "MP3 Audio (*.mp3);;All Files (*)",
+            "ogg": "OGG Vorbis Audio (*.ogg);;All Files (*)",
+            "flac": "FLAC Lossless Audio (*.flac);;All Files (*)"
+        }
+        filter_str = filters.get(fmt.lower(), "All Files (*)")
+        start_path = current_path if current_path else self.getDefaultExportPath(fmt)
+        chosen, _ = QFileDialog.getSaveFileName(
+            None,
+            "Choose Audio Export Destination",
+            start_path,
+            filter_str
+        )
+        if chosen:
+            expected_ext = "." + fmt.lower()
+            if not chosen.lower().endswith(expected_ext):
+                chosen += expected_ext
+        return chosen
+
+    @pyqtSlot(str)
+    def openContainingFolder(self, filepath):
+        if not filepath:
+            return
+        folder = filepath if os.path.isdir(filepath) else os.path.dirname(os.path.abspath(filepath))
+        if os.path.exists(folder):
+            from PyQt6.QtGui import QDesktopServices
+            from PyQt6.QtCore import QUrl
+            QDesktopServices.openUrl(QUrl.fromLocalFile(folder))
+
     def close(self):
         self._timer.stop()
+        if self._export_worker and self._export_worker.isRunning():
+            self._export_worker.cancel()
+            self._export_worker.wait(1000)
         self.lib.myms_shutdown()
