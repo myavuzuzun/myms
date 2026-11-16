@@ -10,8 +10,8 @@ from myms_bridge import MymsEngine
 
 class PluginNativeHostWindow(QMainWindow):
     """
-    Dedicated floating X11 native host window for Linux VST3, CLAP, and VST2 plugins.
-    Embeds the plugin's native X11 window into an isolated WA_NativeWindow container.
+    Dedicated floating native host window for Linux VST3, CLAP, and VST2 plugins.
+    Supports both native X11 sessions and Wayland sessions (via XWayland bridge).
     """
     def __init__(self, parent, engine, track, slot=None, is_fx=False, is_pre=False, on_close_cb=None):
         super().__init__(None, Qt.WindowType.Window)
@@ -27,33 +27,65 @@ class PluginNativeHostWindow(QMainWindow):
         if is_pre:
             name = self.engine.getTrackPreFxName(track, slot)
             fmt = self.engine.getTrackPreFxFormatName(track, slot)
-            self.setWindowTitle(f"myms — {name} [{fmt}] — Track #{track+1} Pre-FX {slot+1}")
+            self.title_str = f"myms — {name} [{fmt}] — Track #{track+1} Pre-FX {slot+1}"
         elif is_fx:
             name = self.engine.getTrackFxName(track, slot)
             fmt = self.engine.getTrackFxFormatName(track, slot)
             if track == -1:
-                self.setWindowTitle(f"myms — {name} [{fmt}] — Master Bus FX {slot+1}")
+                self.title_str = f"myms — {name} [{fmt}] — Master Bus FX {slot+1}"
             else:
-                self.setWindowTitle(f"myms — {name} [{fmt}] — Track #{track+1} FX {slot+1}")
+                self.title_str = f"myms — {name} [{fmt}] — Track #{track+1} FX {slot+1}"
         else:
             name = self.engine.getTrackPluginName(track)
             fmt = self.engine.getTrackPluginFormatName(track)
-            self.setWindowTitle(f"myms — {name} [{fmt}] — Track #{track+1} Plugin GUI")
+            self.title_str = f"myms — {name} [{fmt}] — Track #{track+1} Plugin GUI"
 
+        self.setWindowTitle(self.title_str)
         self.resize(520, 360)
         self.setStyleSheet("background-color: #232629; color: #f0f2f5;")
 
-        # Container widget with dedicated native X11 Window ID
-        self.container = QWidget(self)
-        self.container.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
-        self.container.setAttribute(Qt.WidgetAttribute.WA_PaintOnScreen, True)
-        self.container.setStyleSheet("background-color: #232629;")
-        self.setCentralWidget(self.container)
+        self.x11 = None
+        self.x11_dpy = None
+        self.x11_win = None
+
+        if QGuiApplication.platformName() != "wayland":
+            # Native X11 session: use Qt's native window container
+            self.container = QWidget(self)
+            self.container.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
+            self.container.setAttribute(Qt.WidgetAttribute.WA_PaintOnScreen, True)
+            self.container.setStyleSheet("background-color: #232629;")
+            self.setCentralWidget(self.container)
 
     def showEvent(self, event):
         super().showEvent(event)
-        # Retrieve the underlying X11 Window handle
-        win_id = int(self.container.winId())
+        if QGuiApplication.platformName() == "wayland" and os.environ.get("DISPLAY"):
+            # On Wayland, create a top-level X11 window on XWayland so X11 plugins embed cleanly
+            try:
+                import ctypes
+                from ctypes import util
+                x11_path = util.find_library("X11")
+                if x11_path:
+                    self.x11 = ctypes.cdll.LoadLibrary(x11_path)
+                    self.x11_dpy = self.x11.XOpenDisplay(None)
+                    if self.x11_dpy:
+                        root = self.x11.XDefaultRootWindow(self.x11_dpy)
+                        self.x11_win = self.x11.XCreateSimpleWindow(
+                            self.x11_dpy, root, 100, 100, 520, 360, 1, 0, 0x232629
+                        )
+                        self.x11.XStoreName(self.x11_dpy, self.x11_win, self.title_str.encode("utf-8"))
+                        self.x11.XMapWindow(self.x11_dpy, self.x11_win)
+                        self.x11.XFlush(self.x11_dpy)
+                        win_id = int(self.x11_win)
+                    else:
+                        win_id = int(self.winId())
+                else:
+                    win_id = int(self.winId())
+            except Exception as e:
+                print(f"[myms] X11 Wayland bridge initialization error: {e}")
+                win_id = int(self.winId())
+        else:
+            win_id = int(self.container.winId())
+
         if self.is_pre:
             self.engine.openTrackPreFxNativeEditor(self.track, self.slot, win_id)
         elif self.is_fx:
@@ -68,6 +100,16 @@ class PluginNativeHostWindow(QMainWindow):
             self.engine.closeTrackFxNativeEditor(self.track, self.slot)
         else:
             self.engine.closeTrackPluginNativeEditor(self.track)
+
+        if self.x11 and self.x11_dpy and self.x11_win:
+            try:
+                self.x11.XDestroyWindow(self.x11_dpy, self.x11_win)
+                self.x11.XCloseDisplay(self.x11_dpy)
+            except Exception:
+                pass
+            self.x11_win = None
+            self.x11_dpy = None
+
         if self.on_close_cb:
             self.on_close_cb()
         event.accept()
