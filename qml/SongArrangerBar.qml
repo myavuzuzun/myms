@@ -7,389 +7,663 @@ Rectangle {
     StudioTheme { id: theme }
 
     color: theme.bgHeader
-    height: 38
+    height: 34
     border.color: theme.border
     border.width: 1
 
     property var engine
 
+    // Drag-and-drop state tracking across the arranger timeline
+    property int draggingFromIndex: -1
+    property int dropTargetIndex: -1
+    property bool isDragging: false
+
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 10
-        anchors.rightMargin: 10
-        spacing: 10
+        anchors.leftMargin: 8
+        anchors.rightMargin: 8
+        spacing: 8
 
-        // 1. Arranger Mode & Title
+        // ==========================================
+        // 1. ARRANGER LABEL & PLAYBACK MODE TOGGLE
+        // ==========================================
         RowLayout {
-            spacing: 8
+            spacing: 6
             Layout.alignment: Qt.AlignVCenter
 
             Text {
-                text: "SONG ARRANGER"
+                text: "ARRANGER"
                 font.bold: true
-                font.pixelSize: 11
-                color: theme.textHeading
+                font.pixelSize: 10
+                font.letterSpacing: 0.5
+                color: theme.textMuted
                 Layout.alignment: Qt.AlignVCenter
             }
 
-            // Mode Selector Pill (PAT vs SONG)
-            Button {
-                id: modeToggleBtn
-                implicitHeight: 24
-                implicitWidth: (engine && engine.isSongMode) ? 105 : 95
+            // Segmented Playback Mode Control: [ PAT | SONG ]
+            Rectangle {
+                id: modeSegment
+                height: 22
+                width: 120
+                radius: 3
+                color: theme.bgWell
+                border.color: theme.border
+                border.width: 1
                 Layout.alignment: Qt.AlignVCenter
-                checkable: true
-                checked: engine ? engine.isSongMode : false
-                onClicked: {
-                    if (engine) engine.toggleSongMode()
-                }
 
-                background: Rectangle {
-                    color: (engine && engine.isSongMode) ? theme.playAccent : theme.bgWell
-                    radius: 3
-                    border.color: (engine && engine.isSongMode) ? theme.playAccent : theme.border
-                }
+                Row {
+                    anchors.fill: parent
 
-                contentItem: Row {
-                    anchors.centerIn: parent
-                    spacing: 4
+                    // Segment 1: PAT (Pattern Mode)
                     Rectangle {
-                        width: 6
-                        height: 6
-                        radius: 3
-                        color: (engine && engine.isSongMode) ? "#ffffff" : theme.stopAccent
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                    Text {
-                        text: (engine && engine.isSongMode) ? "SONG MODE" : "PAT LOOP"
-                        font.bold: true
-                        font.pixelSize: 10
-                        color: (engine && engine.isSongMode) ? "#ffffff" : theme.textMuted
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-                }
+                        id: patSegment
+                        width: parent.width / 2
+                        height: parent.height
+                        radius: 2
+                        color: (!engine || !engine.isSongMode) ? theme.accent : "transparent"
 
-                ToolTip.visible: hovered
-                ToolTip.text: (engine && engine.isSongMode) ? "Currently playing entire song sequence" : "Currently looping single active pattern"
-                ToolTip.delay: 400
-            }
-        }
-
-        Rectangle { width: 1; height: 18; color: theme.border; Layout.alignment: Qt.AlignVCenter }
-
-        // 2. Horizontal Sequence Timeline
-        ScrollView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.alignment: Qt.AlignVCenter
-            clip: true
-            ScrollBar.horizontal.policy: ScrollBar.AsNeeded
-            ScrollBar.vertical.policy: ScrollBar.AlwaysOff
-
-            Row {
-                id: sequenceRow
-                spacing: 8
-                height: parent.height
-
-                Repeater {
-                    id: stepRepeater
-                    model: engine ? engine.songOrderLength : 1
-
-                    // Single Arranger Step Card
-                    Rectangle {
-                        id: stepCard
-                        width: 140
-                        height: 26
-                        radius: 3
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        property int stepIdx: index
-                        property int patNum: engine ? engine.getSongOrderStep(stepIdx) : 0
-                        property bool isPlayingStep: (engine && engine.isSongMode && engine.isPlaying && engine.songOrderIndex === stepIdx)
-                        property bool isSelectedStep: (engine && engine.songOrderIndex === stepIdx)
-
-                        color: isPlayingStep ? theme.playRow : (isSelectedStep ? theme.bgWellHover : theme.bgCard)
-                        border.color: isPlayingStep ? theme.playAccent : (isSelectedStep ? theme.accent : theme.border)
-                        border.width: (isPlayingStep || isSelectedStep) ? 2 : 1
-
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.leftMargin: 4
-                            anchors.rightMargin: 4
+                        Row {
+                            anchors.centerIn: parent
                             spacing: 3
-
-                            // Move Step Left Button (◀)
-                            Rectangle {
-                                width: 14
-                                height: 16
-                                radius: 2
-                                Layout.alignment: Qt.AlignVCenter
-                                color: leftMouse.containsMouse ? theme.accent : "transparent"
-                                visible: stepCard.stepIdx > 0
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "◀"
-                                    font.pixelSize: 8
-                                    font.bold: true
-                                    color: leftMouse.containsMouse ? "#ffffff" : theme.textMuted
-                                }
-
-                                MouseArea {
-                                    id: leftMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (engine) engine.moveSongOrderStep(stepCard.stepIdx, stepCard.stepIdx - 1)
-                                    }
-                                    ToolTip.visible: containsMouse
-                                    ToolTip.text: "Move Step Left (Earlier in Song)"
-                                    ToolTip.delay: 300
-                                }
-                            }
-
-                            // Step Order Label
-                            Rectangle {
-                                width: 20
-                                height: parent.height
-                                color: "transparent"
-                                Layout.alignment: Qt.AlignVCenter
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "#" + (stepCard.stepIdx < 9 ? "0" + (stepCard.stepIdx + 1) : "" + (stepCard.stepIdx + 1))
-                                    font.pixelSize: 9
-                                    font.bold: true
-                                    color: stepCard.isPlayingStep ? theme.playAccent : (stepCard.isSelectedStep ? theme.accent : theme.textDim)
-                                }
-                            }
-
-                            // Pattern Dropdown Button
-                            Rectangle {
-                                Layout.fillWidth: true
-                                height: 20
-                                radius: 2
-                                Layout.alignment: Qt.AlignVCenter
-                                color: stepCard.isPlayingStep ? theme.playAccent : (stepCard.isSelectedStep ? theme.accent : (patMouse.containsMouse ? theme.btnHover : theme.btnBg))
-                                border.color: theme.border
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 4
-                                    anchors.rightMargin: 4
-                                    spacing: 2
-
-                                    Text {
-                                        Layout.fillWidth: true
-                                        Layout.alignment: Qt.AlignVCenter
-                                        text: "PAT " + (stepCard.patNum < 10 ? "0" + stepCard.patNum : "" + stepCard.patNum)
-                                        font.bold: true
-                                        font.pixelSize: 10
-                                        font.family: "Monospace"
-                                        color: (stepCard.isPlayingStep || stepCard.isSelectedStep) ? "#ffffff" : theme.textMain
-                                        horizontalAlignment: Text.AlignHCenter
-                                    }
-
-                                    Text {
-                                        text: "▾"
-                                        font.pixelSize: 8
-                                        Layout.alignment: Qt.AlignVCenter
-                                        color: (stepCard.isPlayingStep || stepCard.isSelectedStep) ? "#ffffff" : theme.textMuted
-                                    }
-                                }
-
-                                MouseArea {
-                                    id: patMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (engine) {
-                                            engine.setSongOrderIndex(stepCard.stepIdx)
-                                            engine.setCurrentPattern(stepCard.patNum)
-                                        }
-                                        patMenu.open()
-                                    }
-                                    onWheel: (wheel) => {
-                                        if (engine && engine.numPatterns > 1) {
-                                            let delta = wheel.angleDelta.y > 0 ? 1 : -1
-                                            let newPat = (stepCard.patNum + delta + engine.numPatterns) % engine.numPatterns
-                                            engine.setSongOrderStep(stepCard.stepIdx, newPat)
-                                            engine.setCurrentPattern(newPat)
-                                        }
-                                    }
-                                    ToolTip.visible: containsMouse
-                                    ToolTip.text: "Click for pattern menu, scroll wheel to cycle patterns"
-                                    ToolTip.delay: 400
-                                }
-
-                                Menu {
-                                    id: patMenu
-                                    Repeater {
-                                        model: engine ? engine.numPatterns : 1
-                                        MenuItem {
-                                            text: "Pattern " + (index < 10 ? "0" + index : "" + index)
-                                            onTriggered: {
-                                                if (engine) {
-                                                    engine.setSongOrderStep(stepCard.stepIdx, index)
-                                                    engine.setSongOrderIndex(stepCard.stepIdx)
-                                                    engine.setCurrentPattern(index)
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Move Step Right Button (▶)
-                            Rectangle {
-                                width: 14
-                                height: 16
-                                radius: 2
-                                Layout.alignment: Qt.AlignVCenter
-                                color: rightMouse.containsMouse ? theme.accent : "transparent"
-                                visible: engine && (stepCard.stepIdx < engine.songOrderLength - 1)
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "▶"
-                                    font.pixelSize: 8
-                                    font.bold: true
-                                    color: rightMouse.containsMouse ? "#ffffff" : theme.textMuted
-                                }
-
-                                MouseArea {
-                                    id: rightMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (engine) engine.moveSongOrderStep(stepCard.stepIdx, stepCard.stepIdx + 1)
-                                    }
-                                    ToolTip.visible: containsMouse
-                                    ToolTip.text: "Move Step Right (Later in Song)"
-                                    ToolTip.delay: 300
-                                }
-                            }
-
-                            // Remove Step button
-                            Rectangle {
-                                width: 14
-                                height: 14
-                                radius: 2
-                                Layout.alignment: Qt.AlignVCenter
-                                visible: (engine && engine.songOrderLength > 1)
-                                color: delMouse.containsMouse ? theme.stopAccent : "transparent"
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "×"
-                                    font.bold: true
-                                    font.pixelSize: 10
-                                    color: (delMouse.containsMouse) ? "#ffffff" : theme.textMuted
-                                }
-
-                                MouseArea {
-                                    id: delMouse
-                                    anchors.fill: parent
-                                    hoverEnabled: true
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (engine) engine.removeSongOrderStep(stepCard.stepIdx)
-                                    }
-                                    ToolTip.visible: containsMouse
-                                    ToolTip.text: "Remove Step from Song"
-                                    ToolTip.delay: 300
-                                }
+                            Text {
+                                text: "PAT"
+                                font.bold: true
+                                font.pixelSize: 10
+                                color: (!engine || !engine.isSongMode) ? "#ffffff" : theme.textMuted
+                                anchors.verticalCenter: parent.verticalCenter
                             }
                         }
 
-                        // Right-click context menu on stepCard
-                        Menu {
-                            id: stepContextMenu
-                            MenuItem {
-                                text: "◀ Move Left"
-                                enabled: stepCard.stepIdx > 0
-                                onTriggered: if (engine) engine.moveSongOrderStep(stepCard.stepIdx, stepCard.stepIdx - 1)
-                            }
-                            MenuItem {
-                                text: "▶ Move Right"
-                                enabled: engine && (stepCard.stepIdx < engine.songOrderLength - 1)
-                                onTriggered: if (engine) engine.moveSongOrderStep(stepCard.stepIdx, stepCard.stepIdx + 1)
-                            }
-                            MenuSeparator {}
-                            MenuItem {
-                                text: "Duplicate Step"
-                                onTriggered: if (engine) engine.addSongOrderStep(stepCard.patNum)
-                            }
-                            MenuItem {
-                                text: "Remove Step (×)"
-                                enabled: engine && engine.songOrderLength > 1
-                                onTriggered: if (engine) engine.removeSongOrderStep(stepCard.stepIdx)
-                            }
-                        }
-
-                        // Clicking anywhere on card selects this step & pattern; right click opens context menu
                         MouseArea {
                             anchors.fill: parent
-                            z: -1
-                            acceptedButtons: Qt.LeftButton | Qt.RightButton
-                            onClicked: (mouse) => {
-                                if (mouse.button === Qt.RightButton) {
-                                    stepContextMenu.popup()
-                                } else {
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (engine && engine.isSongMode) engine.toggleSongMode()
+                            }
+                            ToolTip.visible: containsMouse
+                            ToolTip.text: "Pattern Mode (PAT)\nPlayback loops the active pattern being edited.\nIdeal for composition and sound design."
+                            ToolTip.delay: 300
+                        }
+                    }
+
+                    // Segment 2: SONG (Song Sequence Mode)
+                    Rectangle {
+                        id: songSegment
+                        width: parent.width / 2
+                        height: parent.height
+                        radius: 2
+                        color: (engine && engine.isSongMode) ? theme.playAccent : "transparent"
+
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: 4
+                            Rectangle {
+                                width: 5
+                                height: 5
+                                radius: 2.5
+                                color: (engine && engine.isSongMode) ? "#ffffff" : theme.textDim
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                            Text {
+                                text: "SONG"
+                                font.bold: true
+                                font.pixelSize: 10
+                                color: (engine && engine.isSongMode) ? "#ffffff" : theme.textMuted
+                                anchors.verticalCenter: parent.verticalCenter
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (engine && !engine.isSongMode) engine.toggleSongMode()
+                            }
+                            ToolTip.visible: containsMouse
+                            ToolTip.text: "Song Mode (SONG)\nPlayback plays the entire song sequence step-by-step.\nIdeal for arranging and full-track playback."
+                            ToolTip.delay: 300
+                        }
+                    }
+                }
+            }
+        }
+
+        // Vertical Separator
+        Rectangle { width: 1; height: 18; color: theme.border; Layout.alignment: Qt.AlignVCenter }
+
+        // ==========================================
+        // 2. HORIZONTAL STEP SEQUENCE TIMELINE
+        // ==========================================
+        ListView {
+            id: stepListView
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            orientation: ListView.Horizontal
+            spacing: 6
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+
+            ScrollBar.horizontal: ScrollBar {
+                id: hScrollBar
+                policy: ScrollBar.AsNeeded
+                height: 3
+                anchors.bottom: parent.bottom
+            }
+
+            // Auto-scroll to playing step during song playback
+            Connections {
+                target: engine
+                function onSongOrderIndexChanged(idx) {
+                    if (engine && engine.isSongMode && stepListView) {
+                        stepListView.positionViewAtIndex(idx, ListView.Contain)
+                    }
+                }
+            }
+
+            model: engine ? engine.songOrderLength : 1
+
+            // Delegate: Single Step Card
+            delegate: Item {
+                id: delegateRoot
+                width: 90
+                height: 24
+                anchors.verticalCenter: parent.verticalCenter
+
+                property int stepIdx: index
+                property int patNum: engine ? engine.getSongOrderStep(stepIdx) : 0
+                property bool isPlayingStep: (engine && engine.isSongMode && engine.isPlaying && engine.songOrderIndex === stepIdx)
+                property bool isSelectedStep: (engine && engine.songOrderIndex === stepIdx)
+                property bool isBeingDragged: root.isDragging && root.draggingFromIndex === stepIdx
+                property bool isDropTarget: root.isDragging && root.dropTargetIndex === stepIdx && root.draggingFromIndex !== stepIdx
+
+                // Drop Indicator Marker (Left edge)
+                Rectangle {
+                    visible: delegateRoot.isDropTarget && root.dropTargetIndex <= root.draggingFromIndex
+                    width: 3
+                    height: parent.height
+                    x: -4
+                    color: theme.accent
+                    radius: 1
+                    z: 50
+                }
+
+                // Drop Indicator Marker (Right edge)
+                Rectangle {
+                    visible: delegateRoot.isDropTarget && root.dropTargetIndex > root.draggingFromIndex
+                    width: 3
+                    height: parent.height
+                    x: parent.width + 1
+                    color: theme.accent
+                    radius: 1
+                    z: 50
+                }
+
+                // Main Card Container (Rock-solid layout: no jumping/shifting on hover)
+                Rectangle {
+                    id: cardVisual
+                    anchors.fill: parent
+                    radius: 3
+                    opacity: delegateRoot.isBeingDragged ? 0.35 : 1.0
+
+                    color: delegateRoot.isPlayingStep ? "#1e3a29" : (delegateRoot.isSelectedStep ? theme.bgWellHover : (cardMouseArea.containsMouse ? theme.btnHover : theme.bgCard))
+                    border.color: delegateRoot.isPlayingStep ? theme.playAccent : (delegateRoot.isSelectedStep ? theme.accent : (cardMouseArea.containsMouse ? theme.borderLight : theme.border))
+                    border.width: (delegateRoot.isPlayingStep || delegateRoot.isSelectedStep) ? 1.5 : 1
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: 3
+                        anchors.rightMargin: 3
+                        spacing: 2
+
+                        // Step Sequence Index Badge (#01, #02...)
+                        Rectangle {
+                            width: delegateRoot.isPlayingStep ? 26 : 22
+                            height: 18
+                            radius: 2
+                            color: delegateRoot.isPlayingStep ? theme.playAccent : theme.bgWell
+                            Layout.alignment: Qt.AlignVCenter
+
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 1
+                                Text {
+                                    visible: delegateRoot.isPlayingStep
+                                    text: "▶"
+                                    font.pixelSize: 7
+                                    color: "#ffffff"
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                Text {
+                                    text: (delegateRoot.stepIdx < 9 ? "0" : "") + (delegateRoot.stepIdx + 1)
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    font.family: "Monospace"
+                                    color: delegateRoot.isPlayingStep ? "#ffffff" : (delegateRoot.isSelectedStep ? theme.accent : theme.textDim)
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+                        }
+
+                        // Pattern Identifier Badge (PAT 00)
+                        Text {
+                            Layout.fillWidth: true
+                            Layout.alignment: Qt.AlignVCenter
+                            text: "PAT " + (delegateRoot.patNum < 10 ? "0" + delegateRoot.patNum : "" + delegateRoot.patNum)
+                            font.bold: true
+                            font.pixelSize: 10
+                            font.family: "Monospace"
+                            color: (delegateRoot.isPlayingStep || delegateRoot.isSelectedStep) ? "#ffffff" : theme.textMain
+                            horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideNone
+                        }
+
+                        // Pattern Selector Dropdown Arrow (▾)
+                        Rectangle {
+                            id: dropdownBtn
+                            width: 14
+                            height: 18
+                            radius: 2
+                            color: dropMouse.containsMouse ? theme.btnHover : "transparent"
+                            Layout.alignment: Qt.AlignVCenter
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "▾"
+                                font.pixelSize: 8
+                                color: dropMouse.containsMouse ? theme.accent : theme.textMuted
+                            }
+
+                            MouseArea {
+                                id: dropMouse
+                                anchors.fill: parent
+                                hoverEnabled: true
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: {
                                     if (engine) {
-                                        engine.setSongOrderIndex(stepCard.stepIdx)
-                                        engine.setCurrentPattern(stepCard.patNum)
+                                        engine.setSongOrderIndex(delegateRoot.stepIdx)
+                                        engine.setCurrentPattern(delegateRoot.patNum)
                                     }
+                                    patMenu.popup()
+                                }
+                                ToolTip.visible: containsMouse
+                                ToolTip.text: "Change pattern for this step"
+                                ToolTip.delay: 200
+                            }
+                        }
+                    }
+
+                    // Hover Delete Button (Overlay in top-right corner, zero layout shift)
+                    Rectangle {
+                        id: hoverDelBtn
+                        width: 13
+                        height: 13
+                        radius: 6.5
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.topMargin: -3
+                        anchors.rightMargin: -3
+                        color: delMouse.containsMouse ? theme.stopAccent : theme.bgWell
+                        border.color: delMouse.containsMouse ? theme.stopAccent : theme.border
+                        border.width: 1
+                        z: 60
+                        visible: (cardMouseArea.containsMouse || delMouse.containsMouse) && engine && (engine.songOrderLength > 1) && !root.isDragging
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "×"
+                            font.pixelSize: 9
+                            font.bold: true
+                            color: delMouse.containsMouse ? "#ffffff" : theme.textMuted
+                        }
+
+                        MouseArea {
+                            id: delMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (engine) engine.removeSongOrderStep(delegateRoot.stepIdx)
+                            }
+                            ToolTip.visible: containsMouse
+                            ToolTip.text: "Remove step from song"
+                            ToolTip.delay: 200
+                        }
+                    }
+
+                    // Pattern Selection Menu
+                    Menu {
+                        id: patMenu
+
+                        Repeater {
+                            model: engine ? engine.numPatterns : 1
+                            MenuItem {
+                                text: "Pattern " + (index < 10 ? "0" + index : "" + index) + (index === delegateRoot.patNum ? "  ✓" : "")
+                                font.bold: index === delegateRoot.patNum
+                                onTriggered: {
+                                    if (engine) {
+                                        engine.setSongOrderStep(delegateRoot.stepIdx, index)
+                                        engine.setSongOrderIndex(delegateRoot.stepIdx)
+                                        engine.setCurrentPattern(index)
+                                    }
+                                }
+                            }
+                        }
+
+                        MenuSeparator {}
+
+                        MenuItem {
+                            text: "+ New Blank Pattern"
+                            onTriggered: {
+                                if (engine) {
+                                    let newPat = engine.addPattern()
+                                    engine.setSongOrderStep(delegateRoot.stepIdx, newPat)
+                                    engine.setSongOrderIndex(delegateRoot.stepIdx)
+                                    engine.setCurrentPattern(newPat)
+                                }
+                            }
+                        }
+
+                        MenuItem {
+                            text: "⧉ Clone to New Pattern"
+                            onTriggered: {
+                                if (engine) {
+                                    let newPat = engine.duplicatePattern(delegateRoot.patNum)
+                                    engine.setSongOrderStep(delegateRoot.stepIdx, newPat)
+                                    engine.setSongOrderIndex(delegateRoot.stepIdx)
+                                    engine.setCurrentPattern(newPat)
+                                }
+                            }
+                        }
+                    }
+
+                    // Right-Click Context Menu on Step Card
+                    Menu {
+                        id: cardContextMenu
+
+                        MenuItem {
+                            text: "▶ Play from Step " + (delegateRoot.stepIdx + 1)
+                            onTriggered: {
+                                if (engine) {
+                                    engine.setSongOrderIndex(delegateRoot.stepIdx)
+                                    engine.setCurrentPattern(delegateRoot.patNum)
+                                    if (!engine.isSongMode) engine.toggleSongMode()
+                                    if (!engine.isPlaying) engine.play()
+                                }
+                            }
+                        }
+
+                        MenuSeparator {}
+
+                        MenuItem {
+                            text: "+ Insert Step Before"
+                            onTriggered: {
+                                if (engine) engine.insertSongOrderStep(delegateRoot.stepIdx, delegateRoot.patNum)
+                            }
+                        }
+
+                        MenuItem {
+                            text: "+ Insert Step After"
+                            onTriggered: {
+                                if (engine) engine.insertSongOrderStep(delegateRoot.stepIdx + 1, delegateRoot.patNum)
+                            }
+                        }
+
+                        MenuItem {
+                            text: "⧉ Duplicate Step (Same Pattern)"
+                            onTriggered: {
+                                if (engine) engine.insertSongOrderStep(delegateRoot.stepIdx + 1, delegateRoot.patNum)
+                            }
+                        }
+
+                        MenuItem {
+                            text: "✨ Duplicate Pattern to New Step"
+                            onTriggered: {
+                                if (engine) engine.duplicatePatternStep(delegateRoot.stepIdx)
+                            }
+                        }
+
+                        MenuItem {
+                            text: "📄 Insert New Blank Pattern"
+                            onTriggered: {
+                                if (engine) engine.insertNewPatternStep(delegateRoot.stepIdx + 1)
+                            }
+                        }
+
+                        MenuSeparator {}
+
+                        MenuItem {
+                            text: "◀ Move Step Left"
+                            enabled: delegateRoot.stepIdx > 0
+                            onTriggered: {
+                                if (engine) engine.moveSongOrderStep(delegateRoot.stepIdx, delegateRoot.stepIdx - 1)
+                            }
+                        }
+
+                        MenuItem {
+                            text: "▶ Move Step Right"
+                            enabled: engine && delegateRoot.stepIdx < engine.songOrderLength - 1
+                            onTriggered: {
+                                if (engine) engine.moveSongOrderStep(delegateRoot.stepIdx, delegateRoot.stepIdx + 1)
+                            }
+                        }
+
+                        MenuSeparator {}
+
+                        MenuItem {
+                            text: "❌ Delete Step"
+                            enabled: engine && engine.songOrderLength > 1
+                            onTriggered: {
+                                if (engine) engine.removeSongOrderStep(delegateRoot.stepIdx)
+                            }
+                        }
+                    }
+
+                    // Main Card Mouse Area (Selection, Drag-and-Drop, Wheel, Context Menu)
+                    MouseArea {
+                        id: cardMouseArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        cursorShape: root.isDragging ? Qt.ClosedHandCursor : Qt.PointingHandCursor
+
+                        property int pressStartX: 0
+                        property bool dragStarted: false
+
+                        onPressed: (mouse) => {
+                            if (mouse.button === Qt.LeftButton) {
+                                pressStartX = mouse.x
+                                dragStarted = false
+                            }
+                        }
+
+                        onPositionChanged: (mouse) => {
+                            if (pressed && (mouse.buttons & Qt.LeftButton)) {
+                                if (!dragStarted && Math.abs(mouse.x - pressStartX) > 8) {
+                                    dragStarted = true
+                                    root.isDragging = true
+                                    root.draggingFromIndex = delegateRoot.stepIdx
+                                }
+                                if (dragStarted && engine) {
+                                    let globalPos = mapToItem(stepListView.contentItem, mouse.x, mouse.y)
+                                    let itemWidthWithSpacing = delegateRoot.width + stepListView.spacing
+                                    let target = Math.floor(globalPos.x / itemWidthWithSpacing)
+                                    target = Math.max(0, Math.min(engine.songOrderLength - 1, target))
+                                    root.dropTargetIndex = target
+                                }
+                            }
+                        }
+
+                        onReleased: (mouse) => {
+                            if (root.isDragging) {
+                                if (root.dropTargetIndex >= 0 && root.dropTargetIndex !== root.draggingFromIndex && engine) {
+                                    engine.moveSongOrderStep(root.draggingFromIndex, root.dropTargetIndex)
+                                }
+                                root.isDragging = false
+                                root.draggingFromIndex = -1
+                                root.dropTargetIndex = -1
+                                dragStarted = false
+                            } else if (mouse.button === Qt.LeftButton) {
+                                // Clean, direct step selection (no invasive popup!)
+                                if (engine) {
+                                    engine.setSongOrderIndex(delegateRoot.stepIdx)
+                                    engine.setCurrentPattern(delegateRoot.patNum)
+                                }
+                            }
+                        }
+
+                        onDoubleClicked: (mouse) => {
+                            if (mouse.button === Qt.LeftButton) {
+                                patMenu.popup()
+                            }
+                        }
+
+                        onClicked: (mouse) => {
+                            if (mouse.button === Qt.RightButton) {
+                                cardContextMenu.popup()
+                            }
+                        }
+
+                        onWheel: (wheel) => {
+                            if (engine && engine.numPatterns > 1) {
+                                let delta = wheel.angleDelta.y > 0 ? 1 : -1
+                                let newPat = (delegateRoot.patNum + delta + engine.numPatterns) % engine.numPatterns
+                                engine.setSongOrderStep(delegateRoot.stepIdx, newPat)
+                                engine.setCurrentPattern(newPat)
+                            }
+                        }
+
+                        ToolTip.visible: containsMouse && !root.isDragging && !hoverDelBtn.visible
+                        ToolTip.text: "Step " + (delegateRoot.stepIdx + 1) + ": Pattern " + (delegateRoot.patNum < 10 ? "0" : "") + delegateRoot.patNum +
+                                      "\n• Click to select and edit pattern" +
+                                      "\n• Drag horizontally to reorder" +
+                                      "\n• Double-click or ▾ to change pattern" +
+                                      "\n• Mouse wheel to cycle patterns" +
+                                      "\n• Right-click for options"
+                        ToolTip.delay: 400
+                    }
+                }
+            }
+
+            // Footer Component: Modern Add Step (+) Button and Dropdown
+            footer: Item {
+                width: 64
+                height: 24
+                anchors.verticalCenter: parent.verticalCenter
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 3
+                    color: addBtnMouse.containsMouse ? theme.btnHover : theme.bgWell
+                    border.color: addBtnMouse.containsMouse ? theme.accent : theme.border
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 2
+                        Text {
+                            text: "+"
+                            font.bold: true
+                            font.pixelSize: 11
+                            color: theme.accent
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                        Text {
+                            text: "STEP"
+                            font.bold: true
+                            font.pixelSize: 10
+                            color: theme.accent
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+                    }
+
+                    MouseArea {
+                        id: addBtnMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        cursorShape: Qt.PointingHandCursor
+
+                        onClicked: (mouse) => {
+                            if (mouse.button === Qt.RightButton) {
+                                addMenu.popup()
+                            } else {
+                                if (engine) {
+                                    engine.addSongOrderStep(engine.currentPattern)
+                                    // Set focus to the newly added step
+                                    engine.setSongOrderIndex(engine.songOrderLength - 1)
+                                }
+                            }
+                        }
+
+                        ToolTip.visible: containsMouse
+                        ToolTip.text: "Append step with current pattern (Right-click for options)"
+                        ToolTip.delay: 300
+                    }
+
+                    Menu {
+                        id: addMenu
+
+                        MenuItem {
+                            text: "+ Append Current Pattern (PAT " + (engine ? (engine.currentPattern < 10 ? "0" + engine.currentPattern : engine.currentPattern) : "00") + ")"
+                            onTriggered: {
+                                if (engine) {
+                                    engine.addSongOrderStep(engine.currentPattern)
+                                    engine.setSongOrderIndex(engine.songOrderLength - 1)
+                                }
+                            }
+                        }
+
+                        MenuItem {
+                            text: "✨ Create & Append New Pattern"
+                            onTriggered: {
+                                if (engine) {
+                                    let newPat = engine.insertNewPatternStep(engine.songOrderLength)
+                                    engine.setSongOrderIndex(engine.songOrderLength - 1)
+                                }
+                            }
+                        }
+
+                        MenuItem {
+                            text: "⧉ Clone Current Pattern to New Step"
+                            onTriggered: {
+                                if (engine) {
+                                    engine.duplicatePatternStep(engine.songOrderLength - 1)
+                                    engine.setSongOrderIndex(engine.songOrderLength - 1)
                                 }
                             }
                         }
                     }
                 }
-
-                // Add Duplicate Step Button
-                Button {
-                    implicitWidth: 68
-                    implicitHeight: 26
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "+ STEP"
-                    font.bold: true
-                    font.pixelSize: 10
-                    background: Rectangle {
-                        color: parent.hovered ? theme.btnHover : theme.btnBg
-                        border.color: theme.border
-                        radius: 3
-                    }
-                    contentItem: Text {
-                        text: parent.text
-                        font: parent.font
-                        color: theme.accent
-                        horizontalAlignment: Text.AlignHCenter
-                        verticalAlignment: Text.AlignVCenter
-                    }
-                    onClicked: {
-                        if (engine) {
-                            let cur = engine.currentPattern
-                            engine.addSongOrderStep(cur)
-                        }
-                    }
-                    ToolTip.visible: hovered
-                    ToolTip.text: "Append duplicate step into song"
-                    ToolTip.delay: 400
-                }
             }
         }
 
+        // Vertical Separator
         Rectangle { width: 1; height: 18; color: theme.border; Layout.alignment: Qt.AlignVCenter }
 
-        // Total song steps readout
-        Text {
-            text: (engine ? engine.songOrderLength : 1) + " Steps in Song"
-            font.pixelSize: 10
-            font.bold: true
-            color: theme.textMuted
+        // ==========================================
+        // 3. SONG TIMELINE READOUT & STATUS
+        // ==========================================
+        RowLayout {
+            spacing: 6
             Layout.alignment: Qt.AlignVCenter
+
+            Text {
+                text: {
+                    if (!engine) return "1 Step"
+                    let total = engine.songOrderLength
+                    let cur = engine.songOrderIndex + 1
+                    if (engine.isSongMode) {
+                        return "Step " + (cur < 10 ? "0" + cur : cur) + " / " + (total < 10 ? "0" + total : total) + "  ·  Song Mode"
+                    } else {
+                        return total + (total === 1 ? " Step in Sequence" : " Steps in Sequence")
+                    }
+                }
+                font.pixelSize: 10
+                font.bold: engine && engine.isSongMode
+                color: (engine && engine.isSongMode) ? theme.playAccent : theme.textMuted
+                Layout.alignment: Qt.AlignVCenter
+            }
         }
     }
 }

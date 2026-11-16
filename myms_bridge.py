@@ -1072,6 +1072,37 @@ class MymsEngine(QObject):
             self.gridCellChanged.emit(0, 0)
         return ok
 
+    @pyqtSlot(int, int)
+    def insertSongOrderStep(self, step, pat):
+        """Insert pattern at specific step index in the song order."""
+        old_len = self.songOrderLength
+        self.addSongOrderStep(pat)
+        if 0 <= step < old_len:
+            self.moveSongOrderStep(old_len, step)
+
+    @pyqtSlot(int, result=int)
+    def insertNewPatternStep(self, step):
+        """Create a new blank pattern and insert it into song order at step."""
+        new_pat = self.addPattern()
+        old_len = self.songOrderLength
+        if 0 <= step < old_len:
+            self.insertSongOrderStep(step, new_pat)
+        else:
+            self.addSongOrderStep(new_pat)
+        self.setCurrentPattern(new_pat)
+        return new_pat
+
+    @pyqtSlot(int, result=int)
+    def duplicatePatternStep(self, step):
+        """Duplicate pattern at step and insert it right after step."""
+        if 0 <= step < self.songOrderLength:
+            src_pat = self.getSongOrderStep(step)
+            new_pat = self.duplicatePattern(src_pat)
+            self.insertSongOrderStep(step + 1, new_pat)
+            self.setCurrentPattern(new_pat)
+            return new_pat
+        return -1
+
     # ==========================================
     # Phase 3: Linux VST2 & CLAP Plugin Host API
     # ==========================================
