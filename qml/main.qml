@@ -96,23 +96,27 @@ Item {
                             border.width: 1
                         }
 
-                        contentItem: Row {
-                            spacing: 4
-                            anchors.centerIn: parent
-                            Text {
-                                text: (mymsEngine && mymsEngine.isPlaying) ? "❚❚" : "▶"
-                                font.pixelSize: 10
-                                color: (mymsEngine && mymsEngine.isPaused) ? theme.pauseAccent : "#ffffff"
-                            }
-                            Text {
-                                text: {
-                                    if (mymsEngine && mymsEngine.isPlaying) return "PAUSE"
-                                    if (mymsEngine && mymsEngine.isPaused) return "RESUME"
-                                    return "PLAY"
+                        contentItem: Item {
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: (mymsEngine && mymsEngine.isPlaying) ? "❚❚" : "▶"
+                                    font.pixelSize: 10
+                                    color: (mymsEngine && mymsEngine.isPaused) ? theme.pauseAccent : "#ffffff"
                                 }
-                                font.bold: true
-                                font.pixelSize: 9
-                                color: (mymsEngine && mymsEngine.isPaused) ? theme.pauseAccent : "#ffffff"
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: {
+                                        if (mymsEngine && mymsEngine.isPlaying) return "PAUSE"
+                                        if (mymsEngine && mymsEngine.isPaused) return "RESUME"
+                                        return "PLAY"
+                                    }
+                                    font.bold: true
+                                    font.pixelSize: 9
+                                    color: (mymsEngine && mymsEngine.isPaused) ? theme.pauseAccent : "#ffffff"
+                                }
                             }
                         }
                     }
@@ -132,11 +136,24 @@ Item {
                             border.width: 1
                         }
 
-                        contentItem: Row {
-                            spacing: 4
-                            anchors.centerIn: parent
-                            Text { text: "■"; font.pixelSize: 10; color: theme.stopAccent }
-                            Text { text: "STOP"; font.bold: true; font.pixelSize: 9; color: theme.textMain }
+                        contentItem: Item {
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "■"
+                                    font.pixelSize: 10
+                                    color: theme.stopAccent
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "STOP"
+                                    font.bold: true
+                                    font.pixelSize: 9
+                                    color: theme.textMain
+                                }
+                            }
                         }
                     }
 
@@ -157,15 +174,22 @@ Item {
                             border.width: 1
                         }
 
-                        contentItem: Row {
-                            spacing: 3
-                            anchors.centerIn: parent
-                            Text { text: "🔁"; font.pixelSize: 9 }
-                            Text {
-                                text: "LOOP"
-                                font.bold: true
-                                font.pixelSize: 9
-                                color: loopBtn.checked ? theme.accent : theme.textMuted
+                        contentItem: Item {
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "🔁"
+                                    font.pixelSize: 9
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "LOOP"
+                                    font.bold: true
+                                    font.pixelSize: 9
+                                    color: loopBtn.checked ? theme.accent : theme.textMuted
+                                }
                             }
                         }
                     }
@@ -185,20 +209,24 @@ Item {
                             border.width: 1
                         }
 
-                        contentItem: Row {
-                            spacing: 4
-                            anchors.centerIn: parent
-                            Rectangle {
-                                width: 6
-                                height: 6
-                                radius: 3
-                                color: (mymsEngine && mymsEngine.isEditMode) ? theme.stopAccent : theme.accent
-                            }
-                            Text {
-                                text: (mymsEngine && mymsEngine.isEditMode) ? "EDIT" : "JAM"
-                                font.bold: true
-                                font.pixelSize: 9
-                                color: (mymsEngine && mymsEngine.isEditMode) ? "#ffffff" : theme.textMain
+                        contentItem: Item {
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Rectangle {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: 6
+                                    height: 6
+                                    radius: 3
+                                    color: (mymsEngine && mymsEngine.isEditMode) ? theme.stopAccent : theme.accent
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: (mymsEngine && mymsEngine.isEditMode) ? "EDIT" : "JAM"
+                                    font.bold: true
+                                    font.pixelSize: 9
+                                    color: (mymsEngine && mymsEngine.isEditMode) ? "#ffffff" : theme.textMain
+                                }
                             }
                         }
                     }
@@ -629,7 +657,7 @@ Item {
                     Button {
                         id: exportToolbarBtn
                         implicitWidth: 84
-                        implicitHeight: 24
+                        implicitHeight: 26
                         Layout.alignment: Qt.AlignVCenter
                         onClicked: exportModal.open()
 
@@ -639,20 +667,24 @@ Item {
                             radius: 2
                         }
 
-                        contentItem: Row {
-                            spacing: 4
-                            anchors.centerIn: parent
-                            Text {
-                                text: "⤓"
-                                font.pixelSize: 11
-                                font.bold: true
-                                color: theme.accent
-                            }
-                            Text {
-                                text: "EXPORT"
-                                font.bold: true
-                                font.pixelSize: 9
-                                color: theme.btnText
+                        contentItem: Item {
+                            Row {
+                                anchors.centerIn: parent
+                                spacing: 4
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "⤓"
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                    color: theme.accent
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "EXPORT"
+                                    font.bold: true
+                                    font.pixelSize: 9
+                                    color: theme.btnText
+                                }
                             }
                         }
 
