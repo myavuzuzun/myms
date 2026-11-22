@@ -1,6 +1,6 @@
 # myms
 
-A lightweight, real-time Linux tracker and music creation studio built with a zero-allocation C++20 audio engine (`miniaudio`) and a PyQt6 / Qt Quick UI.
+A lightweight tracker for Linux. 
 
 ![myms Screenshot](docs/screenshot.jpg)
 
@@ -12,7 +12,6 @@ A lightweight, real-time Linux tracker and music creation studio built with a ze
   - **FontBox**: SoundFont2 (`.sf2`) GM player.
   - **BeatPad**: 8-slot drum sampler with per-pad pitch, decay, pan, volume, and reverse.
 - **Plugin Hosting (VST3 & CLAP)**: Load 64-bit Linux VST3 (`.vst3`) and CLAP (`.clap`) instruments, Pre-FX, Post-FX, and Master Bus FX with native X11 editor window hosting.
-- **Undo / Redo**: Full-project undo/redo history (`Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y`) with smart coalescing for continuous knob/slider drags.
 - **Audio Export**: Offline rendering to **WAV** (built-in) and **FLAC / OGG / MP3** (via FFmpeg).
 
 ## Dependencies
@@ -46,4 +45,16 @@ A lightweight, real-time Linux tracker and music creation studio built with a ze
 
 ## Desktop Entry
 `myms.desktop` uses `Exec=myms`. If installing system-wide or to `~/.local/bin`, symlink or install `run.sh` (or a wrapper script) as `myms` in your `PATH`, and copy `myms.desktop` to `~/.local/share/applications/`.
+
+## Credits & Third-Party Libraries
+`myms` builds upon the work of the following open-source projects and authors:
+- **[miniaudio](https://github.com/mackron/miniaudio)** by David Reid (`mackron`) — Public Domain / MIT-0
+- **[TinySoundFont](https://github.com/schellingb/TinySoundFont)** by Bernhard Schelling (based on SFZero by Steve Folta) — MIT License
+- **[CLAP (CLever Audio Plugin)](https://github.com/free-audio/clap)** by Alexandre Bique and the free-audio community — MIT License
+- **[VST3 SDK C API](https://github.com/steinbergmedia/vst3sdk)** by Steinberg Media Technologies GmbH — GPLv3 / Steinberg VST3 License (*VST is a trademark of Steinberg Media Technologies GmbH.*)
+- **PyQt6 & Qt 6** by Riverbank Computing and The Qt Company — GPLv3 / LGPLv3
+- **[FFmpeg](https://ffmpeg.org)** (optional runtime dependency for FLAC/OGG/MP3 export) — The FFmpeg developers
+
+## License
+`myms` is licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE) for the full license text.
 

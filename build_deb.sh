@@ -29,7 +29,7 @@ install -m 0644 main.py myms_bridge.py "$STAGE_DIR/usr/lib/myms/"
 install -m 0755 libmyms_audio.so "$STAGE_DIR/usr/lib/myms/"
 install -m 0644 qml/*.qml "$STAGE_DIR/usr/lib/myms/qml/"
 install -m 0644 myms.desktop "$STAGE_DIR/usr/share/applications/myms.desktop"
-install -m 0644 README.md "$STAGE_DIR/usr/share/doc/myms/README.md"
+install -m 0644 README.md LICENSE "$STAGE_DIR/usr/share/doc/myms/"
 
 # Launcher script
 cat > "$STAGE_DIR/usr/bin/myms" <<'EOF'
