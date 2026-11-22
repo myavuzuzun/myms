@@ -48,7 +48,7 @@ Version: ${PKG_VERSION}
 Section: sound
 Priority: optional
 Architecture: ${ARCH}
-Maintainer: myavuzuzun <myavuzuzun@myms.local>
+Maintainer: myavuzuzun <memtyovz@gmail.com>
 Depends: python3, python3-pyqt6, python3-pyqt6.qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-window
 Recommends: ffmpeg, fluid-soundfont-gm | timgm6mb-soundfont
 Description: Lightweight Linux tracker and music creation studio

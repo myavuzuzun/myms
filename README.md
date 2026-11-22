@@ -2,6 +2,8 @@
 
 A lightweight, real-time Linux tracker and music creation studio built with a zero-allocation C++20 audio engine (`miniaudio`) and a PyQt6 / Qt Quick UI.
 
+![myms Screenshot](docs/screenshot.jpg)
+
 ## Features
 - **Tracker Sequencer**: Keyboard-driven note, instrument, volume, and per-cell effect editing (`0x01`/`0x02` pitch slide, `0x0C` note cut/retrigger, `0x0E` delay send, `0x10` filter cutoff), rectangular chunk selection (`Ctrl+C`/`X`/`V`/`A`), and arbitrary per-pattern row counts.
 - **Song Arranger**: Pattern/Song playback mode switch, drag-and-drop step reordering, step insertion/duplication, and auto-scrolling playhead tracking.
