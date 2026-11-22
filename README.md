@@ -51,7 +51,7 @@ A lightweight tracker for Linux.
 - **[miniaudio](https://github.com/mackron/miniaudio)** by David Reid (`mackron`) — Public Domain / MIT-0
 - **[TinySoundFont](https://github.com/schellingb/TinySoundFont)** by Bernhard Schelling (based on SFZero by Steve Folta) — MIT License
 - **[CLAP (CLever Audio Plugin)](https://github.com/free-audio/clap)** by Alexandre Bique and the free-audio community — MIT License
-- **[VST3 SDK C API](https://github.com/steinbergmedia/vst3sdk)** by Steinberg Media Technologies GmbH — GPLv3 / Steinberg VST3 License (*VST is a trademark of Steinberg Media Technologies GmbH.*)
+- **[VST3 SDK C API](https://github.com/steinbergmedia/vst3sdk)** by Steinberg Media Technologies GmbH — MIT License (*VST is a trademark of Steinberg Media Technologies GmbH.*)
 - **PyQt6 & Qt 6** by Riverbank Computing and The Qt Company — GPLv3 / LGPLv3
 - **[FFmpeg](https://ffmpeg.org)** (optional runtime dependency for FLAC/OGG/MP3 export) — The FFmpeg developers
 
