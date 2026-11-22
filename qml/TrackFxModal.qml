@@ -1011,31 +1011,6 @@ Item {
                                             }
                                         }
                                     }
-
-                                    // Quick Demo FX Preset
-                                    Button {
-                                        Layout.fillWidth: true
-                                        implicitHeight: 22
-                                        text: "+ Add Demo Filter FX"
-                                        font.pixelSize: 8
-                                        background: Rectangle {
-                                            color: parent.hovered ? theme.btnHover : theme.bgHeader
-                                            border.color: theme.border
-                                            radius: 3
-                                        }
-                                        contentItem: Text {
-                                            text: parent.text
-                                            font: parent.font
-                                            color: theme.textMuted
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
-                                        }
-                                        onClicked: {
-                                            if (root.engine) {
-                                                root.engine.addTrackFx(root.targetTrack, "plugins/effects/demo_filter_fx.so")
-                                            }
-                                        }
-                                    }
                                 }
                             }
                         }
@@ -1092,7 +1067,7 @@ Item {
                                     }
                                     Text {
                                         text: {
-                                            if (!root.engine || root.targetTrack < 0) return "AuraSynth"
+                                            if (!root.engine || root.targetTrack < 0) return "Synth"
                                             let t = root.engine.getTrackType(root.targetTrack)
                                             if (t === 1) return "SoundFont2 GM Player (FontBox)"
                                             if (t === 2) return "8-Slot Drum Sampler (BeatPad)"
@@ -1101,7 +1076,7 @@ Item {
                                                 let pFmt = root.engine.getTrackPluginFormatName(root.targetTrack)
                                                 return "Plugin Instrument: " + pName + " [" + pFmt + "]"
                                             }
-                                            return "Polyphonic Subtractive Synth (AuraSynth)"
+                                            return "Polyphonic Subtractive Synth"
                                         }
                                         font.pixelSize: 10
                                         color: theme.textMuted
@@ -1625,29 +1600,6 @@ Item {
                                 }
                                 onClicked: {
                                     if (root.engine) root.engine.promptOpenTrackFxDialog(root.targetTrack, -1)
-                                }
-                            }
-
-                            Button {
-                                implicitHeight: 32
-                                implicitWidth: 160
-                                text: "+ Add Demo Filter FX"
-                                font.bold: true
-                                font.pixelSize: 10
-                                background: Rectangle {
-                                    color: parent.hovered ? theme.btnHover : theme.btnBg
-                                    border.color: theme.border
-                                    radius: 3
-                                }
-                                contentItem: Text {
-                                    text: parent.text
-                                    font: parent.font
-                                    color: theme.textMain
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
-                                }
-                                onClicked: {
-                                    if (root.engine) root.engine.addTrackFx(root.targetTrack, "plugins/effects/demo_filter_fx.so")
                                 }
                             }
                         }

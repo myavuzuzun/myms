@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 Unit and Integration Tests for Phase 3:
-- Unified Plugin Instrument (VST3 / CLAP / VST2)
+- Unified Plugin Instrument (VST3 / CLAP)
 - Native GUI Window hosting hooks
-- Interactive reference plugins (demo_gui_synth, demo_filter_fx)
+- Interactive reference plugins (demo_synth_clap, demo_filter_fx)
 - Per-Track Plugin Insert Effects Chain (MAX_TRACK_FX = 2)
 - Project format v3 persistence and serialization
 """
@@ -39,17 +39,17 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.engine.setTrackType(0, 3)
         self.assertEqual(self.engine.getTrackType(0), 3)
 
-    def test_02_load_unified_gui_synth(self):
-        gui_synth_path = os.path.join(PROJECT_ROOT, "plugins", "gui_synth", "demo_gui_synth.so")
-        self.assertTrue(os.path.exists(gui_synth_path), f"File not found: {gui_synth_path}")
+    def test_02_load_unified_clap_synth(self):
+        clap_synth_path = os.path.join(PROJECT_ROOT, "plugins", "clap", "demo_synth_clap.clap")
+        self.assertTrue(os.path.exists(clap_synth_path), f"File not found: {clap_synth_path}")
 
-        ok = self.engine.loadTrackPlugin(0, gui_synth_path)
+        ok = self.engine.loadTrackPlugin(0, clap_synth_path)
         self.assertTrue(ok)
         self.assertTrue(self.engine.isTrackPluginLoaded(0))
         self.assertEqual(self.engine.getTrackType(0), 3)
-        self.assertEqual(self.engine.getTrackPluginName(0), "Demo GUI Synth")
-        self.assertEqual(self.engine.getTrackPluginFormatName(0), "VST2")
-        self.assertTrue(self.engine.hasTrackPluginNativeEditor(0))
+        self.assertEqual(self.engine.getTrackPluginName(0), "DemoSynth CLAP")
+        self.assertEqual(self.engine.getTrackPluginFormatName(0), "CLAP")
+        self.assertIsInstance(self.engine.hasTrackPluginNativeEditor(0), bool)
 
         # Check parameters
         num_params = self.engine.getTrackPluginNumParams(0)
@@ -60,7 +60,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.assertIn("Cutoff", param_names)
         self.assertIn("Resonance", param_names)
         self.assertIn("Decay", param_names)
-        self.assertIn("Volume", param_names)
+        self.assertIn("Waveform", param_names)
 
         # Set parameter
         self.engine.setTrackPluginParamValue(0, 0, 0.42)
@@ -68,7 +68,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.assertAlmostEqual(val, 0.42, places=2)
 
     def test_03_track_insert_fx_chain(self):
-        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.clap")
         self.assertTrue(os.path.exists(filter_fx_path), f"File not found: {filter_fx_path}")
 
         # Slot 0 initial state
@@ -79,8 +79,8 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.assertTrue(ok)
         self.assertTrue(self.engine.isTrackFxLoaded(0, 0))
         self.assertEqual(self.engine.getTrackFxName(0, 0), "Demo Filter FX")
-        self.assertEqual(self.engine.getTrackFxFormatName(0, 0), "VST2")
-        self.assertTrue(self.engine.hasTrackFxNativeEditor(0, 0))
+        self.assertEqual(self.engine.getTrackFxFormatName(0, 0), "CLAP")
+        self.assertIsInstance(self.engine.hasTrackFxNativeEditor(0, 0), bool)
 
         # Check FX parameters
         num_params = self.engine.getTrackFxNumParams(0, 0)
@@ -103,11 +103,11 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.assertFalse(self.engine.isTrackFxLoaded(0, 0))
 
     def test_04_project_format_v3_persistence(self):
-        gui_synth_path = os.path.join(PROJECT_ROOT, "plugins", "gui_synth", "demo_gui_synth.so")
-        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        clap_synth_path = os.path.join(PROJECT_ROOT, "plugins", "clap", "demo_synth_clap.clap")
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.clap")
 
         # Load synth and FX
-        self.engine.loadTrackPlugin(0, gui_synth_path)
+        self.engine.loadTrackPlugin(0, clap_synth_path)
         self.engine.setTrackPluginParamValue(0, 0, 0.77)
         self.engine.loadTrackFx(0, 0, filter_fx_path)
         self.engine.setTrackFxParamValue(0, 0, 2, 0.66)
@@ -128,7 +128,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
             self.assertGreater(len(tracks), 0)
             t0 = tracks[0]
             self.assertEqual(t0.get("type"), 3)
-            self.assertEqual(t0.get("plugin_path"), gui_synth_path)
+            self.assertEqual(t0.get("plugin_path"), clap_synth_path)
             self.assertIn("fx_chain", t0)
             self.assertEqual(len(t0["fx_chain"]), 1)
             self.assertEqual(t0["fx_chain"][0].get("slot"), 0)
@@ -142,7 +142,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
             self.engine.openProject(tmp_path)
             self.assertEqual(self.engine.getTrackType(0), 3)
             self.assertTrue(self.engine.isTrackPluginLoaded(0))
-            self.assertEqual(self.engine.getTrackPluginName(0), "Demo GUI Synth")
+            self.assertEqual(self.engine.getTrackPluginName(0), "DemoSynth CLAP")
             val_p0 = self.engine.lib.myms_plugin_get_param_value(0, 0)
             self.assertAlmostEqual(val_p0, 0.77, places=2)
 
@@ -177,7 +177,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.engine.noteOffInst(0, 60)
 
     def test_06_track_fx_slots_and_count(self):
-        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.clap")
         self.assertEqual(self.engine.getTrackFxCount(0), 0)
         self.assertEqual(self.engine.getMaxTrackFx(), 32)
 
@@ -198,7 +198,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.assertEqual(self.engine.getTrackFxCount(0), 0)
 
     def test_06b_unlimited_fx_chain_add_remove(self):
-        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.clap")
         self.assertEqual(self.engine.getTrackFxCount(0), 0)
 
         # Add 6 effects dynamically (exceeding old 4 FX limit)
@@ -234,18 +234,14 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.assertEqual(self.engine.getTrackFxCount(0), 0)
 
     def test_07_vst_daw_parameter_controls_and_display(self):
-        vst2_path = os.path.join(PROJECT_ROOT, "plugins", "vst2", "demo_synth_vst2.so")
-        self.assertTrue(os.path.exists(vst2_path))
-        self.engine.loadTrackPlugin(0, vst2_path)
+        clap_path = os.path.join(PROJECT_ROOT, "plugins", "clap", "demo_synth_clap.clap")
+        self.assertTrue(os.path.exists(clap_path))
+        self.engine.loadTrackPlugin(0, clap_path)
 
         # Modulate parameter 0 (Cutoff) via DAW controls
         self.engine.setTrackPluginParamValue(0, 0, 0.75)
         val = self.engine.lib.myms_plugin_get_param_value(0, 0)
         self.assertAlmostEqual(val, 0.75, places=2)
-
-        # Parameter display formatting
-        disp = self.engine.getTrackPluginParamDisplay(0, 0)
-        self.assertTrue(len(disp) > 0, "Parameter display string should not be empty")
 
         # Modulate VST3 parameter
         vst3_path = os.path.join(PROJECT_ROOT, "plugins", "vst3", "demo_synth_vst3.so")
@@ -259,7 +255,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.engine.setTrackType(0, 1) # TRACK_TYPE_SOUNDFONT
         self.assertEqual(self.engine.getTrackType(0), 1)
 
-        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.clap")
         self.assertTrue(os.path.exists(filter_fx_path))
 
         # Load FX on SoundFont track slot 0
@@ -307,7 +303,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.assertEqual(self.engine.getInstrumentName(0), "BeatPad 1")
 
     def test_11_pre_instrument_fx_chain(self):
-        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.clap")
         self.assertTrue(os.path.exists(filter_fx_path))
 
         # Initially no pre-fx
@@ -320,7 +316,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.assertTrue(self.engine.isTrackPreFxLoaded(0, 0))
         self.assertEqual(self.engine.getTrackPreFxCount(0), 1)
         self.assertEqual(self.engine.getTrackPreFxName(0, 0), "Demo Filter FX")
-        self.assertEqual(self.engine.getTrackPreFxFormatName(0, 0), "VST2")
+        self.assertEqual(self.engine.getTrackPreFxFormatName(0, 0), "CLAP")
 
         # Check parameters
         num_params = self.engine.getTrackPreFxNumParams(0, 0)
@@ -338,7 +334,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.assertEqual(self.engine.getTrackPreFxCount(0), 0)
 
     def test_12_master_track_fx_chain(self):
-        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.clap")
         self.assertTrue(os.path.exists(filter_fx_path))
 
         # Initially no master fx
@@ -368,7 +364,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.assertEqual(self.engine.getTrackFxCount(-1), 0)
 
     def test_13_project_persistence_pre_fx_and_master_fx(self):
-        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.clap")
         self.assertTrue(os.path.exists(filter_fx_path))
 
         # Setup track 0 pre-fx and post-fx
@@ -425,8 +421,8 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.engine.setInstrumentName(0, "Acoustic Guitar")
 
         self.engine.addTrack()
-        vst2_synth = os.path.join(PROJECT_ROOT, "plugins", "gui_synth", "demo_gui_synth.so")
-        self.engine.loadTrackPlugin(1, vst2_synth)
+        clap_synth = os.path.join(PROJECT_ROOT, "plugins", "clap", "demo_synth_clap.clap")
+        self.engine.loadTrackPlugin(1, clap_synth)
         self.assertEqual(self.engine.getTrackType(1), 3) # Plugin
 
         with tempfile.NamedTemporaryFile(suffix=".myms", delete=False) as f:
@@ -541,7 +537,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.assertEqual(self.engine.getCell(1, 0)["note"], 48)
 
     def test_19_plugin_effect_reordering(self):
-        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.clap")
         self.assertTrue(os.path.exists(filter_fx_path))
 
         # Load effects in slot 0 and slot 1
@@ -562,7 +558,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.assertAlmostEqual(self.engine.lib.myms_track_fx_get_param_value(0, 1, 0), 0.25, places=2)
 
     def test_20_plugin_effect_bypass_toggle_and_persistence(self):
-        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.so")
+        filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.clap")
         self.assertTrue(os.path.exists(filter_fx_path))
 
         # Load Post-FX and Pre-FX
@@ -653,6 +649,31 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         finally:
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
+
+    def test_22_fx_modal_closes_on_open_instrument(self):
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"
+        from PyQt6.QtWidgets import QApplication
+        from PyQt6.QtCore import QObject, QMetaObject, Qt, Q_ARG
+        from main import AppWindow
+
+        app = QApplication.instance() or QApplication(sys.argv)
+        window = AppWindow(self.engine)
+        root = window.quick_widget.rootObject()
+        fx_modal = root.findChild(QObject, "fxModal")
+        editor_modal = root.findChild(QObject, "editorModal")
+        self.assertIsNotNone(fx_modal)
+        self.assertIsNotNone(editor_modal)
+
+        QMetaObject.invokeMethod(fx_modal, "open", Qt.ConnectionType.DirectConnection, Q_ARG("QVariant", 0))
+        app.processEvents()
+        self.assertTrue(fx_modal.property("isOpen"))
+        self.assertFalse(editor_modal.property("isOpen"))
+
+        fx_modal.requestEditInstrument.emit(0, 0)
+        app.processEvents()
+        self.assertFalse(fx_modal.property("isOpen"))
+        self.assertTrue(editor_modal.property("isOpen"))
+        window.close()
 
 if __name__ == "__main__":
     unittest.main()

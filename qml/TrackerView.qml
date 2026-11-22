@@ -384,6 +384,22 @@ Rectangle {
             return
         }
 
+        // Undo / Redo shortcuts (Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y)
+        if ((event.modifiers & Qt.ControlModifier) && (event.key === Qt.Key_Z)) {
+            if (event.modifiers & Qt.ShiftModifier) {
+                if (engine && engine.redo()) root.gridModified()
+            } else {
+                if (engine && engine.undo()) root.gridModified()
+            }
+            event.accepted = true
+            return
+        }
+        if ((event.modifiers & Qt.ControlModifier) && (event.key === Qt.Key_Y)) {
+            if (engine && engine.redo()) root.gridModified()
+            event.accepted = true
+            return
+        }
+
         // Chunk Selection & Clipboard shortcuts (Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+A)
         if ((event.modifiers & Qt.ControlModifier) && (event.key === Qt.Key_C)) {
             root.copySelection()

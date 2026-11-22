@@ -229,79 +229,32 @@ Rectangle {
 
                 Text {
                     Layout.alignment: Qt.AlignHCenter
-                    text: "Load any 64-bit Linux VST3 (.vst3), CLAP (.clap), or VST2 (.so) synthesizer plugin."
+                    text: "Load any 64-bit Linux VST3 (.vst3) or CLAP (.clap) synthesizer plugin."
                     font.pixelSize: 11
                     color: theme.textMuted
                 }
 
-                Row {
+                Button {
                     Layout.alignment: Qt.AlignHCenter
-                    spacing: 8
-
-                    Button {
-                        text: "Load Interactive GUI Synth"
-                        font.bold: true
-                        font.pixelSize: 10
-                        implicitHeight: 28
-                        background: Rectangle {
-                            color: parent.hovered ? theme.btnHover : theme.btnBg
-                            border.color: "#00cec9"
-                            radius: 3
-                        }
-                        contentItem: Text {
-                            text: parent.text
-                            font: parent.font
-                            color: "#00cec9"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        onClicked: {
-                            if (engine) engine.loadTrackPlugin(root.currentTrack, "plugins/gui_synth/demo_gui_synth.so")
-                        }
+                    text: "📁 LOAD PLUGIN..."
+                    font.bold: true
+                    font.pixelSize: 10
+                    implicitHeight: 30
+                    implicitWidth: 160
+                    background: Rectangle {
+                        color: parent.hovered ? theme.btnHover : theme.btnBg
+                        border.color: theme.accent
+                        radius: 3
                     }
-
-                    Button {
-                        text: "Load Demo CLAP Synth"
-                        font.bold: true
-                        font.pixelSize: 10
-                        implicitHeight: 28
-                        background: Rectangle {
-                            color: parent.hovered ? theme.btnHover : theme.btnBg
-                            border.color: "#6c5ce7"
-                            radius: 3
-                        }
-                        contentItem: Text {
-                            text: parent.text
-                            font: parent.font
-                            color: "#a29bfe"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        onClicked: {
-                            if (engine) engine.loadTrackPlugin(root.currentTrack, "plugins/clap/demo_synth_clap.clap")
-                        }
+                    contentItem: Text {
+                        text: parent.text
+                        font: parent.font
+                        color: theme.accent
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
-
-                    Button {
-                        text: "Load Demo VST2 Synth"
-                        font.bold: true
-                        font.pixelSize: 10
-                        implicitHeight: 28
-                        background: Rectangle {
-                            color: parent.hovered ? theme.btnHover : theme.btnBg
-                            border.color: "#d63031"
-                            radius: 3
-                        }
-                        contentItem: Text {
-                            text: parent.text
-                            font: parent.font
-                            color: "#ff7675"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                        }
-                        onClicked: {
-                            if (engine) engine.loadTrackPlugin(root.currentTrack, "plugins/vst2/demo_synth_vst2.so")
-                        }
+                    onClicked: {
+                        if (engine) engine.promptOpenPlugin(root.currentTrack)
                     }
                 }
             }

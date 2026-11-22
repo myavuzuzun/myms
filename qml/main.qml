@@ -992,7 +992,7 @@ Item {
         }
     }
 
-    // Pop-up Instrument Studio Editor Modal (AuraSynth / FontBox / BeatPad / Plugin)
+    // Pop-up Instrument Studio Editor Modal (Synth / FontBox / BeatPad / Plugin)
     InstrumentEditorModal {
         id: editorModal
         objectName: "editorModal"
@@ -1005,6 +1005,7 @@ Item {
         objectName: "fxModal"
         engine: mymsEngine
         onRequestEditInstrument: (track, trackType) => {
+            fxModal.close()
             editorModal.open(track, trackType)
         }
     }

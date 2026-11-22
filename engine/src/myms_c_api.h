@@ -99,7 +99,7 @@ bool myms_drum_get_reverse(int pad);
 void myms_drum_get_name(int pad, char* out_name, int max_len);
 void myms_drum_get_filepath(int pad, char* out_path, int max_len);
 
-// Plugin Host (VST3, CLAP, VST2)
+// Plugin Host (VST3, CLAP)
 bool myms_plugin_load(int track, const char* filepath);
 void myms_plugin_unload(int track);
 bool myms_plugin_is_loaded(int track);
@@ -119,7 +119,7 @@ bool myms_plugin_has_native_editor(int track);
 bool myms_plugin_open_native_editor(int track, void* parent_window);
 void myms_plugin_close_native_editor(int track);
 
-// Track FX Host (VST3, CLAP, VST2)
+// Track FX Host (VST3, CLAP)
 bool myms_track_fx_load(int track, int slot, const char* filepath);
 void myms_track_fx_unload(int track, int slot);
 bool myms_track_fx_is_loaded(int track, int slot);

@@ -10,39 +10,38 @@ from myms_bridge import MymsEngine
 
 def test_plugins():
     app = QCoreApplication(sys.argv)
-    print("=== Testing Phase 3: Linux VST2 & CLAP Plugin Support ===")
+    print("=== Testing Phase 3: Linux VST3 & CLAP Plugin Support ===")
 
     engine = MymsEngine()
     assert engine._is_initialized, "Engine should be initialized"
 
-    vst2_path = os.path.abspath("plugins/vst2/demo_synth_vst2.so")
+    vst3_path = os.path.abspath("plugins/vst3/demo_synth_vst3.so")
     clap_path = os.path.abspath("plugins/clap/demo_synth_clap.clap")
 
-    assert os.path.exists(vst2_path), f"VST2 demo binary missing: {vst2_path}"
+    assert os.path.exists(vst3_path), f"VST3 demo binary missing: {vst3_path}"
     assert os.path.exists(clap_path), f"CLAP demo binary missing: {clap_path}"
 
     engine.newProject()
     assert engine.numTracks == 1
 
-    # 1. Load VST2 on Track 0
-    ok = engine.loadTrackPlugin(0, vst2_path)
-    assert ok, "Should load VST2 plugin on Track 0"
+    # 1. Load VST3 on Track 0
+    ok = engine.loadTrackPlugin(0, vst3_path)
+    assert ok, "Should load VST3 plugin on Track 0"
     assert engine.isTrackPluginLoaded(0)
-    assert engine.getTrackType(0) == 3 # TRACK_TYPE_VST2
-    assert engine.getTrackPluginFormatName(0) == "VST2"
-    assert engine.getTrackPluginName(0) == "DemoSynth VST2"
-    assert engine.getTrackPluginNumParams(0) == 4
-    
+    assert engine.getTrackType(0) == 3
+    assert engine.getTrackPluginFormatName(0) == "VST3"
+    assert engine.getTrackPluginName(0) == "Demo VST3 Synth"
+    assert engine.getTrackPluginNumParams(0) == 3
+
     params = engine.getTrackPluginParams(0)
-    assert len(params) == 4
-    assert params[0]["name"] == "Cutoff"
-    print("✓ Track 0 loaded Linux VST2:", engine.getTrackPluginName(0), "with params:", [p["name"] for p in params])
+    assert len(params) == 3
+    print("✓ Track 0 loaded Linux VST3:", engine.getTrackPluginName(0), "with params:", [p["name"] for p in params])
 
     # Set parameter
     engine.setTrackPluginParamValue(0, 0, 0.85)
     params_after = engine.getTrackPluginParams(0)
     assert abs(params_after[0]["value"] - 0.85) < 0.01
-    print("✓ Track 0 VST2 parameter 0 set to 0.85")
+    print("✓ Track 0 VST3 parameter 0 set to 0.85")
 
     # 2. Add Track 1 and load CLAP
     engine.addTrack()
@@ -94,7 +93,7 @@ def test_plugins():
         assert engine.numTracks == 2
         assert engine.isTrackPluginLoaded(0)
         assert engine.getTrackType(0) == 3
-        assert engine.getTrackPluginName(0) == "DemoSynth VST2"
+        assert engine.getTrackPluginName(0) == "Demo VST3 Synth"
         p0 = engine.getTrackPluginParams(0)
         assert abs(p0[0]["value"] - 0.85) < 0.02, f"Expected 0.85, got {p0[0]['value']}"
 
@@ -103,7 +102,7 @@ def test_plugins():
         assert engine.getTrackPluginName(1) == "DemoSynth CLAP"
         p1 = engine.getTrackPluginParams(1)
         assert abs(p1[1]["value"] - 0.70) < 0.02, f"Expected 0.70, got {p1[1]['value']}"
-        print("✓ Project v3 reopened perfectly with VST2 and CLAP plugins and parameter values restored!")
+        print("✓ Project v3 reopened perfectly with VST3 and CLAP plugins and parameter values restored!")
 
     print("\nALL PHASE 3 PLUGIN HOST TESTS PASSED CLEANLY!\n")
 

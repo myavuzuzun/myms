@@ -160,7 +160,7 @@ public:
     std::string getDrumPadName(int pad) const;
     std::string getDrumPadFilePath(int pad) const;
 
-    // Plugin Host Controls (VST3, CLAP, VST2)
+    // Plugin Host Controls (VST3, CLAP)
     bool loadTrackPlugin(int track, const std::string& path);
     void unloadTrackPlugin(int track);
     bool isTrackPluginLoaded(int track) const;
@@ -180,7 +180,7 @@ public:
     bool openTrackPluginNativeEditor(int track, void* parentWindow);
     void closeTrackPluginNativeEditor(int track);
 
-    // Track Insert FX Controls (VST3, CLAP, VST2)
+    // Track Insert FX Controls (VST3, CLAP)
     bool loadTrackFx(int track, int slot, const std::string& path);
     void unloadTrackFx(int track, int slot);
     bool isTrackFxLoaded(int track, int slot) const;

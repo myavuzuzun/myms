@@ -10,7 +10,7 @@ from myms_bridge import MymsEngine
 
 class PluginNativeHostWindow(QMainWindow):
     """
-    Dedicated floating native host window for Linux VST3, CLAP, and VST2 plugins.
+    Dedicated floating native host window for Linux VST3 and CLAP plugins.
     Supports both native X11 sessions and Wayland sessions (via XWayland bridge).
     """
     def __init__(self, parent, engine, track, slot=None, is_fx=False, is_pre=False, on_close_cb=None):
@@ -198,6 +198,21 @@ class AppWindow(QMainWindow):
         # --- Edit Menu ---
         edit_menu = self.mb.addMenu("&Edit")
 
+        self.act_undo = QAction("&Undo", self)
+        self.act_undo.setShortcut(QKeySequence.StandardKey.Undo)
+        self.act_undo.triggered.connect(self._on_undo)
+        edit_menu.addAction(self.act_undo)
+
+        self.act_redo = QAction("&Redo", self)
+        self.act_redo.setShortcuts([QKeySequence.StandardKey.Redo, QKeySequence("Ctrl+Y")])
+        self.act_redo.triggered.connect(self._on_redo)
+        edit_menu.addAction(self.act_redo)
+
+        self.engine.undoRedoChanged.connect(self._update_undo_redo_actions)
+        self._update_undo_redo_actions()
+
+        edit_menu.addSeparator()
+
         act_cut = QAction("Cu&t Chunk", self)
         act_cut.setShortcut(QKeySequence.StandardKey.Cut)
         act_cut.triggered.connect(self._on_cut)
@@ -321,6 +336,30 @@ class AppWindow(QMainWindow):
         if not root:
             return None
         return root.findChild(QObject, "trackerView")
+
+    def _update_undo_redo_actions(self):
+        if hasattr(self, 'act_undo'):
+            can_u = self.engine.canUndo
+            u_txt = self.engine.undoText
+            self.act_undo.setEnabled(can_u)
+            self.act_undo.setText(f"&Undo {u_txt}" if can_u and u_txt else "&Undo")
+        if hasattr(self, 'act_redo'):
+            can_r = self.engine.canRedo
+            r_txt = self.engine.redoText
+            self.act_redo.setEnabled(can_r)
+            self.act_redo.setText(f"&Redo {r_txt}" if can_r and r_txt else "&Redo")
+
+    def _on_undo(self):
+        if self.engine.undo():
+            tracker = self._get_tracker_view()
+            if tracker:
+                QMetaObject.invokeMethod(tracker, "gridModified")
+
+    def _on_redo(self):
+        if self.engine.redo():
+            tracker = self._get_tracker_view()
+            if tracker:
+                QMetaObject.invokeMethod(tracker, "gridModified")
 
     def _on_copy(self):
         tracker = self._get_tracker_view()
@@ -449,12 +488,23 @@ class AppWindow(QMainWindow):
                 file_path += ".myms"
             self.engine.saveProject(file_path)
 
+    def _default_plugin_dir(self):
+        for candidate in (
+            os.path.expanduser("~/.clap"),
+            os.path.expanduser("~/.vst3"),
+            "/usr/lib/clap",
+            "/usr/lib/vst3",
+        ):
+            if os.path.isdir(candidate):
+                return candidate
+        return os.path.expanduser("~")
+
     def _on_open_plugin_dialog(self, track):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             f"Load Plugin Instrument for Track #{track+1}",
-            os.path.abspath("plugins"),
-            "Audio Plugins (*.vst3 *.clap *.so);;All Files (*)"
+            self._default_plugin_dir(),
+            "Audio Plugins (*.vst3 *.clap);;All Files (*)"
         )
         if file_path:
             self.engine.loadTrackPlugin(track, file_path)
@@ -487,8 +537,8 @@ class AppWindow(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             f"Select Insert Effect Plugin for {target_name}" + (f" (Slot {slot+1})" if slot >= 0 else ""),
-            os.path.abspath("plugins"),
-            "Audio Plugins (*.vst3 *.clap *.so);;All Files (*)"
+            self._default_plugin_dir(),
+            "Audio Plugins (*.vst3 *.clap);;All Files (*)"
         )
         if file_path:
             if slot < 0:
@@ -523,8 +573,8 @@ class AppWindow(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             f"Select Pre-Instrument Effect Plugin for Track #{track+1}" + (f" (Slot {slot+1})" if slot >= 0 else ""),
-            os.path.abspath("plugins"),
-            "Audio Plugins (*.vst3 *.clap *.so);;All Files (*)"
+            self._default_plugin_dir(),
+            "Audio Plugins (*.vst3 *.clap);;All Files (*)"
         )
         if file_path:
             if slot < 0:

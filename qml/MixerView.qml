@@ -271,7 +271,7 @@ Rectangle {
                                         if (strip.trackType === 3) {
                                             return strip.trackPluginLoaded ? ("🔌 " + (strip.trackPluginName ? strip.trackPluginName : "PLUGIN")) : "🔌 PLUGIN INST"
                                         }
-                                        return "🎹 AURASYNTH"
+                                        return "🎹 SYNTH"
                                     }
                                     font.bold: true
                                     font.pixelSize: 9
@@ -302,7 +302,7 @@ Rectangle {
                             Menu {
                                 id: engineMenu
                                 MenuItem {
-                                    text: "🎹 AuraSynth (Poly Subtractive)"
+                                    text: "🎹 Synth (Poly Subtractive)"
                                     onTriggered: if (engine) engine.setTrackType(strip.trackIdx, 0)
                                 }
                                 MenuItem {
@@ -310,7 +310,7 @@ Rectangle {
                                     onTriggered: {
                                         if (engine) {
                                             if (!engine.sf2Loaded) {
-                                                engine.loadSoundFont("/usr/share/sounds/sf2/default-GM.sf2")
+                                                engine.loadDefaultSoundFont()
                                             }
                                             engine.setTrackType(strip.trackIdx, 1)
                                         }
@@ -321,7 +321,7 @@ Rectangle {
                                     onTriggered: if (engine) engine.setTrackType(strip.trackIdx, 2)
                                 }
                                 MenuItem {
-                                    text: "🔌 Plugin Instrument (VST3 / CLAP / VST2)"
+                                    text: "🔌 Plugin Instrument (VST3 / CLAP)"
                                     onTriggered: {
                                         if (engine) {
                                             engine.setTrackType(strip.trackIdx, 3)

@@ -1303,7 +1303,7 @@ void AudioEngine::renderProcessBlock(float* output, int frameCount, int channels
             }
         }
 
-        // 4. Process Unified Plugin Instrument tracks (VST3, CLAP, VST2) with Insert FX
+        // 4. Process Unified Plugin Instrument tracks (VST3, CLAP) with Insert FX
         for (int t = 0; t < numTracks && t < static_cast<int>(m_plugins.size()) && t < static_cast<int>(m_trackMixers.size()); ++t) {
             if (m_trackMixers[t].type == TRACK_TYPE_PLUGIN && m_plugins[t]->isLoaded()) {
                 bool canSound = isPlayingNow || (t < MAX_INSTRUMENTS && m_previewCountdowns[t] > 0);
@@ -1740,7 +1740,7 @@ void AudioEngine::closeTrackPluginNativeEditor(int track) {
 }
 
 // ==========================================
-// Track Insert FX Controls (VST3, CLAP, VST2)
+// Track Insert FX Controls (VST3, CLAP)
 // track == -1 targets the Master Bus
 // ==========================================
 bool AudioEngine::loadTrackFx(int track, int slot, const std::string& path) {

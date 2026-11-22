@@ -196,6 +196,7 @@ class MymsEngine(QObject):
     isExportingChanged = pyqtSignal(bool)
     requestExportAudio = pyqtSignal()
     clipboardChanged = pyqtSignal()
+    undoRedoChanged = pyqtSignal()
 
     def _detect_system_keyboard_layout(self):
         try:
@@ -368,7 +369,7 @@ class MymsEngine(QObject):
         self.lib.myms_drum_get_name.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
         self.lib.myms_drum_get_filepath.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
 
-        # Plugin Host (VST2 & CLAP)
+        # Plugin Host (VST3 & CLAP)
         self.lib.myms_plugin_load.argtypes = [ctypes.c_int, ctypes.c_char_p]
         self.lib.myms_plugin_load.restype = ctypes.c_bool
         self.lib.myms_plugin_unload.argtypes = [ctypes.c_int]
@@ -396,7 +397,7 @@ class MymsEngine(QObject):
         self.lib.myms_plugin_is_params_dirty.argtypes = [ctypes.c_int]
         self.lib.myms_plugin_is_params_dirty.restype = ctypes.c_bool
 
-        # Track FX Host (VST3, CLAP, VST2)
+        # Track FX Host (VST3 & CLAP)
         self.lib.myms_track_fx_load.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_char_p]
         self.lib.myms_track_fx_load.restype = ctypes.c_bool
         self.lib.myms_track_fx_unload.argtypes = [ctypes.c_int, ctypes.c_int]
@@ -542,6 +543,14 @@ class MymsEngine(QObject):
         self.lib.myms_clear_all_tracks.restype = None
         self.lib.myms_transpose_track.argtypes = [ctypes.c_int, ctypes.c_int]
         self.lib.myms_load_demo.restype = None
+
+        # Undo / Redo History State
+        self._max_undo_steps = 100
+        self._undo_stack = []
+        self._redo_stack = []
+        self._undo_suspended = False
+        self._last_coalesce_key = None
+        self._last_coalesce_time = 0.0
 
     def _on_ui_tick(self):
         playing = self.lib.myms_is_playing()
@@ -754,6 +763,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int)
     def setTrackType(self, track, type_idx):
+        self._push_undo("Change Track Engine")
         self.lib.myms_set_track_type(track, type_idx)
         self.trackTypeChanged.emit(track, type_idx)
 
@@ -764,6 +774,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, float)
     def setTrackVolume(self, track, vol):
+        self._push_undo("Adjust Track Volume", coalesce_key=f"vol_{track}")
         self.lib.myms_set_track_volume(track, vol)
         self.trackMixerChanged.emit(track)
 
@@ -773,6 +784,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, float)
     def setTrackPan(self, track, pan):
+        self._push_undo("Adjust Track Pan", coalesce_key=f"pan_{track}")
         self.lib.myms_set_track_pan(track, pan)
         self.trackMixerChanged.emit(track)
 
@@ -782,6 +794,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, bool)
     def setTrackMute(self, track, mute):
+        self._push_undo("Toggle Track Mute")
         self.lib.myms_set_track_mute(track, mute)
         self.trackMixerChanged.emit(track)
 
@@ -791,6 +804,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, bool)
     def setTrackSolo(self, track, solo):
+        self._push_undo("Toggle Track Solo")
         self.lib.myms_set_track_solo(track, solo)
         self.trackMixerChanged.emit(track)
 
@@ -800,6 +814,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int)
     def setTrackSf2Preset(self, track, preset):
+        self._push_undo("Change SoundFont Preset")
         self.lib.myms_set_track_sf2_preset(track, preset)
         self.trackMixerChanged.emit(track)
 
@@ -811,6 +826,22 @@ class MymsEngine(QObject):
         return [pL.value, pR.value]
 
     # SoundFont Player Slots (FontBox)
+    @pyqtSlot(result=bool)
+    def loadDefaultSoundFont(self):
+        candidates = [
+            "/usr/share/sounds/sf2/default-GM.sf2",
+            "/usr/share/sounds/sf2/FluidR3_GM.sf2",
+            "/usr/share/sounds/sf2/TimGM6mb.sf2",
+            "/usr/share/soundfonts/default.sf2",
+            "/usr/share/soundfonts/FluidR3_GM.sf2",
+            "/usr/share/soundfonts/TimGM6mb.sf2",
+            "/usr/share/soundfonts/freepats-general-midi.sf2",
+        ]
+        for path in candidates:
+            if os.path.exists(path) and self.loadSoundFont(path):
+                return True
+        return False
+
     @pyqtSlot(str, result=bool)
     def loadSoundFont(self, filepath):
         ok = self.lib.myms_sf2_load(filepath.encode('utf-8'))
@@ -910,6 +941,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int)
     def setPatternNumRows(self, pat, rows):
+        self._push_undo("Resize Pattern", coalesce_key=f"pat_rows_{pat}")
         self.lib.myms_set_pattern_num_rows(pat, rows)
         if pat == self._current_pattern:
             new_rows = self.lib.myms_get_num_rows()
@@ -936,6 +968,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(result=int)
     def addPattern(self):
+        self._push_undo("Add Pattern")
         idx = self.lib.myms_add_pattern()
         self._num_patterns = self.lib.myms_get_num_patterns()
         self._current_pattern = idx
@@ -954,6 +987,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, result=int)
     def duplicatePattern(self, source_pat):
+        self._push_undo("Duplicate Pattern")
         idx = self.lib.myms_duplicate_pattern(source_pat)
         self._num_patterns = self.lib.myms_get_num_patterns()
         self._current_pattern = idx
@@ -972,6 +1006,8 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, result=bool)
     def removePattern(self, pat):
+        if self.numPatterns > 1 and 0 <= pat < self.numPatterns:
+            self._push_undo("Remove Pattern")
         ok = self.lib.myms_remove_pattern(pat)
         if ok:
             self._num_patterns = self.lib.myms_get_num_patterns()
@@ -1024,16 +1060,20 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int)
     def setSongOrderStep(self, step, pat):
+        self._push_undo("Change Arranger Step")
         self.lib.myms_set_song_order_step(step, pat)
         self.songOrderChanged.emit()
 
     @pyqtSlot(int)
     def addSongOrderStep(self, pat):
+        self._push_undo("Add Arranger Step")
         self.lib.myms_add_song_order_step(pat)
         self.songOrderChanged.emit()
 
     @pyqtSlot(int)
     def removeSongOrderStep(self, step):
+        if self.songOrderLength > 1:
+            self._push_undo("Remove Arranger Step")
         self.lib.myms_remove_song_order_step(step)
         self.songOrderChanged.emit()
         so_idx = self.lib.myms_get_song_order_index()
@@ -1046,6 +1086,8 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int, result=bool)
     def moveSongOrderStep(self, from_step, to_step):
+        if 0 <= from_step < self.songOrderLength and 0 <= to_step < self.songOrderLength and from_step != to_step:
+            self._push_undo("Reorder Arranger Step")
         ok = self.lib.myms_move_song_order_step(from_step, to_step)
         if ok:
             self.songOrderChanged.emit()
@@ -1060,6 +1102,8 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int, result=bool)
     def swapSongOrderSteps(self, step_a, step_b):
+        if 0 <= step_a < self.songOrderLength and 0 <= step_b < self.songOrderLength and step_a != step_b:
+            self._push_undo("Swap Arranger Steps")
         ok = self.lib.myms_swap_song_order_steps(step_a, step_b)
         if ok:
             self.songOrderChanged.emit()
@@ -1075,36 +1119,54 @@ class MymsEngine(QObject):
     @pyqtSlot(int, int)
     def insertSongOrderStep(self, step, pat):
         """Insert pattern at specific step index in the song order."""
-        old_len = self.songOrderLength
-        self.addSongOrderStep(pat)
-        if 0 <= step < old_len:
-            self.moveSongOrderStep(old_len, step)
+        self._push_undo("Insert Arranger Step")
+        was_suspended = self._undo_suspended
+        self._undo_suspended = True
+        try:
+            old_len = self.songOrderLength
+            self.addSongOrderStep(pat)
+            if 0 <= step < old_len:
+                self.moveSongOrderStep(old_len, step)
+        finally:
+            self._undo_suspended = was_suspended
 
     @pyqtSlot(int, result=int)
     def insertNewPatternStep(self, step):
         """Create a new blank pattern and insert it into song order at step."""
-        new_pat = self.addPattern()
-        old_len = self.songOrderLength
-        if 0 <= step < old_len:
-            self.insertSongOrderStep(step, new_pat)
-        else:
-            self.addSongOrderStep(new_pat)
-        self.setCurrentPattern(new_pat)
-        return new_pat
+        self._push_undo("Insert New Pattern Step")
+        was_suspended = self._undo_suspended
+        self._undo_suspended = True
+        try:
+            new_pat = self.addPattern()
+            old_len = self.songOrderLength
+            if 0 <= step < old_len:
+                self.insertSongOrderStep(step, new_pat)
+            else:
+                self.addSongOrderStep(new_pat)
+            self.setCurrentPattern(new_pat)
+            return new_pat
+        finally:
+            self._undo_suspended = was_suspended
 
     @pyqtSlot(int, result=int)
     def duplicatePatternStep(self, step):
         """Duplicate pattern at step and insert it right after step."""
         if 0 <= step < self.songOrderLength:
-            src_pat = self.getSongOrderStep(step)
-            new_pat = self.duplicatePattern(src_pat)
-            self.insertSongOrderStep(step + 1, new_pat)
-            self.setCurrentPattern(new_pat)
-            return new_pat
+            self._push_undo("Duplicate Pattern Step")
+            was_suspended = self._undo_suspended
+            self._undo_suspended = True
+            try:
+                src_pat = self.getSongOrderStep(step)
+                new_pat = self.duplicatePattern(src_pat)
+                self.insertSongOrderStep(step + 1, new_pat)
+                self.setCurrentPattern(new_pat)
+                return new_pat
+            finally:
+                self._undo_suspended = was_suspended
         return -1
 
     # ==========================================
-    # Phase 3: Linux VST2 & CLAP Plugin Host API
+    # Phase 3: Linux VST3 & CLAP Plugin Host API
     # ==========================================
     @pyqtSlot(int, str, result=bool)
     def loadTrackPlugin(self, track, filepath):
@@ -1117,6 +1179,7 @@ class MymsEngine(QObject):
                 filepath = candidate
         if not os.path.exists(filepath):
             return False
+        self._push_undo("Load Plugin Instrument")
         ok = self.lib.myms_plugin_load(track, filepath.encode('utf-8'))
         if ok:
             new_type = self.lib.myms_get_track_type(track)
@@ -1128,6 +1191,8 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int)
     def unloadTrackPlugin(self, track):
+        if self.isTrackPluginLoaded(track):
+            self._push_undo("Unload Plugin Instrument")
         self.lib.myms_plugin_unload(track)
         self.trackPluginChanged.emit(track)
         self.trackPluginParamsChanged.emit(track)
@@ -1161,9 +1226,7 @@ class MymsEngine(QObject):
     @pyqtSlot(int, result=str)
     def getTrackPluginFormatName(self, track):
         fmt = self.lib.myms_plugin_get_format(track)
-        if fmt == 1:
-            return "VST2"
-        elif fmt == 2:
+        if fmt == 2:
             return "CLAP"
         elif fmt == 3:
             return "VST3"
@@ -1205,6 +1268,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int, float)
     def setTrackPluginParamValue(self, track, param_idx, val):
+        self._push_undo("Adjust Plugin Parameter", coalesce_key=f"plg_p_{track}_{param_idx}")
         self.lib.myms_plugin_set_param_value(track, param_idx, ctypes.c_float(val))
 
     @pyqtSlot(int, result=bool)
@@ -1228,7 +1292,7 @@ class MymsEngine(QObject):
         self.requestOpenPluginGui.emit(track)
 
     # ==========================================
-    # Track Insert FX API (VST3, CLAP, VST2)
+    # Track Insert FX API (VST3 & CLAP)
     # ==========================================
     @pyqtSlot(int, int, str, result=bool)
     def loadTrackFx(self, track, slot, filepath):
@@ -1241,6 +1305,7 @@ class MymsEngine(QObject):
                 filepath = candidate
         if not os.path.exists(filepath):
             return False
+        self._push_undo("Load Track Effect")
         ok = self.lib.myms_track_fx_load(track, slot, filepath.encode('utf-8'))
         if ok:
             self.trackFxChanged.emit(track, slot)
@@ -1249,6 +1314,8 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int)
     def unloadTrackFx(self, track, slot):
+        if self.isTrackFxLoaded(track, slot):
+            self._push_undo("Remove Track Effect")
         self.lib.myms_track_fx_unload(track, slot)
         self.trackFxChanged.emit(track, slot)
 
@@ -1323,6 +1390,7 @@ class MymsEngine(QObject):
                 path = candidate
         if not os.path.exists(path):
             return False
+        self._push_undo("Load Pre-FX")
         res = bool(self.lib.myms_track_pre_fx_load(track, slot, path.encode('utf-8')))
         if res:
             self.trackPreFxChanged.emit(track, slot)
@@ -1337,6 +1405,8 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int)
     def unloadTrackPreFx(self, track, slot):
+        if self.isTrackPreFxLoaded(track, slot):
+            self._push_undo("Remove Pre-FX")
         self.lib.myms_track_pre_fx_unload(track, slot)
         self.trackPreFxChanged.emit(track, slot)
         self.trackPreFxParamsChanged.emit(track, slot)
@@ -1436,6 +1506,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int, int, float)
     def setTrackPreFxParamValue(self, track, slot, param_idx, val):
+        self._push_undo("Adjust Pre-FX Parameter", coalesce_key=f"prefx_p_{track}_{slot}_{param_idx}")
         self.lib.myms_track_pre_fx_set_param_value(track, slot, param_idx, ctypes.c_float(val))
 
     @pyqtSlot(int, int, result=bool)
@@ -1556,6 +1627,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int, int, float)
     def setTrackFxParamValue(self, track, slot, param_idx, val):
+        self._push_undo("Adjust Track FX Parameter", coalesce_key=f"fx_p_{track}_{slot}_{param_idx}")
         self.lib.myms_track_fx_set_param_value(track, slot, param_idx, ctypes.c_float(val))
 
     @pyqtSlot(int, int, result=bool)
@@ -1617,6 +1689,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int, bool)
     def setTrackFxEnabled(self, track, slot, enabled):
+        self._push_undo("Toggle Track FX Bypass")
         self.lib.myms_set_track_fx_enabled(track, slot, enabled)
         self.trackFxChanged.emit(track, slot)
 
@@ -1626,11 +1699,14 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int, bool)
     def setTrackPreFxEnabled(self, track, slot, enabled):
+        self._push_undo("Toggle Pre-FX Bypass")
         self.lib.myms_set_track_pre_fx_enabled(track, slot, enabled)
         self.trackPreFxChanged.emit(track, slot)
 
     @pyqtSlot(int, int, int, result=bool)
     def swapTrackFx(self, track, slotA, slotB):
+        if slotA != slotB:
+            self._push_undo("Reorder Track FX")
         ok = bool(self.lib.myms_swap_track_fx(track, slotA, slotB))
         if ok:
             self.trackFxChanged.emit(track, slotA)
@@ -1639,6 +1715,8 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int, int, result=bool)
     def swapTrackPreFx(self, track, slotA, slotB):
+        if slotA != slotB:
+            self._push_undo("Reorder Pre-FX")
         ok = bool(self.lib.myms_swap_track_pre_fx(track, slotA, slotB))
         if ok:
             self.trackPreFxChanged.emit(track, slotA)
@@ -1650,6 +1728,7 @@ class MymsEngine(QObject):
         n = self.numTracks
         if fromIdx < 0 or fromIdx >= n or toIdx < 0 or toIdx >= n or fromIdx == toIdx:
             return False
+        self._push_undo("Reorder Track")
         ok = bool(self.lib.myms_move_track(fromIdx, toIdx))
         if ok:
             if self._selected_instrument == fromIdx:
@@ -1714,6 +1793,8 @@ class MymsEngine(QObject):
             else:
                 name = f"Synth {inst + 1}"
         name = name.strip()
+        if name != self.getInstrumentName(inst):
+            self._push_undo("Rename Track")
         self.lib.myms_set_inst_name(inst, name.encode('utf-8'))
         self.instrumentNameChanged.emit(inst, name)
 
@@ -1759,6 +1840,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(float)
     def setBpm(self, bpm):
+        self._push_undo("Change BPM", coalesce_key="bpm")
         self.lib.myms_set_bpm(bpm)
         self._bpm = bpm
         self.bpmChanged.emit(bpm)
@@ -1773,6 +1855,7 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int)
     def setNumRows(self, rows):
+        self._push_undo("Change Pattern Rows", coalesce_key=f"pat_rows_{self.currentPattern}")
         self.lib.myms_set_num_rows(rows)
         self._num_rows = self.lib.myms_get_num_rows()
         self.numRowsChanged.emit(self._num_rows)
@@ -1799,12 +1882,15 @@ class MymsEngine(QObject):
 
     @pyqtSlot()
     def addTrack(self):
+        self._push_undo("Add Track")
         self.lib.myms_add_track()
         self._num_tracks = self.lib.myms_get_num_tracks()
         self.numTracksChanged.emit(self._num_tracks)
 
     @pyqtSlot(int)
     def removeTrack(self, track_idx):
+        if self._num_tracks > 1 and 0 <= track_idx < self._num_tracks:
+            self._push_undo("Remove Track")
         self.lib.myms_remove_track(track_idx)
         self._num_tracks = self.lib.myms_get_num_tracks()
         self.numTracksChanged.emit(self._num_tracks)
@@ -1830,30 +1916,37 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int)
     def setInstOsc1(self, inst, wave):
+        self._push_undo("Edit Synth", coalesce_key=f"synth_{inst}")
         self.lib.myms_set_inst_osc1(inst, wave)
 
     @pyqtSlot(int, int)
     def setInstOsc2(self, inst, wave):
+        self._push_undo("Edit Synth", coalesce_key=f"synth_{inst}")
         self.lib.myms_set_inst_osc2(inst, wave)
 
     @pyqtSlot(int, float)
     def setInstOscMix(self, inst, mix):
+        self._push_undo("Edit Synth", coalesce_key=f"synth_{inst}")
         self.lib.myms_set_inst_osc_mix(inst, mix)
 
     @pyqtSlot(int, float, float)
     def setInstDetune(self, inst, semi, cents):
+        self._push_undo("Edit Synth", coalesce_key=f"synth_{inst}")
         self.lib.myms_set_inst_detune(inst, semi, cents)
 
     @pyqtSlot(int, float, float, float)
     def setInstFilter(self, inst, cutoff, res, env_amt):
+        self._push_undo("Edit Synth", coalesce_key=f"synth_{inst}")
         self.lib.myms_set_inst_filter(inst, cutoff, res, env_amt)
 
     @pyqtSlot(int, float, float, float, float)
     def setInstAmpEnv(self, inst, a, d, s, r):
+        self._push_undo("Edit Synth", coalesce_key=f"synth_{inst}")
         self.lib.myms_set_inst_amp_env(inst, a, d, s, r)
 
     @pyqtSlot(int, float, float, float, float)
     def setInstFilterEnv(self, inst, a, d, s, r):
+        self._push_undo("Edit Synth", coalesce_key=f"synth_{inst}")
         self.lib.myms_set_inst_filter_env(inst, a, d, s, r)
 
     @pyqtSlot(int, result="QVariantMap")
@@ -1896,36 +1989,42 @@ class MymsEngine(QObject):
 
     @pyqtSlot(float)
     def setMacroPunch(self, val):
+        self._push_undo("Adjust Macro Punch", coalesce_key="macro_punch")
         self._macro_punch = val
         self.lib.myms_set_macro_punch(ctypes.c_float(val))
         self.macrosChanged.emit()
 
     @pyqtSlot(float)
     def setMacroWarmth(self, val):
+        self._push_undo("Adjust Macro Warmth", coalesce_key="macro_warmth")
         self._macro_warmth = val
         self.lib.myms_set_macro_warmth(ctypes.c_float(val))
         self.macrosChanged.emit()
 
     @pyqtSlot(float)
     def setMacroTone(self, val):
+        self._push_undo("Adjust Macro Tone", coalesce_key="macro_tone")
         self._macro_tone = val
         self.lib.myms_set_macro_tone(ctypes.c_float(val))
         self.macrosChanged.emit()
 
     @pyqtSlot(float)
     def setMacroSpace(self, val):
+        self._push_undo("Adjust Macro Space", coalesce_key="macro_space")
         self._macro_space = val
         self.lib.myms_set_macro_space(ctypes.c_float(val))
         self.macrosChanged.emit()
 
     @pyqtSlot(float)
     def setMasterVolume(self, val):
+        self._push_undo("Adjust Master Volume", coalesce_key="master_vol")
         self._master_volume = val
         self.lib.myms_set_master_volume(ctypes.c_float(val))
         self.macrosChanged.emit()
 
     @pyqtSlot(int, int, int, int, int, int, int)
     def setCell(self, track, row, note, instrument, volume, effectType, effectParam):
+        self._push_undo("Edit Cell")
         self.lib.myms_set_cell(track, row, note, instrument, volume, effectType, effectParam)
         self.gridCellChanged.emit(track, row)
 
@@ -1951,16 +2050,19 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int)
     def clearTrack(self, track):
+        self._push_undo("Clear Track")
         self.lib.myms_clear_track(track)
         self.gridCellChanged.emit(track, 0)
 
     @pyqtSlot()
     def clearAllTracks(self):
+        self._push_undo("Clear All Tracks")
         self.lib.myms_clear_all_tracks()
         self.gridCellChanged.emit(0, 0)
 
     @pyqtSlot(int, int)
     def transposeTrack(self, track, semitones):
+        self._push_undo("Transpose Track")
         self.lib.myms_transpose_track(track, semitones)
         self.gridCellChanged.emit(track, 0)
 
@@ -2017,19 +2119,31 @@ class MymsEngine(QObject):
 
     @pyqtSlot(int, int, int, int)
     def deleteRange(self, startTrack, startRow, endTrack, endRow):
-        min_t = max(0, min(startTrack, endTrack))
-        max_t = min(self.numTracks - 1, max(startTrack, endTrack))
-        min_r = max(0, min(startRow, endRow))
-        max_r = min(self.numRows - 1, max(startRow, endRow))
+        self._push_undo("Delete Chunk")
+        was_suspended = self._undo_suspended
+        self._undo_suspended = True
+        try:
+            min_t = max(0, min(startTrack, endTrack))
+            max_t = min(self.numTracks - 1, max(startTrack, endTrack))
+            min_r = max(0, min(startRow, endRow))
+            max_r = min(self.numRows - 1, max(startRow, endRow))
 
-        for r in range(min_r, max_r + 1):
-            for t in range(min_t, max_t + 1):
-                self.setCell(t, r, 255, t + 1, 255, 0, 0)
+            for r in range(min_r, max_r + 1):
+                for t in range(min_t, max_t + 1):
+                    self.setCell(t, r, 255, t + 1, 255, 0, 0)
+        finally:
+            self._undo_suspended = was_suspended
 
     @pyqtSlot(int, int, int, int)
     def cutRange(self, startTrack, startRow, endTrack, endRow):
-        self.copyRange(startTrack, startRow, endTrack, endRow)
-        self.deleteRange(startTrack, startRow, endTrack, endRow)
+        self._push_undo("Cut Chunk")
+        was_suspended = self._undo_suspended
+        self._undo_suspended = True
+        try:
+            self.copyRange(startTrack, startRow, endTrack, endRow)
+            self.deleteRange(startTrack, startRow, endTrack, endRow)
+        finally:
+            self._undo_suspended = was_suspended
 
     @pyqtSlot(int, int)
     def pasteClipboard(self, targetTrack, targetRow):
@@ -2057,24 +2171,30 @@ class MymsEngine(QObject):
         if not rows:
             return
 
-        num_rows = self.numRows
-        num_tracks = self.numTracks
+        self._push_undo("Paste Chunk")
+        was_suspended = self._undo_suspended
+        self._undo_suspended = True
+        try:
+            num_rows = self.numRows
+            num_tracks = self.numTracks
 
-        for r_idx, row_cells in enumerate(rows):
-            dest_r = targetRow + r_idx
-            if dest_r >= num_rows:
-                break
-            for c_idx, cell in enumerate(row_cells):
-                dest_t = targetTrack + c_idx
-                if dest_t >= num_tracks:
-                    continue
-                note = cell.get("note", 255)
-                default_inst = dest_t + 1
-                inst = default_inst if note == 255 else cell.get("instrument", default_inst)
-                vol = cell.get("volume", 255)
-                fx_t = cell.get("effectType", 0)
-                fx_p = cell.get("effectParam", 0)
-                self.setCell(dest_t, dest_r, note, inst, vol, fx_t, fx_p)
+            for r_idx, row_cells in enumerate(rows):
+                dest_r = targetRow + r_idx
+                if dest_r >= num_rows:
+                    break
+                for c_idx, cell in enumerate(row_cells):
+                    dest_t = targetTrack + c_idx
+                    if dest_t >= num_tracks:
+                        continue
+                    note = cell.get("note", 255)
+                    default_inst = dest_t + 1
+                    inst = default_inst if note == 255 else cell.get("instrument", default_inst)
+                    vol = cell.get("volume", 255)
+                    fx_t = cell.get("effectType", 0)
+                    fx_p = cell.get("effectParam", 0)
+                    self.setCell(dest_t, dest_r, note, inst, vol, fx_t, fx_p)
+        finally:
+            self._undo_suspended = was_suspended
 
     @pyqtSlot(str, result=bool)
     def saveProject(self, filepath=""):
@@ -2208,6 +2328,8 @@ class MymsEngine(QObject):
         if not filepath or not os.path.exists(filepath):
             return False
 
+        was_suspended = self._undo_suspended
+        self._undo_suspended = True
         try:
             import json
             with open(filepath, "r", encoding="utf-8") as f:
@@ -2414,55 +2536,347 @@ class MymsEngine(QObject):
         except Exception as e:
             print(f"[myms] Failed to open project from {filepath}: {e}")
             return False
+        finally:
+            self._undo_suspended = was_suspended
+            self.clearUndoHistory()
 
     @pyqtSlot()
     def newProject(self):
-        self.stop()
-        self.clearAllTracks()
-        for t in range(self.numTracks):
-            self.unloadTrackPlugin(t)
+        was_suspended = self._undo_suspended
+        self._undo_suspended = True
+        try:
+            self.stop()
+            self.clearAllTracks()
+            for t in range(self.numTracks):
+                self.unloadTrackPlugin(t)
+                for s in range(self.getMaxTrackFx()):
+                    self.unloadTrackFx(t, s)
+                    self.unloadTrackPreFx(t, s)
             for s in range(self.getMaxTrackFx()):
-                self.unloadTrackFx(t, s)
-                self.unloadTrackPreFx(t, s)
-        for s in range(self.getMaxTrackFx()):
-            self.unloadTrackFx(-1, s)
-        while self.numTracks > 1:
-            self.removeTrack(self.numTracks - 1)
-        while self.numPatterns > 1:
-            self.removePattern(self.numPatterns - 1)
-        self.setTrackType(0, 0) # Synth
-        self.setInstrumentName(0, "Synth 1")
-        self.setTrackVolume(0, 1.0)
-        self.setTrackPan(0, 0.5)
-        self.setTrackMute(0, False)
-        self.setTrackSolo(0, False)
-        self.setTrackSf2Preset(0, 0)
-        self.setSongOrderStep(0, 0)
-        while self.songOrderLength > 1:
-            self.removeSongOrderStep(self.songOrderLength - 1)
-        self.setBpm(90.0)
-        self.setNumRows(32)
-        self.setLooping(False)
-        self.setSongMode(False)
-        self.setMacroPunch(0.20)
-        self.setMacroWarmth(0.25)
-        self.setMacroTone(0.50)
-        self.setMacroSpace(0.15)
-        self.setMasterVolume(0.85)
-        self.setCurrentPattern(0)
-        self.setSongOrderIndex(0)
-        self.setSelectedInstrument(0)
-        self._current_project_path = ""
-        self.currentProjectPathChanged.emit("")
-        self.projectLoaded.emit()
-        print("[myms] New project created.")
+                self.unloadTrackFx(-1, s)
+            while self.numTracks > 1:
+                self.removeTrack(self.numTracks - 1)
+            while self.numPatterns > 1:
+                self.removePattern(self.numPatterns - 1)
+            self.setTrackType(0, 0) # Synth
+            self.setInstrumentName(0, "Synth 1")
+            self.setTrackVolume(0, 1.0)
+            self.setTrackPan(0, 0.5)
+            self.setTrackMute(0, False)
+            self.setTrackSolo(0, False)
+            self.setTrackSf2Preset(0, 0)
+            self.setSongOrderStep(0, 0)
+            while self.songOrderLength > 1:
+                self.removeSongOrderStep(self.songOrderLength - 1)
+            self.setBpm(90.0)
+            self.setNumRows(32)
+            self.setLooping(False)
+            self.setSongMode(False)
+            self.setMacroPunch(0.20)
+            self.setMacroWarmth(0.25)
+            self.setMacroTone(0.50)
+            self.setMacroSpace(0.15)
+            self.setMasterVolume(0.85)
+            self.setCurrentPattern(0)
+            self.setSongOrderIndex(0)
+            self.setSelectedInstrument(0)
+            self._current_project_path = ""
+            self.currentProjectPathChanged.emit("")
+            self.projectLoaded.emit()
+            print("[myms] New project created.")
+        finally:
+            self._undo_suspended = was_suspended
+            self.clearUndoHistory()
 
     @pyqtSlot()
     def loadDemoGroove(self):
+        self._push_undo("Load Demo Groove")
         self.lib.myms_load_demo()
         self._num_tracks = self.lib.myms_get_num_tracks()
         self.numTracksChanged.emit(self._num_tracks)
         self.projectLoaded.emit()
+
+    # ==========================================
+    # Undo / Redo History Engine
+    # ==========================================
+    @pyqtProperty(bool, notify=undoRedoChanged)
+    def canUndo(self):
+        return len(self._undo_stack) > 0
+
+    @pyqtProperty(bool, notify=undoRedoChanged)
+    def canRedo(self):
+        return len(self._redo_stack) > 0
+
+    @pyqtProperty(str, notify=undoRedoChanged)
+    def undoText(self):
+        return self._undo_stack[-1][0] if self._undo_stack else ""
+
+    @pyqtProperty(str, notify=undoRedoChanged)
+    def redoText(self):
+        return self._redo_stack[-1][0] if self._redo_stack else ""
+
+    @pyqtSlot()
+    def clearUndoHistory(self):
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+        self._last_coalesce_key = None
+        self._last_coalesce_time = 0.0
+        self.undoRedoChanged.emit()
+
+    def _capture_snapshot(self):
+        tracks_data = []
+        for t in range(self.numTracks):
+            trk_type = self.getTrackType(t)
+            plg_loaded = (trk_type == 3 and self.isTrackPluginLoaded(t))
+            tracks_data.append({
+                "name": self.getInstrumentName(t),
+                "type": trk_type,
+                "volume": self.getTrackVolume(t),
+                "pan": self.getTrackPan(t),
+                "mute": self.getTrackMute(t),
+                "solo": self.getTrackSolo(t),
+                "sf2_preset": self.getTrackSf2Preset(t),
+                "synth": self.getInstParams(t),
+                "plugin_path": self.getTrackPluginPath(t) if plg_loaded else "",
+                "plugin_params": [p["value"] for p in self.getTrackPluginParams(t)] if plg_loaded else [],
+                "pre_fx": self.getTrackPreFxChainData(t),
+                "fx_chain": self.getTrackFxChainData(t),
+            })
+
+        patterns_data = []
+        n_buf = ctypes.c_uint8(0)
+        inst_buf = ctypes.c_uint8(0)
+        vol_buf = ctypes.c_uint8(0)
+        fx_t_buf = ctypes.c_uint8(0)
+        fx_p_buf = ctypes.c_uint8(0)
+        for pat_idx in range(self.numPatterns):
+            pat_rows = self.getPatternNumRows(pat_idx)
+            cells = []
+            for t in range(self.numTracks):
+                for r in range(pat_rows):
+                    self.lib.myms_get_pattern_cell(
+                        pat_idx, t, r,
+                        ctypes.byref(n_buf), ctypes.byref(inst_buf),
+                        ctypes.byref(vol_buf), ctypes.byref(fx_t_buf), ctypes.byref(fx_p_buf)
+                    )
+                    n_val = n_buf.value
+                    vol_val = vol_buf.value
+                    fxt_val = fx_t_buf.value
+                    fxp_val = fx_p_buf.value
+                    if n_val != 255 or vol_val != 255 or fxt_val != 0 or fxp_val != 0:
+                        cells.append((t, r, n_val, inst_buf.value, vol_val, fxt_val, fxp_val))
+            patterns_data.append({
+                "num_rows": pat_rows,
+                "cells": cells,
+            })
+
+        return {
+            "bpm": self.bpm,
+            "current_pattern": self.currentPattern,
+            "song_order_index": self.songOrderIndex,
+            "selected_instrument": self.selectedInstrument,
+            "is_song_mode": self.isSongMode,
+            "is_looping": self.isLooping,
+            "macros": {
+                "punch": self._macro_punch,
+                "warmth": self._macro_warmth,
+                "tone": self._macro_tone,
+                "space": self._macro_space,
+                "master_volume": self._master_volume,
+            },
+            "song_order": self.getSongOrderList(),
+            "master_fx": self.getTrackFxChainData(-1),
+            "tracks": tracks_data,
+            "patterns": patterns_data,
+        }
+
+    def _restore_fx_slots(self, track, target_chain, is_pre=False):
+        max_fx = self.getMaxTrackFx()
+        target_by_slot = {int(fx["slot"]): fx for fx in target_chain}
+        for s in range(max_fx):
+            cur_loaded = self.isTrackPreFxLoaded(track, s) if is_pre else self.isTrackFxLoaded(track, s)
+            cur_path = (self.getTrackPreFxPath(track, s) if is_pre else self.getTrackFxPath(track, s)) if cur_loaded else ""
+            target_fx = target_by_slot.get(s)
+            if target_fx is None:
+                if cur_loaded:
+                    if is_pre:
+                        self.unloadTrackPreFx(track, s)
+                    else:
+                        self.unloadTrackFx(track, s)
+            else:
+                t_path = target_fx.get("path", "")
+                if cur_path != t_path:
+                    if cur_loaded:
+                        if is_pre:
+                            self.unloadTrackPreFx(track, s)
+                        else:
+                            self.unloadTrackFx(track, s)
+                    if t_path and os.path.exists(t_path):
+                        if is_pre:
+                            self.loadTrackPreFx(track, s, t_path)
+                        else:
+                            self.loadTrackFx(track, s, t_path)
+                is_now_loaded = self.isTrackPreFxLoaded(track, s) if is_pre else self.isTrackFxLoaded(track, s)
+                if is_now_loaded:
+                    enabled = bool(target_fx.get("enabled", True))
+                    if is_pre:
+                        self.setTrackPreFxEnabled(track, s, enabled)
+                    else:
+                        self.setTrackFxEnabled(track, s, enabled)
+                    for p_idx, val in enumerate(target_fx.get("params", [])):
+                        if is_pre:
+                            self.setTrackPreFxParamValue(track, s, p_idx, float(val))
+                        else:
+                            self.setTrackFxParamValue(track, s, p_idx, float(val))
+
+    def _restore_snapshot(self, snap):
+        was_suspended = self._undo_suspended
+        self._undo_suspended = True
+        try:
+            # 1. Restore Master FX
+            self._restore_fx_slots(-1, snap.get("master_fx", []), is_pre=False)
+
+            # 2. Restore Track count
+            tracks = snap.get("tracks", [])
+            target_tracks = max(1, len(tracks))
+            while self.numTracks < target_tracks:
+                self.addTrack()
+            while self.numTracks > target_tracks:
+                self.removeTrack(self.numTracks - 1)
+
+            # 3. Restore Track properties, Synth, Plugin & FX chains
+            for t, trk in enumerate(tracks):
+                self.setInstrumentName(t, trk["name"])
+                self.setTrackVolume(t, float(trk["volume"]))
+                self.setTrackPan(t, float(trk["pan"]))
+                self.setTrackMute(t, bool(trk["mute"]))
+                self.setTrackSolo(t, bool(trk["solo"]))
+                self.setTrackSf2Preset(t, int(trk["sf2_preset"]))
+
+                trk_type = int(trk["type"])
+                t_plugin_path = trk.get("plugin_path", "")
+                if trk_type == 3:
+                    cur_path = self.getTrackPluginPath(t) if self.isTrackPluginLoaded(t) else ""
+                    if cur_path != t_plugin_path:
+                        if cur_path:
+                            self.unloadTrackPlugin(t)
+                        if t_plugin_path and os.path.exists(t_plugin_path):
+                            self.loadTrackPlugin(t, t_plugin_path)
+                    self.setTrackType(t, 3)
+                    if self.isTrackPluginLoaded(t):
+                        for p_idx, val in enumerate(trk.get("plugin_params", [])):
+                            self.setTrackPluginParamValue(t, p_idx, float(val))
+                else:
+                    if self.isTrackPluginLoaded(t):
+                        self.unloadTrackPlugin(t)
+                    self.setTrackType(t, trk_type)
+
+                self._restore_fx_slots(t, trk.get("pre_fx", []), is_pre=True)
+                self._restore_fx_slots(t, trk.get("fx_chain", []), is_pre=False)
+
+                s = trk.get("synth", {})
+                if s:
+                    self.setInstOsc1(t, int(s.get("osc1", 0)))
+                    self.setInstOsc2(t, int(s.get("osc2", 1)))
+                    self.setInstOscMix(t, float(s.get("mix", 0.45)))
+                    self.setInstDetune(t, float(s.get("detuneSemi", 0.0)), float(s.get("detuneCents", 8.0)))
+                    self.setInstFilter(t, float(s.get("cutoff", 3500.0)), float(s.get("resonance", 0.35)), float(s.get("envAmount", 0.40)))
+                    self.setInstAmpEnv(t, float(s.get("ampA", 0.005)), float(s.get("ampD", 0.25)), float(s.get("ampS", 0.65)), float(s.get("ampR", 0.25)))
+
+            # 4. Restore Pattern count, row counts, and cells
+            patterns = snap.get("patterns", [])
+            target_pats = max(1, len(patterns))
+            while self.numPatterns < target_pats:
+                self.addPattern()
+            while self.numPatterns > target_pats:
+                self.removePattern(self.numPatterns - 1)
+
+            for p_idx, p_data in enumerate(patterns):
+                p_rows = int(p_data.get("num_rows", 32))
+                self.lib.myms_set_pattern_num_rows(p_idx, p_rows)
+                for t in range(self.numTracks):
+                    for r in range(p_rows):
+                        self.lib.myms_set_pattern_cell(p_idx, t, r, 255, t + 1, 255, 0, 0)
+                for (t, r, n_val, inst_val, vol_val, fxt_val, fxp_val) in p_data.get("cells", []):
+                    if t < self.numTracks and r < p_rows:
+                        self.lib.myms_set_pattern_cell(p_idx, t, r, n_val, inst_val, vol_val, fxt_val, fxp_val)
+
+            # 5. Restore Song Order
+            song_order = snap.get("song_order", [0])
+            if song_order:
+                self.lib.myms_set_song_order_step(0, int(song_order[0]))
+                while self.songOrderLength > 1:
+                    self.lib.myms_remove_song_order_step(self.songOrderLength - 1)
+                for step_pat in song_order[1:]:
+                    self.lib.myms_add_song_order_step(int(step_pat))
+
+            # 6. Restore Global & Selection State
+            self.setBpm(float(snap.get("bpm", 90.0)))
+            macros = snap.get("macros", {})
+            self.setMacroPunch(float(macros.get("punch", 0.20)))
+            self.setMacroWarmth(float(macros.get("warmth", 0.25)))
+            self.setMacroTone(float(macros.get("tone", 0.50)))
+            self.setMacroSpace(float(macros.get("space", 0.15)))
+            self.setMasterVolume(float(macros.get("master_volume", 0.85)))
+            self.setLooping(bool(snap.get("is_looping", False)))
+            self.setSongMode(bool(snap.get("is_song_mode", False)))
+            self.setSongOrderIndex(int(snap.get("song_order_index", 0)))
+            self.setCurrentPattern(int(snap.get("current_pattern", 0)))
+            sel_inst = max(0, min(int(snap.get("selected_instrument", 0)), self.numTracks - 1))
+            self.setSelectedInstrument(sel_inst)
+
+            self._num_rows = self.lib.myms_get_num_rows()
+            self.numRowsChanged.emit(self._num_rows)
+            self.songOrderChanged.emit()
+            self.macrosChanged.emit()
+            self.gridCellChanged.emit(0, 0)
+            self.undoRedoChanged.emit()
+        finally:
+            self._undo_suspended = was_suspended
+
+    def _push_undo(self, action_name="", coalesce_key=None):
+        if self._undo_suspended:
+            return
+        import time
+        now = time.monotonic()
+        if (
+            coalesce_key is not None
+            and coalesce_key == self._last_coalesce_key
+            and (now - self._last_coalesce_time) < 0.6
+        ):
+            self._last_coalesce_time = now
+            return
+
+        snap = self._capture_snapshot()
+        self._undo_stack.append((action_name, snap))
+        if len(self._undo_stack) > self._max_undo_steps:
+            self._undo_stack.pop(0)
+        self._redo_stack.clear()
+        self._last_coalesce_key = coalesce_key
+        self._last_coalesce_time = now
+        self.undoRedoChanged.emit()
+
+    @pyqtSlot(result=bool)
+    def undo(self):
+        if not self._undo_stack:
+            return False
+        action_name, prev_snap = self._undo_stack.pop()
+        self._redo_stack.append((action_name, self._capture_snapshot()))
+        self._last_coalesce_key = None
+        self._last_coalesce_time = 0.0
+        self._restore_snapshot(prev_snap)
+        return True
+
+    @pyqtSlot(result=bool)
+    def redo(self):
+        if not self._redo_stack:
+            return False
+        action_name, next_snap = self._redo_stack.pop()
+        self._undo_stack.append((action_name, self._capture_snapshot()))
+        self._last_coalesce_key = None
+        self._last_coalesce_time = 0.0
+        self._restore_snapshot(next_snap)
+        return True
 
     # ==========================================
     # Phase 4: Offline Audio Export Slots

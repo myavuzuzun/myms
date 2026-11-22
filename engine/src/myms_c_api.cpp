@@ -458,7 +458,7 @@ void myms_load_demo() {
     myms::AudioEngine::instance().loadDemoGroove();
 }
 
-// Plugin Host (VST2 & CLAP)
+// Plugin Host (VST3 & CLAP)
 bool myms_plugin_load(int track, const char* filepath) {
     if (!filepath) return false;
     return myms::AudioEngine::instance().loadTrackPlugin(track, filepath);
@@ -554,7 +554,7 @@ void myms_plugin_close_native_editor(int track) {
 }
 
 // ==========================================
-// Track Insert FX Controls (VST3, CLAP, VST2)
+// Track Insert FX Controls (VST3, CLAP)
 // ==========================================
 bool myms_track_fx_load(int track, int slot, const char* filepath) {
     if (!filepath) return false;

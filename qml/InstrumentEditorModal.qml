@@ -139,8 +139,8 @@ Item {
                         text: {
                             if (root.trackType === 1) return "— SoundFont Player (FontBox)"
                             if (root.trackType === 2) return "— 8-Slot Drum Sampler (BeatPad)"
-                            if (root.trackType === 3) return "— Plugin Instrument (VST3 / CLAP / VST2)"
-                            return "— Polyphonic Subtractive Synth (AuraSynth)"
+                            if (root.trackType === 3) return "— Plugin Instrument (VST3 / CLAP)"
+                            return "— Polyphonic Subtractive Synth"
                         }
                         font.pixelSize: 11
                         color: theme.textMuted

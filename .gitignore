@@ -1,6 +1,14 @@
-# Compiled libraries
+# Compiled libraries & plugins
 *.so
+*.clap
 libmyms_audio.so
+
+# Packages & build output
+*.deb
+dist/
+
+# Screenshots
+screenshot_*.png
 
 # Python cache
 __pycache__/

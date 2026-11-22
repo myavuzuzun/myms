@@ -61,6 +61,9 @@ Rectangle {
             root.currentInstrument = engine ? engine.selectedInstrument : 0
             root.loadFromEngine()
         }
+        function onUndoRedoChanged() {
+            root.loadFromEngine()
+        }
     }
 
     function applySynth() {
@@ -96,50 +99,10 @@ Rectangle {
                     spacing: 5
                     Text { text: "🎹"; font.pixelSize: 11 }
                     Text {
-                        text: "AuraSynth"
+                        text: "Synth"
                         font.bold: true
                         font.pixelSize: 10
                         color: theme.accent
-                    }
-                }
-            }
-
-            Item { Layout.fillHeight: true }
-
-            // Init Patch Button
-            Rectangle {
-                Layout.fillWidth: true
-                height: 26
-                radius: 3
-                color: initMouse.containsMouse ? theme.btnHover : theme.btnBg
-                border.color: theme.border
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "Init Patch"
-                    font.pixelSize: 10
-                    font.bold: true
-                    color: theme.textMain
-                }
-
-                MouseArea {
-                    id: initMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    onClicked: {
-                        root.osc1Wave = 0
-                        root.osc2Wave = 1
-                        root.oscMix = 0.45
-                        root.detuneSemi = 0.0
-                        root.detuneCents = 8.0
-                        root.filterCutoff = 3500.0
-                        root.filterRes = 0.35
-                        root.filterEnv = 0.40
-                        root.ampA = 0.005
-                        root.ampD = 0.25
-                        root.ampS = 0.65
-                        root.ampR = 0.25
-                        root.applySynth()
                     }
                 }
             }

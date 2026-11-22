@@ -7,6 +7,7 @@
 #include <cstring>
 #include <algorithm>
 #include <iostream>
+#include <unistd.h>
 #include "tsf.h"
 
 namespace myms {
@@ -40,11 +41,15 @@ public:
         // Auto-load available system default SoundFont
         const char* systemFonts[] = {
             "/usr/share/sounds/sf2/default-GM.sf2",
+            "/usr/share/sounds/sf2/FluidR3_GM.sf2",
             "/usr/share/sounds/sf2/TimGM6mb.sf2",
-            "/usr/share/soundfonts/default.sf2"
+            "/usr/share/soundfonts/default.sf2",
+            "/usr/share/soundfonts/FluidR3_GM.sf2",
+            "/usr/share/soundfonts/TimGM6mb.sf2",
+            "/usr/share/soundfonts/freepats-general-midi.sf2"
         };
         for (const char* path : systemFonts) {
-            if (loadSoundFont(path)) {
+            if (access(path, R_OK) == 0 && loadSoundFont(path)) {
                 std::cout << "[myms] Auto-loaded system SoundFont: " << path << std::endl;
                 break;
             }

@@ -16,7 +16,6 @@
 #include <dlfcn.h>
 #include <unistd.h>
 
-#include "vst2/aeffectx.h"
 #include "clap/clap.h"
 #include "vst3/vst3_c_api.h"
 
@@ -24,7 +23,6 @@ namespace myms {
 
 enum PluginFormat {
     PLUGIN_FORMAT_NONE = 0,
-    PLUGIN_FORMAT_VST2 = 1,
     PLUGIN_FORMAT_CLAP = 2,
     PLUGIN_FORMAT_VST3 = 3
 };
@@ -275,27 +273,7 @@ public:
             }
         }
 
-        // 3. Try loading as VST 2.4
-        using VstMainFunc = AEffect* (*)(audioMasterCallback);
-        VstMainFunc vstMain = reinterpret_cast<VstMainFunc>(dlsym(handle, "VSTPluginMain"));
-        if (!vstMain) {
-            vstMain = reinterpret_cast<VstMainFunc>(dlsym(handle, "main_plugin"));
-        }
-        if (!vstMain) {
-            vstMain = reinterpret_cast<VstMainFunc>(dlsym(handle, "main"));
-        }
-
-        if (vstMain) {
-            if (initVst2(vstMain)) {
-                m_format = PLUGIN_FORMAT_VST2;
-                m_isLoaded.store(true, std::memory_order_release);
-                std::cout << "[myms PluginHost] Successfully loaded VST2 plugin: " << m_name 
-                          << " (" << m_params.size() << " params)" << std::endl;
-                return true;
-            }
-        }
-
-        std::cerr << "[myms PluginHost] File is not a recognized Linux VST3, CLAP, or VST2 plugin: " << path << std::endl;
+        std::cerr << "[myms PluginHost] File is not a recognized Linux VST3 or CLAP plugin: " << path << std::endl;
         dlclose(m_handle);
         m_handle = nullptr;
         return false;
@@ -339,16 +317,6 @@ public:
                 m_vst3Factory->lpVtbl->release(m_vst3Factory);
                 m_vst3Factory = nullptr;
             }
-        } else if (m_format == PLUGIN_FORMAT_VST2) {
-            if (m_vstEffect) {
-                {
-                    std::lock_guard<std::mutex> lock(s_vstMapMutex);
-                    s_vstInstanceMap.erase(m_vstEffect);
-                }
-                m_vstEffect->dispatcher(m_vstEffect, effMainsChanged, 0, 0, nullptr, 0.0f);
-                m_vstEffect->dispatcher(m_vstEffect, effClose, 0, 0, nullptr, 0.0f);
-                m_vstEffect = nullptr;
-            }
         }
 
         if (m_handle) {
@@ -383,7 +351,6 @@ public:
         switch (m_format) {
             case PLUGIN_FORMAT_VST3: return "VST3";
             case PLUGIN_FORMAT_CLAP: return "CLAP";
-            case PLUGIN_FORMAT_VST2: return "VST2";
             default: return "NONE";
         }
     }
@@ -412,19 +379,7 @@ public:
         m_params[index].value = val;
         int paramId = m_params[index].id;
 
-        if (m_format == PLUGIN_FORMAT_VST2 && m_vstEffect) {
-            if (m_vstEffect->setParameter) {
-                m_vstEffect->setParameter(m_vstEffect, index, val);
-            }
-            queueEvent(QueuedMidiEvent{QueuedMidiEvent::PARAM_CHANGE, 0, 0.0f, index, val});
-            char buf[32] = {0};
-            if (m_vstEffect->dispatcher) {
-                m_vstEffect->dispatcher(m_vstEffect, effGetParamDisplay, index, 0, buf, 0.0f);
-                if (buf[0] != '\0') {
-                    m_params[index].display = buf;
-                }
-            }
-        } else if (m_format == PLUGIN_FORMAT_CLAP) {
+        if (m_format == PLUGIN_FORMAT_CLAP) {
             queueEvent(QueuedMidiEvent{QueuedMidiEvent::PARAM_CHANGE, 0, 0.0f, paramId, val});
         } else if (m_format == PLUGIN_FORMAT_VST3) {
             if (m_vst3Controller) {
@@ -448,13 +403,6 @@ public:
         }
         if (idx >= 0 && idx < static_cast<int>(m_params.size())) {
             m_params[idx].value = std::clamp(val, 0.0f, 1.0f);
-            if (m_format == PLUGIN_FORMAT_VST2 && m_vstEffect && m_vstEffect->dispatcher) {
-                char buf[32] = {0};
-                m_vstEffect->dispatcher(m_vstEffect, effGetParamDisplay, idx, 0, buf, 0.0f);
-                if (buf[0] != '\0') {
-                    m_params[idx].display = buf;
-                }
-            }
             queueEvent(QueuedMidiEvent{QueuedMidiEvent::PARAM_CHANGE, 0, 0.0f, m_params[idx].id, m_params[idx].value});
             m_paramsDirty.store(true, std::memory_order_release);
         }
@@ -529,11 +477,42 @@ public:
             return;
         }
 
-        if (m_format == PLUGIN_FORMAT_VST2 && m_vstEffect && m_vstEffect->processReplacing) {
-            float* inPtrs[2] = { inL, inR };
-            float* outPtrs[2] = { outL, outR };
-            m_vstEffect->processReplacing(m_vstEffect, inPtrs, outPtrs, numFrames);
-        } else if (m_format == PLUGIN_FORMAT_CLAP && m_clapPlugin && m_clapPlugin->process) {
+        if (m_format == PLUGIN_FORMAT_CLAP && m_clapPlugin && m_clapPlugin->process) {
+            ClapEventBuffer evBuf;
+            int head = m_eventQueueHead.load(std::memory_order_relaxed);
+            int tail = m_eventQueueTail.load(std::memory_order_acquire);
+            while (head != tail && evBuf.count < MAX_QUEUED_EVENTS) {
+                const QueuedMidiEvent& q = m_eventQueue[head];
+                head = (head + 1) % MAX_QUEUED_EVENTS;
+                if (q.type == QueuedMidiEvent::PARAM_CHANGE) {
+                    clap_event_param_value_t& p = evBuf.params[evBuf.count];
+                    p.header.size = sizeof(clap_event_param_value_t);
+                    p.header.time = 0;
+                    p.header.space_id = CLAP_CORE_EVENT_SPACE_ID;
+                    p.header.type = CLAP_EVENT_PARAM_VALUE;
+                    p.header.flags = 0;
+                    p.param_id = q.paramId;
+                    p.cookie = nullptr;
+                    p.note_id = -1;
+                    p.port_index = 0;
+                    p.channel = 0;
+                    p.key = -1;
+                    p.value = q.paramValue;
+                    evBuf.headers[evBuf.count] = &p.header;
+                    evBuf.count++;
+                }
+            }
+            m_eventQueueHead.store(head, std::memory_order_release);
+
+            clap_input_events_t in_events;
+            in_events.ctx = &evBuf;
+            in_events.size = clapInEventsSize;
+            in_events.get = clapInEventsGet;
+
+            clap_output_events_t out_events;
+            out_events.ctx = nullptr;
+            out_events.try_push = clapOutEventsTryPush;
+
             float* inChs[2] = { inL, inR };
             float* outChs[2] = { outL, outR };
             clap_audio_buffer_t in_buf;
@@ -548,6 +527,8 @@ public:
             process.audio_outputs = &out_buf;
             process.audio_inputs_count = 1;
             process.audio_outputs_count = 1;
+            process.in_events = &in_events;
+            process.out_events = &out_events;
             m_clapPlugin->process(m_clapPlugin, &process);
         } else if (m_format == PLUGIN_FORMAT_VST3 && m_vst3Processor) {
             HostVst3ParameterChanges paramChanges;
@@ -606,9 +587,6 @@ public:
     bool openNativeEditor(void* parentWindow) {
         if (!hasNativeEditor() || !parentWindow) return false;
 
-        if (m_format == PLUGIN_FORMAT_VST2 && m_vstEffect) {
-            return m_vstEffect->dispatcher(m_vstEffect, effEditOpen, 0, 0, parentWindow, 0.0f) != 0;
-        }
         if (m_format == PLUGIN_FORMAT_CLAP && m_clapPlugin) {
             const clap_plugin_gui_t* gui = static_cast<const clap_plugin_gui_t*>(
                 m_clapPlugin->get_extension(m_clapPlugin, CLAP_EXT_GUI));
@@ -637,9 +615,7 @@ public:
     }
 
     void closeNativeEditor() {
-        if (m_format == PLUGIN_FORMAT_VST2 && m_vstEffect) {
-            m_vstEffect->dispatcher(m_vstEffect, effEditClose, 0, 0, nullptr, 0.0f);
-        } else if (m_format == PLUGIN_FORMAT_CLAP && m_clapPlugin) {
+        if (m_format == PLUGIN_FORMAT_CLAP && m_clapPlugin) {
             const clap_plugin_gui_t* gui = static_cast<const clap_plugin_gui_t*>(
                 m_clapPlugin->get_extension(m_clapPlugin, CLAP_EXT_GUI));
             if (gui && gui->destroy) {
@@ -826,203 +802,6 @@ private:
         pData.inputParameterChanges = reinterpret_cast<Steinberg_Vst_IParameterChanges*>(&paramChanges);
 
         m_vst3Processor->lpVtbl->process(m_vst3Processor, &pData);
-        m_bufferAvailable = numFrames;
-    }
-
-    // ==========================================
-    // VST 2.4 INITIALIZATION & PROCESSING
-    // ==========================================
-    // Static VST instance tracking to safely map AEffect* to PluginInstance* without overwriting effect->user
-    static inline std::mutex s_vstMapMutex;
-    static inline std::unordered_map<AEffect*, PluginInstance*> s_vstInstanceMap;
-
-    static intptr_t VST_CALL_CONV staticAudioMaster(AEffect* effect, int32_t opcode, int32_t index, intptr_t value, void* ptr, float opt) {
-        switch (opcode) {
-            case 0: // audioMasterAutomate (setParameterAutomated)
-                if (effect) {
-                    PluginInstance* inst = nullptr;
-                    {
-                        std::lock_guard<std::mutex> lock(s_vstMapMutex);
-                        auto it = s_vstInstanceMap.find(effect);
-                        if (it != s_vstInstanceMap.end()) {
-                            inst = it->second;
-                        }
-                    }
-                    if (inst) {
-                        inst->onPluginParamAutomated(index, opt);
-                        return 1;
-                    }
-                }
-                return 0;
-            case audioMasterVersion:
-                return 2400;
-            case audioMasterGetSampleRate:
-                return 48000;
-            case audioMasterGetBlockSize:
-                return 256;
-            case audioMasterGetVendorString:
-                if (ptr) std::strncpy(static_cast<char*>(ptr), "myms", 64);
-                return 1;
-            case audioMasterGetProductString:
-                if (ptr) std::strncpy(static_cast<char*>(ptr), "myms Tracker Studio", 64);
-                return 1;
-            case audioMasterGetVendorVersion:
-                return 1000;
-            case audioMasterCanDo:
-                if (ptr) {
-                    const char* s = static_cast<const char*>(ptr);
-                    if (std::strcmp(s, "sendVstEvents") == 0) return 1;
-                    if (std::strcmp(s, "sendVstMidiEvent") == 0) return 1;
-                    if (std::strcmp(s, "receiveVstEvents") == 0) return 1;
-                    if (std::strcmp(s, "receiveVstMidiEvent") == 0) return 1;
-                    if (std::strcmp(s, "sizeWindow") == 0) return 1;
-                }
-                return 0;
-            default:
-                return 0;
-        }
-    }
-
-    bool initVst2(AEffect* (*vstMain)(audioMasterCallback)) {
-        m_vstEffect = vstMain(staticAudioMaster);
-        if (!m_vstEffect || m_vstEffect->magic != kEffectMagic) {
-            std::cerr << "[myms PluginHost] Invalid VST2 magic" << std::endl;
-            return false;
-        }
-        {
-            std::lock_guard<std::mutex> lock(s_vstMapMutex);
-            s_vstInstanceMap[m_vstEffect] = this;
-        }
-
-        m_vstEffect->dispatcher(m_vstEffect, effOpen, 0, 0, nullptr, 0.0f);
-        m_vstEffect->dispatcher(m_vstEffect, effSetSampleRate, 0, 0, nullptr, m_sampleRate);
-        m_vstEffect->dispatcher(m_vstEffect, effSetBlockSize, 0, m_blockSize, nullptr, 0.0f);
-        m_vstEffect->dispatcher(m_vstEffect, effMainsChanged, 0, 1 /* activate */, nullptr, 0.0f);
-
-        // Retrieve plugin metadata
-        char nameBuf[64] = {0};
-        if (m_vstEffect->dispatcher(m_vstEffect, effGetEffectName, 0, 0, nameBuf, 0.0f) && nameBuf[0]) {
-            m_name = nameBuf;
-        } else {
-            m_name = "VST2 Plugin";
-        }
-
-        char vendorBuf[64] = {0};
-        if (m_vstEffect->dispatcher(m_vstEffect, effGetVendorString, 0, 0, vendorBuf, 0.0f) && vendorBuf[0]) {
-            m_vendor = vendorBuf;
-        } else {
-            m_vendor = "Generic";
-        }
-
-        // Retrieve parameter definitions
-        int numParams = m_vstEffect->numParams;
-        m_params.resize(numParams);
-        for (int i = 0; i < numParams; ++i) {
-            m_params[i].id = i;
-            m_params[i].value = m_vstEffect->getParameter ? m_vstEffect->getParameter(m_vstEffect, i) : 0.0f;
-
-            char pName[32] = {0};
-            if (m_vstEffect->dispatcher(m_vstEffect, effGetParamName, i, 0, pName, 0.0f) && pName[0]) {
-                m_params[i].name = pName;
-            } else {
-                m_params[i].name = "Param " + std::to_string(i + 1);
-            }
-
-            char pDisplay[32] = {0};
-            if (m_vstEffect->dispatcher(m_vstEffect, effGetParamDisplay, i, 0, pDisplay, 0.0f) && pDisplay[0]) {
-                m_params[i].display = pDisplay;
-            }
-
-            char pLabel[32] = {0};
-            if (m_vstEffect->dispatcher(m_vstEffect, effGetParamLabel, i, 0, pLabel, 0.0f) && pLabel[0]) {
-                m_params[i].label = pLabel;
-            }
-        }
-
-        m_hasEditor = (m_vstEffect->flags & effFlagsHasEditor) != 0;
-        return true;
-    }
-
-    void renderVst2(int numFrames) {
-        if (!m_vstEffect || !m_vstEffect->processReplacing) return;
-
-        // Drain event queue into VstEvents
-        struct {
-            int32_t numEvents;
-            void* reserved;
-            VstEvent* events[MAX_QUEUED_EVENTS];
-        } vstEvents;
-
-        VstMidiEvent midiEvents[MAX_QUEUED_EVENTS];
-        int evCount = 0;
-
-        int head = m_eventQueueHead.load(std::memory_order_relaxed);
-        int tail = m_eventQueueTail.load(std::memory_order_acquire);
-
-        while (head != tail && evCount < MAX_QUEUED_EVENTS) {
-            const QueuedMidiEvent& q = m_eventQueue[head];
-            head = (head + 1) % MAX_QUEUED_EVENTS;
-
-            if (q.type == QueuedMidiEvent::NOTE_ON) {
-                VstMidiEvent& m = midiEvents[evCount];
-                std::memset(&m, 0, sizeof(VstMidiEvent));
-                m.type = kVstMidiType;
-                m.byteSize = sizeof(VstMidiEvent);
-                m.midiData[0] = static_cast<char>(0x90);
-                m.midiData[1] = static_cast<char>(q.note & 0x7F);
-                m.midiData[2] = static_cast<char>(std::clamp(static_cast<int>(q.velocity * 127.0f), 1, 127));
-                vstEvents.events[evCount] = reinterpret_cast<VstEvent*>(&m);
-                evCount++;
-            } else if (q.type == QueuedMidiEvent::NOTE_OFF) {
-                VstMidiEvent& m = midiEvents[evCount];
-                std::memset(&m, 0, sizeof(VstMidiEvent));
-                m.type = kVstMidiType;
-                m.byteSize = sizeof(VstMidiEvent);
-                m.midiData[0] = static_cast<char>(0x80);
-                m.midiData[1] = static_cast<char>(q.note & 0x7F);
-                m.midiData[2] = 0;
-                vstEvents.events[evCount] = reinterpret_cast<VstEvent*>(&m);
-                evCount++;
-            } else if (q.type == QueuedMidiEvent::ALL_OFF) {
-                for (int ch = 0; ch < 16 && evCount + 2 < MAX_QUEUED_EVENTS; ++ch) {
-                    // All Sound Off (CC 120)
-                    VstMidiEvent& m1 = midiEvents[evCount++];
-                    std::memset(&m1, 0, sizeof(VstMidiEvent));
-                    m1.type = kVstMidiType;
-                    m1.byteSize = sizeof(VstMidiEvent);
-                    m1.midiData[0] = static_cast<char>(0xB0 | ch);
-                    m1.midiData[1] = 120;
-                    m1.midiData[2] = 0;
-                    vstEvents.events[evCount - 1] = reinterpret_cast<VstEvent*>(&m1);
-
-                    // All Notes Off (CC 123)
-                    VstMidiEvent& m2 = midiEvents[evCount++];
-                    std::memset(&m2, 0, sizeof(VstMidiEvent));
-                    m2.type = kVstMidiType;
-                    m2.byteSize = sizeof(VstMidiEvent);
-                    m2.midiData[0] = static_cast<char>(0xB0 | ch);
-                    m2.midiData[1] = 123;
-                    m2.midiData[2] = 0;
-                    vstEvents.events[evCount - 1] = reinterpret_cast<VstEvent*>(&m2);
-                }
-            } else if (q.type == QueuedMidiEvent::PARAM_CHANGE) {
-                if (m_vstEffect->setParameter) {
-                    m_vstEffect->setParameter(m_vstEffect, q.paramId, q.paramValue);
-                }
-            }
-        }
-        m_eventQueueHead.store(head, std::memory_order_release);
-
-        if (evCount > 0) {
-            vstEvents.numEvents = evCount;
-            vstEvents.reserved = nullptr;
-            m_vstEffect->dispatcher(m_vstEffect, effProcessEvents, 0, 0, &vstEvents, 0.0f);
-        }
-
-        float* inPtrs[2] = { m_dummyInL.data(), m_dummyInR.data() };
-        float* outPtrs[2] = { m_tempOutL.data(), m_tempOutR.data() };
-
-        m_vstEffect->processReplacing(m_vstEffect, inPtrs, outPtrs, numFrames);
         m_bufferAvailable = numFrames;
     }
 
@@ -1244,9 +1023,7 @@ private:
         std::fill(m_tempOutL.begin(), m_tempOutL.begin() + numFrames, 0.0f);
         std::fill(m_tempOutR.begin(), m_tempOutR.begin() + numFrames, 0.0f);
 
-        if (m_format == PLUGIN_FORMAT_VST2) {
-            renderVst2(numFrames);
-        } else if (m_format == PLUGIN_FORMAT_CLAP) {
+        if (m_format == PLUGIN_FORMAT_CLAP) {
             renderClap(numFrames);
         } else if (m_format == PLUGIN_FORMAT_VST3) {
             renderVst3(numFrames);
@@ -1266,9 +1043,6 @@ private:
     int m_lastNote = -1;
 
     std::vector<PluginParamInfo> m_params;
-
-    // VST2 State
-    AEffect* m_vstEffect = nullptr;
 
     // CLAP State
     const clap_plugin_entry_t* m_clapEntry = nullptr;

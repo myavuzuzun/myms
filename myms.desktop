@@ -2,7 +2,7 @@
 Name=myms
 GenericName=Tracker & Music Creation Studio
 Comment=Modern, lightweight Linux tracker and music studio
-Exec=/home/yavuz/Documents/antigravity projects/music creation/run.sh
+Exec=myms
 Icon=multimedia-audio-player
 Terminal=false
 Type=Application

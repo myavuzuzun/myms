@@ -14,10 +14,6 @@ if [ ! -f "libmyms_audio.so" ] || [ "engine/src/audio_engine.cpp" -nt "libmyms_a
 fi
 
 # Compile demo plugins if not built
-if [ ! -f "plugins/vst2/demo_synth_vst2.so" ]; then
-    mkdir -p plugins/vst2
-    g++ -O3 -shared -fPIC -Iengine/include plugins/vst2/demo_synth_vst2.cpp -o plugins/vst2/demo_synth_vst2.so -lm
-fi
 if [ ! -f "plugins/clap/demo_synth_clap.clap" ]; then
     mkdir -p plugins/clap
     g++ -O3 -shared -fPIC -Iengine/include plugins/clap/demo_synth_clap.cpp -o plugins/clap/demo_synth_clap.clap -lm
@@ -26,21 +22,9 @@ if [ ! -f "plugins/vst3/demo_synth_vst3.so" ]; then
     mkdir -p plugins/vst3
     g++ -O3 -shared -fPIC -Iengine/include plugins/vst3/demo_synth_vst3.cpp -o plugins/vst3/demo_synth_vst3.so -lm
 fi
-if [ ! -f "plugins/gui_synth/demo_gui_synth.so" ]; then
-    mkdir -p plugins/gui_synth
-    g++ -O3 -shared -fPIC -Iengine/include \
-        -I/home/yavuz/.local/share/mamba/envs/ros_env/include \
-        -L/home/yavuz/.local/share/mamba/envs/ros_env/lib \
-        plugins/gui_synth/demo_gui_synth.cpp \
-        -o plugins/gui_synth/demo_gui_synth.so -lX11 -lpthread -lm
-fi
-if [ ! -f "plugins/effects/demo_filter_fx.so" ]; then
+if [ ! -f "plugins/effects/demo_filter_fx.clap" ]; then
     mkdir -p plugins/effects
-    g++ -O3 -shared -fPIC -Iengine/include \
-        -I/home/yavuz/.local/share/mamba/envs/ros_env/include \
-        -L/home/yavuz/.local/share/mamba/envs/ros_env/lib \
-        plugins/effects/demo_filter_fx.cpp \
-        -o plugins/effects/demo_filter_fx.so -lX11 -lpthread -lm
+    g++ -O3 -shared -fPIC -Iengine/include plugins/effects/demo_filter_fx.cpp -o plugins/effects/demo_filter_fx.clap -lm
 fi
 
 # Ensure xcb platform for native X11 plugin GUI window support
