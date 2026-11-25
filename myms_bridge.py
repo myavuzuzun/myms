@@ -1743,6 +1743,8 @@ class MymsEngine(QObject):
                 self.instrumentNameChanged.emit(t, self.getInstrumentName(t))
                 self.trackMixerChanged.emit(t)
                 self.trackTypeChanged.emit(t, self.getTrackType(t))
+                self.trackPluginChanged.emit(t)
+                self.trackPluginParamsChanged.emit(t)
                 self.trackFxChanged.emit(t, -1)
                 self.trackPreFxChanged.emit(t, -1)
             self.gridCellChanged.emit(0, 0)

@@ -51,6 +51,17 @@ struct TrackerPattern {
         if (numTracks <= 1 || trackIdx < 0 || trackIdx >= numTracks) return;
         for (int r = 0; r < numRows; ++r) {
             rows[r].erase(rows[r].begin() + trackIdx);
+            for (int c = 0; c < static_cast<int>(rows[r].size()); ++c) {
+                uint8_t inst = rows[r][c].instrument;
+                if (inst > 0) {
+                    int oldIdx = static_cast<int>(inst) - 1;
+                    if (oldIdx > trackIdx) {
+                        rows[r][c].instrument = static_cast<uint8_t>(oldIdx);
+                    } else if (oldIdx == trackIdx) {
+                        rows[r][c].instrument = 0;
+                    }
+                }
+            }
         }
         numTracks--;
     }
@@ -62,6 +73,21 @@ struct TrackerPattern {
                 TrackerCell cell = rows[r][fromIdx];
                 rows[r].erase(rows[r].begin() + fromIdx);
                 rows[r].insert(rows[r].begin() + toIdx, cell);
+                for (int c = 0; c < static_cast<int>(rows[r].size()); ++c) {
+                    uint8_t inst = rows[r][c].instrument;
+                    if (inst > 0) {
+                        int oldIdx = static_cast<int>(inst) - 1;
+                        int newIdx = oldIdx;
+                        if (oldIdx == fromIdx) {
+                            newIdx = toIdx;
+                        } else if (fromIdx < toIdx && oldIdx > fromIdx && oldIdx <= toIdx) {
+                            newIdx = oldIdx - 1;
+                        } else if (fromIdx > toIdx && oldIdx >= toIdx && oldIdx < fromIdx) {
+                            newIdx = oldIdx + 1;
+                        }
+                        rows[r][c].instrument = static_cast<uint8_t>(newIdx + 1);
+                    }
+                }
             }
         }
     }

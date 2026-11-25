@@ -506,6 +506,7 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         # Set up Track 0
         self.engine.setInstrumentName(0, "Bassline")
         self.engine.setTrackType(0, 0) # Synth
+        self.engine.setInstFilter(0, 900.0, 0.4, 0.2)
         self.engine.setCell(0, 0, 48, 1, 200, 0, 0)
 
         # Add Track 1
@@ -516,25 +517,45 @@ class TestPhase3UnifiedAndFx(unittest.TestCase):
         self.engine.setTrackSf2Preset(1, 10)
         self.engine.setCell(1, 0, 60, 2, 250, 0, 0)
 
-        # Verify before swap
+        # Add Track 2 (cross-track targeting Track 0 / Inst 1)
+        self.engine.addTrack()
+        self.assertEqual(self.engine.numTracks, 3)
+        self.engine.setInstrumentName(2, "Pad")
+        self.engine.setCell(2, 0, 67, 1, 180, 0, 0)
+
+        # Verify before move
         self.assertEqual(self.engine.getInstrumentName(0), "Bassline")
         self.assertEqual(self.engine.getInstrumentName(1), "Lead Synth")
         self.assertEqual(self.engine.getCell(0, 0)["note"], 48)
+        self.assertEqual(self.engine.getCell(0, 0)["instrument"], 1)
         self.assertEqual(self.engine.getCell(1, 0)["note"], 60)
+        self.assertEqual(self.engine.getCell(1, 0)["instrument"], 2)
 
-        # Move Track 0 to Track 1 (swap them)
+        # Move Track 0 (Bassline) to Track 1 -> [Lead Synth, Bassline, Pad]
         ok = self.engine.moveTrack(0, 1)
         self.assertTrue(ok)
 
-        # Verify after swap: Track 0 is now Lead Synth, Track 1 is now Bassline
+        # Verify after move: Track 0 is Lead Synth (inst 1), Track 1 is Bassline (inst 2), Track 2 cross-ref -> inst 2
         self.assertEqual(self.engine.getInstrumentName(0), "Lead Synth")
         self.assertEqual(self.engine.getTrackType(0), 1)
         self.assertEqual(self.engine.getTrackSf2Preset(0), 10)
         self.assertEqual(self.engine.getCell(0, 0)["note"], 60)
+        self.assertEqual(self.engine.getCell(0, 0)["instrument"], 1)
 
         self.assertEqual(self.engine.getInstrumentName(1), "Bassline")
         self.assertEqual(self.engine.getTrackType(1), 0)
+        self.assertAlmostEqual(self.engine.getInstParams(1)["cutoff"], 900.0, places=1)
         self.assertEqual(self.engine.getCell(1, 0)["note"], 48)
+        self.assertEqual(self.engine.getCell(1, 0)["instrument"], 2)
+
+        self.assertEqual(self.engine.getCell(2, 0)["instrument"], 2)
+
+        # Remove Track 0 (Lead Synth) -> Bassline shifts to index 0, its cell instrument remaps 2 -> 1
+        self.engine.removeTrack(0)
+        self.assertEqual(self.engine.numTracks, 2)
+        self.assertEqual(self.engine.getInstrumentName(0), "Bassline")
+        self.assertEqual(self.engine.getCell(0, 0)["instrument"], 1)
+        self.assertEqual(self.engine.getCell(1, 0)["instrument"], 1)
 
     def test_19_plugin_effect_reordering(self):
         filter_fx_path = os.path.join(PROJECT_ROOT, "plugins", "effects", "demo_filter_fx.clap")

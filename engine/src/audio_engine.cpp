@@ -333,8 +333,13 @@ void AudioEngine::addTrack() {
 }
 
 void AudioEngine::removeTrack(int trackIdx) {
-    if (m_instruments.size() <= 1 || trackIdx < 0 || trackIdx >= static_cast<int>(m_instruments.size())) return;
+    int oldCount = static_cast<int>(m_instruments.size());
+    if (oldCount <= 1 || trackIdx < 0 || trackIdx >= oldCount) return;
+    allNotesOff();
     m_instruments.erase(m_instruments.begin() + trackIdx);
+    if (trackIdx < static_cast<int>(m_instrumentNames.size())) {
+        m_instrumentNames.erase(m_instrumentNames.begin() + trackIdx);
+    }
     if (trackIdx < static_cast<int>(m_trackTypes.size())) {
         m_trackTypes.erase(m_trackTypes.begin() + trackIdx);
     }
@@ -350,7 +355,24 @@ void AudioEngine::removeTrack(int trackIdx) {
     if (trackIdx < static_cast<int>(m_trackPreFx.size())) {
         m_trackPreFx.erase(m_trackPreFx.begin() + trackIdx);
     }
+    for (int i = trackIdx; i < oldCount - 1 && i + 1 < MAX_INSTRUMENTS; ++i) {
+        m_trackBaseCutoff[i] = m_trackBaseCutoff[i + 1];
+        m_trackFxMaxSlot[i].store(m_trackFxMaxSlot[i + 1].load(std::memory_order_relaxed), std::memory_order_release);
+        m_trackPreFxMaxSlot[i].store(m_trackPreFxMaxSlot[i + 1].load(std::memory_order_relaxed), std::memory_order_release);
+    }
+    if (oldCount - 1 < MAX_INSTRUMENTS) {
+        m_trackBaseCutoff[oldCount - 1] = 3500.0f;
+        m_trackFxMaxSlot[oldCount - 1].store(0, std::memory_order_release);
+        m_trackPreFxMaxSlot[oldCount - 1].store(0, std::memory_order_release);
+    }
     m_sequencer.removeTrack(trackIdx);
+    int newCount = static_cast<int>(m_instruments.size());
+    for (int t = 0; t < newCount && t < static_cast<int>(m_trackMixers.size()); ++t) {
+        m_soundfont.setChannelPreset(t, m_trackMixers[t].sf2Preset);
+        m_soundfont.setChannelVolume(t, m_trackMixers[t].volume);
+        m_soundfont.setChannelPan(t, m_trackMixers[t].pan);
+        m_soundfont.setChannelMute(t, m_trackMixers[t].mute);
+    }
 }
 
 int AudioEngine::getNumInstruments() const {
@@ -2169,6 +2191,7 @@ bool AudioEngine::moveTrack(int fromIdx, int toIdx) {
     if (fromIdx < 0 || fromIdx >= numTracks || toIdx < 0 || toIdx >= numTracks || fromIdx == toIdx) {
         return false;
     }
+    allNotesOff();
 
     // 1. Move instrument synth
     SynthEngine inst = std::move(m_instruments[fromIdx]);
@@ -2217,39 +2240,49 @@ bool AudioEngine::moveTrack(int fromIdx, int toIdx) {
         m_trackPreFx.insert(m_trackPreFx.begin() + toIdx, std::move(preFx));
     }
 
-    // 7. Move slot max atomics
+    // 7. Move slot max atomics and synth baseline cutoffs
     int fxMax[MAX_INSTRUMENTS];
     int preMax[MAX_INSTRUMENTS];
+    float baseCutoffs[MAX_INSTRUMENTS];
     for (int i = 0; i < numTracks && i < MAX_INSTRUMENTS; ++i) {
         fxMax[i] = m_trackFxMaxSlot[i].load(std::memory_order_relaxed);
         preMax[i] = m_trackPreFxMaxSlot[i].load(std::memory_order_relaxed);
+        baseCutoffs[i] = m_trackBaseCutoff[i];
     }
     int savedFx = fxMax[fromIdx];
     int savedPre = preMax[fromIdx];
+    float savedCutoff = baseCutoffs[fromIdx];
     if (fromIdx < toIdx) {
         for (int i = fromIdx; i < toIdx; ++i) {
             fxMax[i] = fxMax[i + 1];
             preMax[i] = preMax[i + 1];
+            baseCutoffs[i] = baseCutoffs[i + 1];
         }
     } else {
         for (int i = fromIdx; i > toIdx; --i) {
             fxMax[i] = fxMax[i - 1];
             preMax[i] = preMax[i - 1];
+            baseCutoffs[i] = baseCutoffs[i - 1];
         }
     }
     fxMax[toIdx] = savedFx;
     preMax[toIdx] = savedPre;
+    baseCutoffs[toIdx] = savedCutoff;
     for (int i = 0; i < numTracks && i < MAX_INSTRUMENTS; ++i) {
         m_trackFxMaxSlot[i].store(fxMax[i], std::memory_order_release);
         m_trackPreFxMaxSlot[i].store(preMax[i], std::memory_order_release);
+        m_trackBaseCutoff[i] = baseCutoffs[i];
     }
 
-    // 8. Move sequencer pattern cells
+    // 8. Move sequencer pattern cells & remap instrument references
     m_sequencer.moveTrack(fromIdx, toIdx);
 
-    // 9. Sync SoundFont channel presets
+    // 9. Sync SoundFont channel state (preset, volume, pan, mute)
     for (int t = 0; t < numTracks && t < static_cast<int>(m_trackMixers.size()); ++t) {
         m_soundfont.setChannelPreset(t, m_trackMixers[t].sf2Preset);
+        m_soundfont.setChannelVolume(t, m_trackMixers[t].volume);
+        m_soundfont.setChannelPan(t, m_trackMixers[t].pan);
+        m_soundfont.setChannelMute(t, m_trackMixers[t].mute);
     }
 
     return true;
